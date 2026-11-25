@@ -1,0 +1,44 @@
+# 运行时数据，绝不入库
+data/*
+!data/.gitkeep
+models/
+llama/
+*.db
+*.db-wal
+*.db-shm
+secret.key
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pip-cache/
+
+# 日志与临时文件
+*.log
+*.pid
+*.port
+*.tmp
+*.bak
+
+# 本地配置与密钥
+.env
+.env.*
+config.json
+auth_providers.json
+database_connections.json
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# 打包产物
+dist/
+build/
+*.zip
+*.tar.gz

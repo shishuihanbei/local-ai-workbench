@@ -1,0 +1,674 @@
+"""系统信息、日志、设置、审计、备份。"""
+from __future__ import annotations
+
+import platform
+import shutil
+import socket
+import sys
+import time
+
+import psutil
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
+
+from ..config import DATA_DIR, LOG_DIR, load_config, model_file_path, save_config
+from ..db import audit, fetch_all, fetch_one
+from ..security import admin_user, any_user_or_none, current_user, user_from_any_token
+from ..services import backup, hardware, installer, llama, netinfo, platform_deploy, platforms, retention, websearch
+
+router = APIRouter(prefix="/api/system", tags=["system"])
+
+
+async def _admin_from_request(request: Request, token: str | None = None) -> dict:
+    user = await user_from_any_token(token) if token else None
+    auth = request.headers.get("authorization", "")
+    if not user and auth.lower().startswith("bearer "):
+        user = await user_from_any_token(auth.split(" ", 1)[1].strip())
+    if not user:
+        user = await any_user_or_none(request)
+    if not user:
+        raise HTTPException(401, "未登录或令牌已失效")
+    if user["role"] != "admin":
+        raise HTTPException(403, "需要管理员权限")
+    return user
+START_TS = time.time()
+
+SETTING_KEYS = [
+    "upstream_base", "upstream_key", "upstream_port", "ctx", "threads", "gpu_layers",
+    "system_prompt", "tts_voice", "session_hours", "models_dir", "llama_dir", "llama_bin",
+    "tunnel_target", "tunnel_token", "tunnel_domain", "github_proxy", "kb_enabled", "kb_top_k",
+    "library_enabled", "library_max_chars", "library_max_docs",
+    "frontend_url", "allow_register",
+    "org_name", "org_short_name", "org_domain", "org_industry", "org_size",
+    "org_contact_name", "org_contact_email",
+    "watermark_enabled", "watermark_text",
+]
+
+
+class SettingsBody(BaseModel):
+    pass
+
+
+class LocalDeployBody(BaseModel):
+    enabled: bool
+    platforms: list[str] | None = None
+    endpoints: dict[str, str] | None = None
+    github_proxy: str | None = None
+
+
+class LocalPlatformsBody(BaseModel):
+    platforms: list[str] | None = None
+    endpoints: dict[str, str] | None = None
+    github_proxy: str | None = None
+
+
+class WebsearchBody(BaseModel):
+    enabled: bool | None = None
+    max_sources: int | None = None
+    max_pages: int | None = None
+
+
+class WebsearchTestBody(BaseModel):
+    query: str = ""
+    max_sources: int | None = None
+    max_pages: int | None = None
+
+
+class FileRetentionBody(BaseModel):
+    days: int
+
+
+def _local_ips() -> list[str]:
+    ips = []
+    try:
+        for name, addrs in psutil.net_if_addrs().items():
+            if any(k in name for k in ("Loopback", "蓝牙", "Bluetooth", "vEthernet", "VMware", "Virtual")):
+                continue
+            for a in addrs:
+                if a.family == socket.AF_INET and not a.address.startswith(("127.", "169.254.")):
+                    ips.append(f"{a.address} ({name})")
+    except Exception:
+        pass
+    return ips
+
+
+@router.get("/info")
+async def info(user: dict = Depends(current_user)):
+    cfg = load_config()
+    disk = shutil.disk_usage(str(DATA_DIR))
+    mem = psutil.virtual_memory()
+    cpu_percent = psutil.cpu_percent(interval=0.3)
+    status = await llama.server.status()
+    from ..services.tunnel import tunnel
+    return {
+        "app": {
+            "version": "0.7.88",
+            "uptime": round(time.time() - START_TS, 1),
+            "panel_port": cfg["port"],
+            "python": sys.version.split()[0],
+            "platform": f"{platform.system()} {platform.release()}",
+            "ips": _local_ips(),
+            "data_dir": str(DATA_DIR),
+        },
+        "host": {
+            "cpu_percent": cpu_percent,
+            "cpu_count": psutil.cpu_count(),
+            "mem_total": mem.total,
+            "mem_used": mem.used,
+            "mem_percent": mem.percent,
+            "disk_total": disk.total,
+            "disk_free": disk.free,
+            "disk_percent": round(disk.used * 100 / disk.total, 1),
+            "boot_time": psutil.boot_time(),
+        },
+        "model": status,
+        "tunnel": tunnel.status(),
+        "config": {k: cfg.get(k) for k in SETTING_KEYS},
+    }
+
+
+@router.get("/stats")
+async def stats(user: dict = Depends(current_user)):
+    mem = psutil.virtual_memory()
+    cpu = psutil.cpu_percent(interval=0.2)
+    return {"cpu": cpu, "mem": mem.percent, "mem_used": mem.used, "mem_total": mem.total}
+
+
+LOG_FILES = {
+    "llama": LOG_DIR / "llama.log",
+    "tunnel": LOG_DIR / "tunnel.log",
+    "app": LOG_DIR / "app.log",
+}
+
+
+@router.get("/logs")
+async def logs(file: str = Query("llama"), tail: int = 200, user: dict = Depends(admin_user)):
+    p = LOG_FILES.get(file)
+    if not p:
+        raise HTTPException(404, "未知日志")
+    if not p.exists():
+        return {"lines": [], "file": file}
+    text = p.read_bytes()[-300_000:].decode("utf-8", "replace")
+    return {"lines": text.splitlines()[-min(tail, 1000):], "file": file}
+
+
+@router.get("/settings")
+async def get_settings(request: Request, user: dict = Depends(admin_user)):
+    cfg = load_config()
+    data = {k: cfg.get(k) for k in SETTING_KEYS}
+    origin = netinfo.origin(request)
+    configured = str(cfg.get("frontend_url") or "").strip()
+    auto = bool(cfg.get("serve_frontend", False) and origin)
+    if auto:
+        data["frontend_url"] = f"{origin}/"
+    data["frontend_url_auto"] = auto
+    data["frontend_url_configured"] = configured
+    data["request_origin"] = origin
+    data["client_ip"] = netinfo.client_ip(request)
+    return data
+
+
+@router.put("/settings")
+async def put_settings(body: dict, user: dict = Depends(admin_user)):
+    cfg = load_config()
+    changed = []
+    for k, v in (body or {}).items():
+        if k not in SETTING_KEYS:
+            continue
+        if k == "frontend_url" and v:
+            v = str(v).strip()
+            if not v.startswith(("http://", "https://")):
+                raise HTTPException(400, "frontend_url 只支持 http/https 地址")
+        default = cfg.get(k)
+        if isinstance(default, bool):
+            v = bool(v)
+        elif isinstance(default, int) and v not in (None, ""):
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"{k} 需要整数")
+        cfg[k] = v
+        changed.append(k)
+    save_config(cfg)
+    await audit(user, "settings.update", detail=",".join(changed))
+    return {"ok": True, "changed": changed}
+
+
+@router.get("/audit")
+async def audit_list(page: int = 1, size: int = 30, action: str = "", user: dict = Depends(admin_user)):
+    where, params = "", []
+    if action:
+        where = "WHERE action LIKE ?"
+        params.append(f"%{action}%")
+    total = await fetch_one(f"SELECT COUNT(*) c FROM audit_logs {where}", params)
+    rows = await fetch_all(
+        f"SELECT * FROM audit_logs {where} ORDER BY ts DESC LIMIT ? OFFSET ?",
+        params + [size, (page - 1) * size])
+    return {"items": rows, "total": (total or {}).get("c", 0), "page": page, "size": size}
+
+
+@router.get("/backup")
+async def backup_download(request: Request, token: str | None = None):
+    user = await _admin_from_request(request, token)
+    try:
+        path = await run_in_threadpool(backup.create_backup)
+    except backup.BackupError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await audit(user, "system.backup", path.name)
+    return FileResponse(path, filename=path.name, media_type="application/zip")
+
+
+@router.get("/backups")
+async def backup_list(request: Request, user: dict = Depends(admin_user)):
+    return {
+        "items": await run_in_threadpool(backup.list_backups),
+        "backup_dir": str(backup.BACKUP_DIR),
+        "migration_dir": str(backup.MIGRATION_DIR),
+    }
+
+
+@router.get("/file-retention")
+async def file_retention(user: dict = Depends(admin_user)):
+    """生成文档保留周期与磁盘占用，供备份页展示。"""
+    return await retention.stats()
+
+
+@router.put("/file-retention")
+async def set_file_retention(body: FileRetentionBody, user: dict = Depends(admin_user)):
+    days = retention.clamp_days(body.days)
+    if not retention.MIN_DAYS <= body.days <= retention.MAX_DAYS:
+        raise HTTPException(
+            400, f"保留天数需在 {retention.MIN_DAYS}–{retention.MAX_DAYS} 天之间")
+    cfg = load_config()
+    cfg["generated_file_retention_days"] = days
+    save_config(cfg)
+    result = await retention.apply_days(days)
+    await audit(user, "files.retention.update", detail=f"{days}天，清理{result['removed']}个")
+    return {"ok": True, "result": result, **await retention.stats(days)}
+
+
+@router.post("/file-retention/cleanup")
+async def cleanup_file_retention(user: dict = Depends(admin_user)):
+    result = await retention.cleanup_once()
+    await audit(user, "files.retention.cleanup", detail=f"清理{result['removed']}个")
+    return {"ok": True, "result": result, **await retention.stats()}
+
+
+@router.api_route("/migration", methods=["GET", "POST"])
+async def migration_download(request: Request, token: str | None = None, save: bool = False):
+    # GET 兼容旧版控制台缓存；新版控制台统一用 POST。
+    user = await _admin_from_request(request, token)
+    try:
+        path = await run_in_threadpool(backup.create_migration_package)
+    except backup.BackupError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await audit(user, "system.migration", path.name)
+    if save:
+        return {
+            "ok": True,
+            "kind": "migration",
+            "name": path.name,
+            "path": str(path),
+            "directory": str(path.parent),
+            "size": path.stat().st_size,
+            "download_url": f"/api/system/backups/{path.name}",
+        }
+    return FileResponse(path, filename=path.name, media_type="application/zip")
+
+
+@router.post("/open-migration-folder")
+async def open_migration_folder(request: Request, token: str | None = None):
+    await _admin_from_request(request, token)
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1", "localhost"}:
+        raise HTTPException(403, "只能在运行工作台的电脑上打开这个文件夹")
+    try:
+        path = await run_in_threadpool(backup.open_migration_folder)
+    except backup.BackupError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True, "path": path}
+
+
+@router.get("/shares")
+async def share_list(request: Request, user: dict = Depends(admin_user)):
+    return {
+        "items": await run_in_threadpool(backup.list_shares),
+        "share_dir": str(backup.SHARE_DIR),
+    }
+
+
+@router.api_route("/share", methods=["GET", "POST"])
+async def share_download(request: Request, token: str | None = None, save: bool = False):
+    user = await _admin_from_request(request, token)
+    try:
+        path = await run_in_threadpool(backup.create_share_package)
+    except backup.BackupError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await audit(user, "system.share", path.name)
+    if save:
+        return {
+            "ok": True,
+            "kind": "share",
+            "name": path.name,
+            "path": str(path),
+            "directory": str(path.parent),
+            "size": path.stat().st_size,
+            "download_url": f"/api/system/shares/{path.name}",
+            "includes_data": False,
+        }
+    return FileResponse(path, filename=path.name, media_type="application/zip")
+
+
+@router.post("/open-share-folder")
+async def open_share_folder(request: Request, token: str | None = None):
+    await _admin_from_request(request, token)
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1", "localhost"}:
+        raise HTTPException(403, "只能在运行工作台的电脑上打开这个文件夹")
+    try:
+        path = await run_in_threadpool(backup.open_share_folder)
+    except backup.BackupError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True, "path": path}
+
+
+@router.get("/shares/{name}")
+async def share_file(name: str, request: Request, user: dict = Depends(admin_user)):
+    try:
+        path = backup.share_path(name)
+    except backup.BackupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return FileResponse(path, filename=path.name, media_type="application/zip")
+
+
+@router.delete("/shares/{name}")
+async def share_delete(name: str, request: Request, user: dict = Depends(admin_user)):
+    try:
+        backup.delete_share(name)
+    except backup.BackupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    await audit(user, "system.share.delete", name)
+    return {"ok": True}
+
+
+@router.get("/backups/{name}")
+async def backup_file(name: str, request: Request, user: dict = Depends(admin_user)):
+    try:
+        path = backup.backup_path(name)
+    except backup.BackupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return FileResponse(path, filename=path.name, media_type="application/zip")
+
+
+@router.delete("/backups/{name}")
+async def delete_backup_file(name: str, request: Request, user: dict = Depends(admin_user)):
+    try:
+        backup.delete_backup(name)
+    except backup.BackupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    await audit(user, "system.backup.delete", name)
+    return {"ok": True}
+
+
+@router.post("/restore")
+async def restore_backup(
+    request: Request,
+    file: UploadFile = File(...),
+    user: dict = Depends(admin_user),
+):
+    if not (file.filename or "").lower().endswith(".zip"):
+        raise HTTPException(400, "只支持备份 zip 文件")
+    tmp = DATA_DIR / f"restore-upload-{int(time.time() * 1000)}.zip"
+    total = 0
+    try:
+        with tmp.open("wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                total += len(chunk)
+                if total > backup.MAX_RESTORE_BYTES:
+                    raise HTTPException(413, "备份文件超过 1GB")
+                out.write(chunk)
+        result = await run_in_threadpool(backup.restore_backup, tmp)
+    except backup.BackupError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    finally:
+        tmp.unlink(missing_ok=True)
+    await audit(user, "system.restore", file.filename or "", str(result.get("safety_backup") or ""))
+    return result
+
+
+@router.post("/restart-hint")
+async def restart_hint(user: dict = Depends(admin_user)):
+    """前端提示用：某些设置需要重启服务生效。"""
+    return {"ok": True, "msg": "部分设置（端口、目录）需要重启服务后生效"}
+# ------------------------------------------------------------------ 部署检测 / 一键安装
+@router.get("/hardware")
+async def hardware_profile(user: dict = Depends(admin_user)):
+    """本机配置：CPU、内存、磁盘、GPU、llama.cpp 状态、模型目录。"""
+    prof = hardware.profile()
+    prof["install"] = installer.status()
+    return prof
+
+
+@router.get("/install-status")
+async def install_status(user: dict = Depends(admin_user)):
+    return installer.status()
+
+
+@router.post("/install-llama")
+async def install_llama(force: bool = False, user: dict = Depends(admin_user)):
+    """后台自动下载并安装 llama.cpp（Windows/Linux 预编译包）。"""
+    import asyncio
+    if installer.STATE.get("running"):
+        return {"ok": False, "msg": "安装已在进行中"}
+    if hardware.llama_info()["installed"] and not force:
+        return {"ok": False, "msg": "本机已安装 llama.cpp；如需覆盖重装请使用 force=true"}
+    asyncio.create_task(installer.install_llama())
+    await audit(user, "system.install_llama", "start")
+    return {"ok": True, "msg": "已开始安装，可轮询进度"}
+
+
+@router.get("/install-progress")
+async def install_progress(user: dict = Depends(admin_user)):
+    return installer.STATE
+
+
+def _clean_github_proxy(value: str | None) -> str | None:
+    if value is None:
+        return None
+    raw = str(value).strip()[:300]
+    if raw.lower() in ("off", "direct", "none", "auto", ""):
+        return raw.lower() if raw else "auto"
+    if not raw.startswith(("http://", "https://")):
+        raw = "https://" + raw
+    return raw.rstrip("/") + "/"
+
+
+async def _platform_items(cfg: dict, selected: list[str], srv: dict, scan: bool = False) -> list[dict]:
+    items = await platforms.status(cfg, selected, srv, probe_all=scan)
+    return platform_deploy.enrich(items)
+
+
+async def _pick_local_model(cfg: dict) -> dict | None:
+    """优先当前配置模型，否则取第一个下载完整的本地模型。"""
+    rows = await fetch_all("SELECT * FROM models ORDER BY sort,key")
+    preferred = str(cfg.get("model") or "")
+    if preferred:
+        rows = [r for r in rows if preferred in (r["key"], r.get("alias"), r.get("label"))] + \
+               [r for r in rows if preferred not in (r["key"], r.get("alias"), r.get("label"))]
+    for row in rows:
+        path = model_file_path(cfg, row["filename"])
+        expected = int(row["total_bytes"] or 0)
+        if not path.exists():
+            continue
+        if expected and path.stat().st_size + 1024 < expected:
+            continue
+        return row
+    return None
+
+
+@router.get("/local-deploy")
+async def local_deploy_status(scan: bool = Query(False), user: dict = Depends(admin_user)):
+    """本地部署总开关、平台选择与各平台实际状态；scan=true 会扫描未勾选平台。"""
+    cfg = load_config()
+    selected = platforms.normalize_selected(cfg.get("deploy_platforms"))
+    srv = await llama.server.status()
+    items = await _platform_items(cfg, selected, srv, scan)
+    return {
+        "enabled": bool(cfg.get("local_enabled", True)),
+        "installed": hardware.llama_info()["installed"],
+        "model": srv.get("model") or cfg.get("model") or "",
+        "server": srv,
+        "selected": selected,
+        "platforms": items,
+        "endpoints": platforms.endpoints(cfg),
+        "github_proxy": cfg.get("github_proxy") or "auto",
+    }
+
+
+@router.put("/local-platforms")
+async def save_local_platforms(body: LocalPlatformsBody, user: dict = Depends(admin_user)):
+    """只保存平台选择和外部平台地址，不改变本地部署开关。"""
+    cfg = load_config()
+    selected = platforms.normalize_selected(
+        body.platforms if body.platforms is not None else cfg.get("deploy_platforms"))
+    cfg["deploy_platforms"] = selected
+    if body.endpoints is not None:
+        cfg["platform_endpoints"] = platforms.clean_endpoints(body.endpoints, cfg)
+    proxy = _clean_github_proxy(body.github_proxy)
+    if proxy is not None:
+        cfg["github_proxy"] = proxy
+    save_config(cfg)
+    srv = await llama.server.status()
+    items = await _platform_items(cfg, selected, srv)
+    await audit(user, "system.local.platforms", detail=",".join(selected))
+    return {"ok": True, "enabled": bool(cfg.get("local_enabled", True)),
+            "selected": selected, "platforms": items,
+            "endpoints": platforms.endpoints(cfg), "github_proxy": cfg.get("github_proxy") or "auto",
+            "server": srv}
+
+
+@router.post("/local-platforms/{key}/deploy")
+async def deploy_platform(key: str, force: bool = Query(False), endpoint: str = Query(""),
+                          user: dict = Depends(admin_user)):
+    """单个平台一键部署：已安装就跳过下载，仍会尝试启动/连接。"""
+    import asyncio
+    if key not in platforms.PLATFORMS:
+        raise HTTPException(404, "未知平台")
+    if platform_deploy.is_running(key):
+        return {"ok": False, "msg": "这个平台正在部署，请稍等", "state": platform_deploy.get_state(key)}
+    endpoint = (endpoint or "").strip()[:300]
+    asyncio.create_task(platform_deploy.deploy(key, force=force, endpoint=endpoint))
+    await audit(user, "system.platform.deploy", key, detail=f"force={bool(force)}")
+    return {"ok": True, "msg": "已开始部署", "key": key,
+            "skipped": True if (platform_deploy.detect(key).get("installed") and not force) else False}
+
+
+@router.get("/local-platforms/{key}/progress")
+async def platform_progress(key: str, user: dict = Depends(admin_user)):
+    if key not in platforms.PLATFORMS:
+        raise HTTPException(404, "未知平台")
+    return {"state": platform_deploy.get_state(key)}
+
+
+@router.get("/network-check")
+async def network_check(user: dict = Depends(admin_user)):
+    """检查 GitHub 直连/加速、PyPI 镜像和官网是否可达。"""
+    return await installer.network_check()
+
+
+@router.get("/websearch")
+async def get_websearch(user: dict = Depends(admin_user)):
+    """联网检索后台配置与运行状态。"""
+    return websearch.settings()
+
+
+@router.put("/websearch")
+async def put_websearch(body: WebsearchBody, user: dict = Depends(admin_user)):
+    cfg = load_config()
+    changed: list[str] = []
+    if body.enabled is not None:
+        cfg["websearch_enabled"] = bool(body.enabled)
+        changed.append("enabled=" + ("on" if body.enabled else "off"))
+    if body.max_sources is not None:
+        if not 1 <= body.max_sources <= 10:
+            raise HTTPException(400, "搜索结果数量需在 1–10 条之间")
+        cfg["websearch_max_sources"] = int(body.max_sources)
+        changed.append(f"sources={body.max_sources}")
+    if body.max_pages is not None:
+        if not 0 <= body.max_pages <= 4:
+            raise HTTPException(400, "抓取网页数量需在 0–4 篇之间")
+        cfg["websearch_max_pages"] = int(body.max_pages)
+        changed.append(f"pages={body.max_pages}")
+    save_config(cfg)
+    websearch.clear_cache()
+    await audit(user, "websearch.settings", detail=", ".join(changed) or "未变更")
+    return websearch.settings()
+
+
+@router.post("/websearch/test")
+async def test_websearch(body: WebsearchTestBody, user: dict = Depends(admin_user)):
+    """用真实检索验证当前开关和抓取设置，返回来源与耗时。"""
+    q = body.query.strip()
+    if len(q) < 2:
+        raise HTTPException(400, "请输入至少 2 个字的检索词")
+    current = websearch.settings()
+    if not current["enabled"]:
+        raise HTTPException(400, "联网检索当前已关闭，请先打开总开关")
+    started = time.time()
+    try:
+        web = await websearch.research(
+            q,
+            limit=body.max_sources or current["max_sources"],
+            pages=body.max_pages if body.max_pages is not None else current["max_pages"],
+        )
+    except Exception as e:
+        raise HTTPException(400, f"检索失败：{str(e)[:160]}")
+    cost = int((time.time() - started) * 1000)
+    sources = [{"title": s.get("title") or s.get("url", ""), "url": s.get("url", ""),
+                "snippet": (s.get("snippet") or "")[:240]}
+               for s in (web.get("sources") or [])]
+    await audit(user, "websearch.test", q, f"{len(sources)} 条 / {cost}ms",
+                "ok" if sources else "fail")
+    return {"ok": bool(sources), "query": web.get("query") or q, "sources": sources,
+            "error": web.get("error") or "", "ms": cost}
+
+
+@router.post("/websearch/cache/clear")
+async def clear_websearch_cache(user: dict = Depends(admin_user)):
+    websearch.clear_cache()
+    await audit(user, "websearch.cache.clear")
+    return {"ok": True, "cache_entries": websearch.settings()["cache_entries"]}
+
+
+@router.post("/local-deploy")
+async def set_local_deploy(body: LocalDeployBody, user: dict = Depends(admin_user)):
+    """开启/关闭本地部署；可同时选择多个平台，不选则默认 llama.cpp。"""
+    cfg = load_config()
+    selected = platforms.normalize_selected(
+        body.platforms if body.platforms is not None else cfg.get("deploy_platforms"))
+    if body.endpoints is not None:
+        cfg["platform_endpoints"] = platforms.clean_endpoints(body.endpoints, cfg)
+    proxy = _clean_github_proxy(body.github_proxy)
+    if proxy is not None:
+        cfg["github_proxy"] = proxy
+    cfg["deploy_platforms"] = selected
+
+    if not body.enabled:
+        cfg["local_enabled"] = False
+        save_config(cfg)
+        await llama.server.stop()
+        srv = await llama.server.status()
+        items = await _platform_items(cfg, selected, srv)
+        warning = ""
+        if srv.get("healthy") and srv.get("external"):
+            warning = "外部 llama-server 仍在运行；工作台已停止使用本地模型，但未强制结束外部进程"
+        await audit(user, "system.local.disable", detail=warning or "已关闭本地部署")
+        return {"ok": True, "enabled": False, "started": False, "msg": warning or "本地部署已关闭",
+                "server": srv, "selected": selected, "platforms": items}
+
+    cfg["local_enabled"] = True
+    save_config(cfg)
+    srv = await llama.server.status()
+    notes: list[str] = []
+
+    if "llama.cpp" in selected:
+        if srv.get("healthy"):
+            notes.append("llama.cpp 已在运行")
+        elif not hardware.llama_info()["installed"]:
+            notes.append("llama.cpp 还没安装，请在平台卡点“一键部署”")
+        else:
+            row = await _pick_local_model(cfg)
+            if not row:
+                notes.append("还没有下载完整的 GGUF 模型，llama.cpp 暂未启动")
+            else:
+                ok, msg = await llama.server.start(row["key"])
+                notes.append(msg if ok else f"llama.cpp 启动失败：{msg}")
+    else:
+        notes.append("未选择 llama.cpp，工作台不会启动它")
+
+    srv = await llama.server.status()
+    items = await _platform_items(cfg, selected, srv)
+    healthy_external = [p["name"] for p in items
+                        if p["kind"] == "external" and p["selected"] and p["healthy"]]
+    if healthy_external:
+        notes.append("外部平台已连接：" + "、".join(healthy_external))
+    started = bool(srv.get("healthy")) or bool(healthy_external)
+    if not started:
+        notes.append("当前没有检测到可用的本地平台，请先启动平台服务")
+
+    msg = "；".join(notes)
+    await audit(user, "system.local.enable" if started else "system.local.enable",
+                detail=f"平台 {','.join(selected)}；{msg}")
+    return {"ok": True, "enabled": True, "started": started, "msg": msg,
+            "server": srv, "selected": selected, "platforms": items}
+
+
+
+
+
+
+
+
+

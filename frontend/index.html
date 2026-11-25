@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7fb">
+<meta name="description" content="本地 AI 工作台：多模型对话、账号与 API 管理">
+<title>本地 AI 工作台</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app.css?v=0.8.1.2">
+<link rel="stylesheet" href="/app.ui.css?v=0.8.1.8">
+</head>
+<body>
+
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h8M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.5"/><circle cx="8" cy="17" r="2.5"/></symbol>
+  <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="M20 11.5l-8.2 8.2a4.6 4.6 0 0 1-6.5-6.5l8.4-8.4a3.1 3.1 0 0 1 4.4 4.4l-8.3 8.3a1.7 1.7 0 0 1-2.4-2.4l7.7-7.7"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="5" cy="6" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="18" r="1"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-translate" viewBox="0 0 24 24"><path d="M4 5h8M8 3v2c0 4-2 7-4 8M6 9c1 3 3 4 6 5"/><path d="M13 20l4-9 4 9M14.5 17h5"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4"/></symbol>
+  <symbol id="i-plan" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M8 11h3M14 11h2M8 15h7"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12l16-8-6.5 16-2.5-6.5L4 12z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16v4z"/><path d="M13 5l4 4"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M17 12v3M20 12v3"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 19h14"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 4H5v16h5M14 8l4 4-4 4M9 12h9"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5L17.5 6.5M6.5 17.5L5 19"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19 14.5A8 8 0 0 1 9.5 5 8 8 0 1 0 19 14.5z"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 4h5.5A3.5 3.5 0 0 1 14 7.5V20a3 3 0 0 0-3-3H5z"/><path d="M19 4h-3.5A3.5 3.5 0 0 0 12 7.5V20a3 3 0 0 1 3-3H19z"/></symbol>
+  <symbol id="i-brain" viewBox="0 0 24 24"><path d="M9 5a3 3 0 0 0-3 3 3 3 0 0 0-1 5 3 3 0 0 0 3 3 3 3 0 0 0 4 2V6a3 3 0 0 0-3-1z"/><path d="M15 5a3 3 0 0 1 3 3 3 3 0 0 1 1 5 3 3 0 0 1-3 3 3 3 0 0 1-4 2V6a3 3 0 0 1 3-1z"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2 6"/><path d="M20 4v7h-7"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1 1-1.1 1.8"/><circle cx="12" cy="17" r="1"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 20l1.8-4.1A7.5 7.5 0 1 1 20 11.5z"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.2 2.3 3.4 5.3 3.4 8.5s-1.2 6.2-3.4 8.5c-2.2-2.3-3.4-5.3-3.4-8.5S9.8 5.8 12 3.5z"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 16v-4M12 16V8M16 16v-6"/></symbol>
+</svg>
+
+<!-- ============================ 登录 / 注册 / 初始化 ============================ -->
+<section id="authView" class="auth-view" hidden>
+  <div class="auth-bg"><span class="orb a"></span><span class="orb b"></span></div>
+  <div class="auth-shell">
+    <div class="auth-brand">
+      <div class="brand-lockup">
+        <span class="logo big" data-brand-logo-box><svg data-brand-logo-default viewBox="0 0 48 48" aria-hidden="true"><path d="M24 6l4.6 11.4L40 22l-11.4 4.6L24 38l-4.6-11.4L8 22l11.4-4.6L24 6z"/><circle cx="24" cy="22" r="3.2"/></svg><img data-brand-logo alt="" hidden></span>
+        <span><b data-brand-name>本地 AI 工作台</b><small data-brand-tagline>Local AI Workbench</small></span>
+      </div>
+      <h1 id="authHeroTitle">你的模型，<br>只为你的账号工作。</h1>
+      <p class="lead" id="authHeroLead">本地模型、云端接口、知识库与调用记录统一在一处。登录后即可对话、生成自己的 API Key，并随时管理账号安全。</p>
+      <ul class="auth-points">
+        <li><span class="dot"></span>账号隔离，每个用户只能调用被授权的模型</li>
+        <li><span class="dot"></span>密码加密存储，API Key 只显示一次</li>
+        <li><span class="dot"></span>支持本机、局域网和公网穿透访问</li>
+      </ul>
+      <div class="auth-foot" id="authFoot">数据保存在你自己的机器上 · 不上传云端</div>
+      <div class="auth-legal" id="authLegal" hidden></div>
+    </div>
+
+    <div class="auth-card">
+      <div class="auth-card-head">
+        <div class="auth-kicker" id="authKicker">欢迎回来</div>
+        <h2 id="authTitle">登录账号</h2>
+        <p id="authSubtitle">使用工作台账号继续对话</p>
+      </div>
+
+      <div class="auth-tabs" id="authTabs" hidden>
+        <button class="auth-tab active" data-authmode="login">登录</button>
+        <button class="auth-tab" data-authmode="register">注册</button>
+      </div>
+
+      <div class="auth-methods" id="authMethods" hidden>
+        <button type="button" class="auth-method active" data-authmethod="password">账号密码</button>
+        <button type="button" class="auth-method" data-authmethod="phone" hidden>手机号</button>
+        <button type="button" class="auth-method" data-authmethod="email" hidden>邮箱</button>
+      </div>
+
+      <form id="authForm" novalidate>
+        <label class="field">
+          <span>用户名</span>
+          <input id="authUser" name="username" autocomplete="username" placeholder="2–32 位" maxlength="32" required>
+        </label>
+        <label class="field">
+          <span>密码</span>
+          <input id="authPass" name="password" type="password" autocomplete="current-password" placeholder="至少 8 位，不能全是数字或字母" required>
+        </label>
+        <label class="field" id="authConfirmWrap" hidden>
+          <span>确认密码</span>
+          <input id="authConfirm" name="confirm" type="password" autocomplete="new-password" placeholder="再输入一次">
+        </label>
+        <div class="auth-error" id="authError" hidden></div>
+        <button class="btn primary wide" id="authSubmit" type="submit">登录</button>
+      </form>
+
+      <form id="otpForm" class="auth-otp" hidden novalidate>
+        <label class="field">
+          <span id="otpTargetLabel">手机号</span>
+          <input id="otpTarget" autocomplete="tel" placeholder="请输入手机号" maxlength="64" required>
+        </label>
+        <label class="field">
+          <span>验证码</span>
+          <div class="otp-row">
+            <input id="otpCode" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" maxlength="6" required>
+            <button class="btn ghost" type="button" id="otpSend">发送验证码</button>
+          </div>
+        </label>
+        <div class="auth-error" id="otpError" hidden></div>
+        <button class="btn primary wide" id="otpSubmit" type="submit">登录</button>
+      </form>
+
+      <div class="auth-switch" id="authSwitch" hidden>
+        还没有账号？<button type="button" class="linkbtn" data-authmode="register">立即注册</button>
+      </div>
+      <div class="auth-switch" id="authSwitchLogin" hidden>
+        已有账号？<button type="button" class="linkbtn" data-authmode="login">去登录</button>
+      </div>
+
+      <div class="auth-providers" id="authProviders" hidden>
+        <div class="auth-divider"><span>其他登录方式</span></div>
+        <div class="provider-buttons" id="providerButtons"></div>
+      </div>
+      <div class="auth-provider-note" id="providerNote"></div>
+
+      <div class="auth-note" id="authNote"></div>
+      <button class="auth-admin-link" id="toConsole" type="button">进入管理控制台 <span>→</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 主应用 ============================ -->
+<section id="appView" class="app-view" hidden>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-head">
+      <div class="brand-lockup">
+        <span class="logo" data-brand-logo-box><svg data-brand-logo-default viewBox="0 0 48 48" aria-hidden="true"><path d="M24 6l4.6 11.4L40 22l-11.4 4.6L24 38l-4.6-11.4L8 22l11.4-4.6L24 6z"/><circle cx="24" cy="22" r="3.2"/></svg><img data-brand-logo alt="" hidden></span>
+        <span><b data-brand-short-name>AI 工作台</b><small id="sidebarUser">未登录</small></span>
+      </div>
+      <button class="iconbtn sidebar-close" id="closeSidebar" title="收起侧栏"><svg><use href="#i-close"/></svg></button>
+    </div>
+
+    <button class="new-chat" id="newChatBtn"><svg><use href="#i-plus"/></svg><span>新建对话</span></button>
+
+    <div class="side-active-wb" id="sideActiveWb" hidden>
+      <button type="button" class="side-active-main" id="sideActiveWbOpen" title="打开当前工作台">
+        <span class="side-active-icon" id="sideActiveWbIcon">🧩</span>
+        <span class="side-active-copy"><b id="sideActiveWbName">当前工作台</b></span>
+      </button>
+      <button type="button" class="side-active-close" id="sideActiveWbClose" title="关闭当前工作台" aria-label="关闭当前工作台"><svg><use href="#i-close"/></svg></button>
+    </div>
+
+    <div class="side-label">工作区</div>
+    <div class="side-chat active" aria-current="page">
+      <svg><use href="#i-chat"/></svg><span>对话</span><em>当前</em>
+    </div>
+    <div class="side-tools">
+      <button id="workbenchBtn" type="button" class="side-workbench" data-front="workbench"><svg><use href="#i-grid"/></svg><span>工作台</span><b class="side-badge" id="workbenchBadge" hidden>0</b></button>
+      <button id="capsBtn" type="button" class="side-caps" data-front="skills"><svg><use href="#i-spark"/></svg><span>插件 · 技能</span></button>
+      <button id="squadsBtn" type="button" data-front="collab"><svg><use href="#i-list"/></svg><span>小队与共享</span></button>
+      <button id="deskBtn" type="button" data-front="desk"><svg><use href="#i-help"/></svg><span>服务台</span></button>
+      <div class="side-label sub">内容与效率</div>
+      <button id="sideLibraryBtn" type="button" data-front="library"><svg><use href="#i-book"/></svg><span>资料库</span></button>
+      <button id="sideScheduleBtn" type="button" data-front="schedule"><svg><use href="#i-clock"/></svg><span>定时任务</span></button>
+      <button id="sideFilesBtn" type="button" data-front="files"><svg><use href="#i-file"/></svg><span>生成文件</span></button>
+    </div>
+    <button class="all-features" id="allFeaturesBtn" type="button" aria-haspopup="dialog" aria-controls="featureCenter">
+      <svg><use href="#i-grid"/></svg><span>全部功能</span><em id="frontEnabledCount">11</em>
+    </button>
+
+    <div class="side-search">
+      <svg><use href="#i-search"/></svg>
+      <input id="convSearch" placeholder="搜索对话" autocomplete="off">
+    </div>
+
+    <div class="conv-head"><span>最近对话</span><button class="linkbtn" id="refreshConv">刷新</button></div>
+    <nav class="conv-list" id="convList"></nav>
+
+    <div class="sidebar-foot">
+      <div class="local-card" id="localModeCard">
+        <span class="local-icon"><svg><use href="#i-shield"/></svg></span>
+        <span class="local-copy"><b>本地模式</b><small>对话与文件不离开这台电脑</small></span>
+      </div>
+      <button class="user-chip" id="userChip">
+        <span class="avatar" id="userAvatar">A</span>
+        <span class="user-meta"><b id="userName">admin</b><small id="userRole">管理员</small></span>
+        <svg><use href="#i-settings"/></svg>
+      </button>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="iconbtn only-mobile" id="openSidebar" title="打开侧栏"><svg><use href="#i-menu"/></svg></button>
+      <div class="top-title">
+        <h3 id="currentTitle">新对话</h3>
+        <span id="currentMeta">开始一段新的对话</span>
+      </div>
+      <label class="model-select top-model" title="选择模型">
+        <svg><use href="#i-spark"/></svg>
+        <select id="modelSelect"></select>
+      </label>
+      <button class="toolbtn top-share" id="shareChatBtn" data-front="collab" type="button" title="分享当前对话" hidden>
+        <svg><use href="#i-share"/></svg><span>分享</span>
+      </button>
+    </header>
+
+    <div class="notice-strip" id="noticeStrip" hidden>
+      <div class="notice-strip-main"><b id="noticeTitle"></b><span id="noticeBody"></span></div>
+      <button class="iconbtn small" id="noticeClose" type="button" title="关闭公告"><svg><use href="#i-close"/></svg></button>
+    </div>
+
+    <div class="chat-scroll" id="chatScroll">
+      <div class="welcome" id="welcome">
+        <div class="welcome-dayline"><i></i><b>今天</b> · <span id="welcomeDate">11 月 25 日 周三</span></div>
+        <div class="welcome-mark" id="welcomeMark"><svg><use href="#i-spark"/></svg></div>
+        <div class="welcome-workbench" id="welcomeWorkbench" hidden></div>
+        <h2 id="welcomeTitle">今天想做什么？</h2>
+        <p id="welcomeSub">直接说任务。需要资料、联网或工作台时，再打开对应工具。</p>
+        <div class="welcome-caps" id="welcomeCaps" hidden></div>
+        <div class="suggestions" id="suggestions">
+          <button data-suggest="帮我写一份本周工作总结，包含进度、问题和下周计划">写一份工作总结</button>
+          <button data-suggest="用简单的例子解释一下什么是 RAG，适合新手">解释一个技术概念</button>
+          <button data-suggest="把下面这段话润色得更正式、简洁：">帮我润色一段文字</button>
+          <button data-suggest="给我一个 Python 脚本，用来批量重命名文件夹里的图片">写一个 Python 脚本</button>
+        </div>
+        <section class="welcome-continue" id="welcomeContinue" hidden>
+          <div class="wc-head"><b>从工作台继续</b><button class="linkbtn" id="welcomeAllWorkbench" type="button">查看全部工作台</button></div>
+          <div class="wc-grid" id="welcomeWbGrid"></div>
+        </section>
+        <div class="welcome-note" id="welcomeNote"></div>
+      </div>
+      <div class="messages" id="messages"></div>
+    </div>
+
+    <div class="composer-wrap">
+      <div class="composer" id="composer">
+        <div class="attach-list" id="attachList" hidden></div>
+        <textarea id="messageInput" rows="1" placeholder="给 AI 一个任务，或粘贴一段文字…"></textarea>
+        <div class="composer-actions">
+          <div class="composer-left">
+            <label class="agent-inline agent-picker" id="agentWrap" data-front="agent" title="选择智能体" hidden>
+              <svg><use href="#i-brain"/></svg>
+              <select id="agentSelect"><option value="">通用助手</option></select>
+              <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </label>
+            <div class="skill-wrap">
+              <button class="toolbtn skill-btn" id="skillBtn" data-front="skills" type="button" title="选择技能" aria-expanded="false" aria-controls="skillMenu">
+                <svg><use href="#i-spark"/></svg><span id="skillBtnLabel">技能</span>
+              </button>
+              <div class="skill-pop" id="skillMenu" hidden>
+                <div class="pop-head"><b>技能</b><span>默认不使用，点选后只作用于本条消息</span></div>
+                <div class="skill-list" id="skillList"></div>
+              </div>
+            </div>
+            <div class="skill-wrap">
+              <button class="toolbtn lib-btn" id="libBtn" data-front="library" type="button" title="从资料库挑选本次要带入的资料" aria-expanded="false" aria-controls="libMenu">
+                <svg><use href="#i-book"/></svg><span>资料库</span><b class="lib-badge" id="libBtnCount" hidden>0</b>
+              </button>
+              <div class="skill-pop lib-pop" id="libMenu" hidden>
+                <div class="pop-head"><b>资料库</b><span>可多选；选中的资料会随每条消息反复使用</span></div>
+                <input class="lib-picker-search" id="libPickerSearch" placeholder="筛选标题、来源、文件夹或标签…" autocomplete="off">
+                <div class="lib-picker-filters">
+                  <select id="libPickerFolder" aria-label="按文件夹筛选资料"><option value="">全部文件夹</option></select>
+                  <select id="libPickerTag" aria-label="按标签筛选资料"><option value="">全部标签</option></select>
+                </div>
+                <div class="lib-picker-list" id="libPickerList"><div class="empty-line">读取中…</div></div>
+                <div class="inline-notice" id="libPickerNotice" hidden></div>
+                <div class="lib-picker-foot">
+                  <span class="hint" id="libPickerHint">默认不选择资料</span>
+                  <button class="btn ghost sm" id="libClear" type="button">清空选择</button>
+                </div>
+              </div>
+            </div>
+            <button class="toolbtn web-btn" id="webBtn" data-front="web" type="button" title="联网检索实时网页（Bing），默认关闭" aria-pressed="false">
+              <svg><use href="#i-search"/></svg><span>联网</span>
+            </button>
+            <label class="fmt-pick" id="fmtPick" data-front="docgen" title="选择输出文件格式；选好后本条及后续回答会直接生成可下载文件">
+              <svg><use href="#i-file"/></svg>
+              <select id="formatSelect" aria-label="输出文件格式">
+                <option value="">自动</option>
+                <option value="docx">Word 文档</option>
+                <option value="xlsx">Excel 表格</option>
+                <option value="pptx">PPT 演示</option>
+                <option value="pdf">PDF 文档</option>
+                <option value="md">Markdown</option>
+                <option value="txt">纯文本</option>
+              </select>
+            </label>
+          </div>
+          <div class="composer-buttons">
+            <button class="toolbtn attach-btn" id="attachBtn" data-front="attach" type="button" title="上传文件或粘贴截图（文档解析和图片 OCR 后存入个人资料库）"><svg><use href="#i-paperclip"/></svg></button>
+            <button class="sendbtn" id="sendBtn" title="发送"><svg><use href="#i-send"/></svg></button>
+            <button class="sendbtn stop" id="stopBtn" title="停止生成" hidden><svg><use href="#i-stop"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <div class="composer-foot">
+        <span class="foot-hint"><svg><use href="#i-paperclip"/></svg>支持拖入文件，也可以直接粘贴</span>
+        <em>Shift + Enter 换行 · Enter 发送</em>
+      </div>
+    </div>
+    <input id="fileInput" type="file" multiple hidden
+           accept=".txt,.md,.csv,.json,.log,.py,.js,.ts,.tsx,.jsx,.html,.htm,.css,.xml,.yaml,.yml,.ini,.conf,.sql,.sh,.bat,.ps1,.pdf,.docx,.xlsx,.xlsm,.xls,.pptx,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff">
+  </main>
+</section>
+
+<!-- ============================ 功能中心 ============================ -->
+<div class="feature-center" id="featureCenter" hidden>
+  <div class="fc-scrim" data-close-feature-center></div>
+  <div class="fc-card" role="dialog" aria-modal="true" aria-labelledby="fcTitle">
+    <div class="fc-head">
+      <div>
+        <span class="fc-kicker">ALL FEATURES</span>
+        <h2 id="fcTitle">全部功能</h2>
+        <p id="fcSummary">正在读取已启用功能…</p>
+      </div>
+      <button class="iconbtn" type="button" data-close-feature-center title="关闭"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="fc-grid" id="fcGrid"></div>
+  </div>
+</div>
+
+<!-- ============================ 设置抽屉 ============================ -->
+<div class="drawer-wrap" id="settingsDrawer" hidden>
+  <div class="drawer-scrim" data-close-settings></div>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-label="账号设置">
+    <div class="drawer-head">
+      <div><span class="kicker">ACCOUNT &amp; SECURITY</span><h2>设置</h2></div>
+      <button class="iconbtn" data-close-settings title="关闭"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <nav class="drawer-tabs" id="drawerTabs">
+      <button class="active" data-dtab="account"><svg><use href="#i-user"/></svg><span>账号</span></button>
+      <button data-dtab="api" data-front="api_access"><svg><use href="#i-key"/></svg><span>API</span></button>
+      <button data-dtab="chat"><svg><use href="#i-spark"/></svg><span>对话</span></button>
+      <button data-dtab="kb" data-front="kb"><svg><use href="#i-book"/></svg><span>知识库</span></button>
+      <button data-dtab="library" data-front="library"><svg><use href="#i-book"/></svg><span>资料库</span></button>
+      <button data-dtab="memory" data-front="memory"><svg><use href="#i-brain"/></svg><span>记忆</span></button>
+      <button data-dtab="appearance"><svg><use href="#i-sun"/></svg><span>外观</span></button>
+      <button data-dtab="data" data-front="data_export"><svg><use href="#i-download"/></svg><span>数据</span></button>
+</nav>
+
+    <div class="drawer-body">
+      <!-- 账号 -->
+      <section class="dpanel active" id="dpanel-account">
+        <div class="profile-card">
+          <span class="avatar xl" id="profileAvatar">A</span>
+          <div><h3 id="profileName">admin</h3><p id="profileMeta">管理员 · 加入于 —</p></div>
+          <span class="badge" id="profileRole">管理员</span>
+        </div>
+
+        <div class="stat-row">
+          <div class="stat"><span>账号 ID</span><b id="statId">#1</b></div>
+          <div class="stat"><span>最近登录</span><b id="statLogin">—</b></div>
+          <div class="stat"><span>登录 IP</span><b id="statIp" class="mono">—</b></div>
+        </div>
+
+        <div class="section-title"><b>登录方式</b><span>一个账号可绑定多种方式</span></div>
+        <div class="identity-list" id="identityList"><div class="empty-line">读取中…</div></div>
+        <form id="bindForm" class="bind-form" hidden novalidate>
+          <div class="bind-head">
+            <b id="bindTitle">绑定手机号</b>
+            <button class="btn ghost sm" type="button" id="bindCancel">取消</button>
+          </div>
+          <label class="field">
+            <span id="bindTargetLabel">手机号</span>
+            <input id="bindTarget" autocomplete="tel" placeholder="请输入手机号" maxlength="64" required>
+          </label>
+          <label class="field">
+            <span>验证码</span>
+            <div class="otp-row">
+              <input id="bindCode" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" maxlength="6" required>
+              <button class="btn ghost" type="button" id="bindSend">发送验证码</button>
+            </div>
+          </label>
+          <div class="inline-error" id="bindError" hidden></div>
+          <button class="btn primary" type="submit" id="bindSubmit">确认绑定</button>
+        </form>
+
+        <div class="section-title"><b>修改密码</b><span>修改后会让其他设备退出登录</span></div>
+        <form id="pwForm" class="form-stack">
+          <label class="field"><span>当前密码</span><input id="pwOld" type="password" autocomplete="current-password" required></label>
+          <div class="two-col">
+            <label class="field"><span>新密码</span><input id="pwNew" type="password" autocomplete="new-password" placeholder="至少 8 位" required></label>
+            <label class="field"><span>确认新密码</span><input id="pwConfirm" type="password" autocomplete="new-password" required></label>
+          </div>
+          <div class="inline-error" id="pwError" hidden></div>
+          <button class="btn primary" id="pwSubmit" type="submit">保存新密码</button>
+        </form>
+
+        <div class="section-title"><b>登录设备</b><span>当前账号正在使用的会话</span></div>
+        <div class="device-list" id="deviceList"><div class="empty-line">读取中…</div></div>
+        <button class="btn ghost" id="revokeOthers">退出其他设备</button>
+
+        <div class="danger-zone">
+          <div><b>退出当前账号</b><span>下次需要重新输入密码</span></div>
+          <button class="btn" id="logoutBtn"><svg><use href="#i-logout"/></svg>退出登录</button>
+        </div>
+      </section>
+
+      <!-- API -->
+      <section class="dpanel" id="dpanel-api">
+        <div class="section-title">
+          <b>我的 API</b><span>给手机、脚本或其他程序调用</span>
+        </div>
+        <div class="scope-line"><span class="scope-dot" id="apiScopeDot"></span><b id="apiScope">检测中…</b><span id="apiScopeHint"></span></div>
+        <div class="api-address" id="apiAddress"><span class="mono">—</span><button class="iconbtn small" id="copyBase" title="复制地址"><svg><use href="#i-copy"/></svg></button></div>
+        <div class="api-urls" id="apiUrls"></div>
+
+        <div class="key-create">
+          <input id="keyName" placeholder="给 Key 起个名字，例如 手机 / 脚本" maxlength="40" autocomplete="off">
+          <button class="btn primary" id="createKeyBtn">生成 Key</button>
+        </div>
+        <div class="secret-box" id="secretBox" hidden>
+          <div><b>新 Key 只显示这一次</b><span>关闭后只能看到前缀，请现在复制保存。</span></div>
+          <div class="secret-row"><input id="secretValue" readonly autocomplete="off"><button class="btn primary" id="copySecret">复制</button><button class="btn ghost" id="hideSecret">我已保存</button></div>
+        </div>
+        <div class="key-list" id="keyList"><div class="empty-line">读取中…</div></div>
+
+        <div class="section-title"><b>调用说明</b><span>兼容 OpenAI SDK / curl</span></div>
+        <div class="code-card"><div class="code-head"><b>curl</b><button class="iconbtn small" data-copy-target="apiCurl"><svg><use href="#i-copy"/></svg></button></div><pre id="apiCurl"></pre></div>
+        <div class="code-card"><div class="code-head"><b>Python</b><button class="iconbtn small" data-copy-target="apiPython"><svg><use href="#i-copy"/></svg></button></div><pre id="apiPython"></pre></div>
+        <p class="muted small">外网调用前，需要先在控制台「网络」页开启内网穿透，并把目标选为“管理控制台”。</p>
+      </section>
+
+      <!-- 对话 -->
+      <section class="dpanel" id="dpanel-chat">
+        <div class="section-title"><b>生成参数</b><span>模型在顶部切换，其他偏好只保存在这台设备</span></div>
+        <div class="range-row">
+          <label for="setTemp">温度 <b id="tempValue">0.7</b></label>
+          <input type="range" id="setTemp" min="0" max="1.5" step="0.1" value="0.7">
+          <span class="hint">越低越稳定，越高越发散</span>
+        </div>
+        <div class="two-col">
+          <label class="field"><span>最大输出 Token</span><input id="setMaxTokens" type="number" min="64" max="8192" step="64" value="2048"></label>
+          <label class="checkline tall"><input id="setKb" type="checkbox" checked> 使用本机知识库检索</label>
+        </div>
+        <label class="field"><span>系统提示词 <em id="sysPromptScope">（用于新对话）</em></span><textarea id="setSystemPrompt" rows="5" placeholder="例如：回答简洁、专业，默认使用简体中文。"></textarea></label>
+        <div class="row-end">
+          <button class="btn ghost" id="resetChatPrefs">恢复默认</button>
+          <button class="btn primary" id="saveChatPrefs">保存</button>
+        </div>
+        <div class="note-card">当前模型能力由控制台的「用户」页分配。普通用户只能看到已授权的模型。</div>
+      </section>
+
+      <!-- 我的知识库 -->
+      <section class="dpanel" id="dpanel-kb">
+        <div class="section-title"><b>我的知识库</b><span id="myKbStat">读取中…</span></div>
+        <label class="checkline tall"><input type="checkbox" id="myKbToggle"> 在对话中使用我的个人知识库</label>
+        <div class="note-card" id="myKbToggleNote">默认关闭。开启后才会把个人资料用于当前账号的对话检索，其他账号看不到。</div>
+        <div class="kb-source-picker">
+          <div class="kb-source-title">对话时参考哪些来源 <span id="myKbSourceState">可多选</span></div>
+          <div class="kb-source-options">
+            <label class="checkline"><input type="checkbox" id="myKbUsePublic"> 公共知识库 <em id="myKbPublicHint"></em></label>
+            <label class="checkline"><input type="checkbox" id="myKbUsePersonal"> 我的个人知识库</label>
+          </div>
+        </div>
+        <div class="note-card">个人资料不会进入公共库，也不会被其他账号检索；公共库是否可用由管理员开关决定。</div>
+        <div class="form-stack" style="margin-top:14px">
+          <label class="field"><span>标题</span><input id="myKbTitle" maxlength="200" placeholder="例如：产品退款规则"></label>
+          <label class="field"><span>正文</span><textarea id="myKbContent" rows="4" placeholder="粘贴要长期参考的规则、说明、产品资料…"></textarea></label>
+          <div class="row-end">
+            <label class="btn ghost sm file-btn">上传文件<input type="file" id="myKbFile" multiple accept=".txt,.md,.markdown,.csv,.json,.log,.py,.html,.htm,.pdf,.docx,.xlsx,.xlsm,.xls,.pptx,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff" hidden></label>
+            <button class="btn primary sm" id="myKbAdd">添加到我的知识库</button>
+          </div>
+          <div class="inline-error" id="myKbError" hidden></div>
+          <div class="inline-notice" id="myKbNotice" hidden></div>
+        </div>
+
+        <div class="section-title"><b>检索我的资料</b><span>只查个人库</span></div>
+        <div class="inline-search">
+          <input id="myKbSearch" placeholder="输入关键词，回车检索">
+          <button class="btn ghost sm" id="myKbSearchBtn">检索</button>
+        </div>
+        <div class="mine-list" id="myKbResults"></div>
+
+        <div class="section-title"><b>我的文档</b><span id="myKbCount"></span></div>
+        <div class="mine-list" id="myKbList"><div class="empty-line">读取中…</div></div>
+      </section>
+
+      <!-- 我的资料库 -->
+      <section class="dpanel" id="dpanel-library">
+        <div class="section-title"><b>我的资料库</b><span id="myLibStat">读取中…</span></div>
+        <label class="checkline tall"><input type="checkbox" id="myLibToggle"> 在聊天中可使用资料库</label>
+        <div class="note-card" id="myLibToggleNote">默认关闭。开启后可在聊天框点「资料库」挑选总库或个人资料；总库是否可用由管理员开关决定。</div>
+        <div class="kb-source-picker">
+          <div class="kb-source-title">聊天时可选的来源 <span id="myLibSourceState">可多选</span></div>
+          <div class="kb-source-options">
+            <label class="checkline"><input type="checkbox" id="myLibUseGlobal"> 总资料库 <em id="myLibGlobalHint"></em></label>
+            <label class="checkline"><input type="checkbox" id="myLibUsePersonal"> 我的个人资料</label>
+          </div>
+        </div>
+        <div class="note-card">聊天框中上传的可读文件会自动加入这里；同名同字数不会重复添加。支持 Word、PDF、Excel、PPT 和带文字的图片，图片会先做 OCR，扫描版 PDF 默认识别前 15 页。只能删除自己上传的个人资料，总库资料由管理员维护。选中的资料可以反复用于多次对话，每次引用都会记一次使用。</div>
+        <div class="form-stack" style="margin-top:14px">
+          <label class="field"><span>标题</span><input id="myLibTitle" maxlength="200" placeholder="例如：设备接线图说明"></label>
+          <label class="field"><span>正文</span><textarea id="myLibContent" rows="4" placeholder="粘贴需要反复使用的参数、清单、说明…"></textarea></label>
+          <div class="lib-classify">
+            <label class="field"><span>文件夹</span><input id="myLibFolder" list="myLibFolderOptions" maxlength="80" placeholder="未分类，例如：合同资料"></label>
+            <label class="field"><span>标签</span><input id="myLibTags" maxlength="200" placeholder="逗号分隔，例如：合同, 付款"></label>
+          </div>
+          <datalist id="myLibFolderOptions"></datalist>
+          <div class="row-end">
+            <label class="btn ghost sm file-btn">上传文件<input type="file" id="myLibFile" multiple accept=".txt,.md,.markdown,.csv,.json,.log,.py,.html,.htm,.pdf,.docx,.xlsx,.xlsm,.xls,.pptx,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff" hidden></label>
+            <button class="btn primary sm" id="myLibAdd">添加到个人资料库</button>
+          </div>
+          <div class="inline-error" id="myLibError" hidden></div>
+          <div class="inline-notice" id="myLibNotice" hidden></div>
+        </div>
+
+        <div class="section-title"><b>检索我的资料</b><span>只查个人资料库</span></div>
+        <div class="inline-search">
+          <input id="myLibSearch" placeholder="输入关键词，回车检索">
+          <button class="btn ghost sm" id="myLibSearchBtn">检索</button>
+        </div>
+        <div class="mine-list" id="myLibResults"></div>
+
+        <div class="section-title"><b>我的资料</b><span id="myLibCount"></span></div>
+        <div class="lib-filter-row">
+          <select id="myLibFolderFilter" aria-label="按文件夹筛选"><option value="">全部文件夹</option></select>
+          <select id="myLibTagFilter" aria-label="按标签筛选"><option value="">全部标签</option></select>
+        </div>
+        <div class="mine-list" id="myLibList"><div class="empty-line">读取中…</div></div>
+        <div class="lib-org-editor" id="myLibOrg" hidden>
+          <div class="lib-org-head"><b>整理资料</b><button class="btn ghost sm" id="myLibOrgClose" type="button">收起</button></div>
+          <label class="field"><span>标题</span><input id="myLibOrgTitle" maxlength="200"></label>
+          <div class="lib-classify">
+            <label class="field"><span>文件夹</span><input id="myLibOrgFolder" list="myLibFolderOptions" maxlength="80" placeholder="留空表示未分类"></label>
+            <label class="field"><span>标签</span><input id="myLibOrgTags" maxlength="200" placeholder="逗号分隔"></label>
+          </div>
+          <div class="row-end">
+            <button class="btn ghost sm" id="myLibOrgCancel" type="button">取消</button>
+            <button class="btn primary sm" id="myLibOrgSave" type="button">保存分类</button>
+          </div>
+          <div class="inline-error" id="myLibOrgError" hidden></div>
+        </div>
+        <div class="note-card" id="myLibView" hidden>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><b id="myLibViewTitle">资料正文</b><button class="btn ghost sm" id="myLibViewClose">收起</button></div>
+          <div id="myLibViewBody" style="margin-top:8px;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto"></div>
+        </div>
+      </section>
+
+      <!-- 我的长期记忆 -->
+      <section class="dpanel" id="dpanel-memory">
+        <div class="section-title"><b>我的长期记忆</b><span id="myMemStat">读取中…</span></div>
+        <label class="checkline tall"><input type="checkbox" id="myMemToggle"> 让我在对话中跨会话记住偏好</label>
+        <div class="note-card" id="myMemNote">默认关闭。开启后只保存你明确说出的稳定事实和偏好，不保存密码、密钥、验证码等敏感内容。</div>
+        <div class="section-title"><b>手动添加</b><span>只保存你确认的内容</span></div>
+        <label class="field"><textarea id="myMemInput" rows="2" maxlength="160" placeholder="例如：我叫张三，常用 Windows 和 NAS。"></textarea></label>
+        <div class="row-end">
+          <button class="btn ghost sm" id="myMemClear">清空我的记忆</button>
+          <button class="btn primary sm" id="myMemAdd">添加记忆</button>
+        </div>
+        <div class="inline-error" id="myMemError" hidden></div>
+        <div class="mine-list" id="myMemList"><div class="empty-line">读取中…</div></div>
+      </section>
+
+      <!-- 外观 -->
+      <section class="dpanel" id="dpanel-appearance">
+        <div class="section-title"><b>主题</b><span>只保存在这台设备</span></div>
+        <div class="theme-grid" id="themeGrid">
+          <button type="button" data-theme-choice="light"><span class="theme-preview light"><i></i><i></i><i></i></span><b>浅色</b></button>
+          <button type="button" data-theme-choice="dark"><span class="theme-preview dark"><i></i><i></i><i></i></span><b>深色</b></button>
+          <button type="button" data-theme-choice="system"><span class="theme-preview system"><i></i><i></i><i></i></span><b>跟随系统</b></button>
+        </div>
+        <div class="range-row">
+          <label for="fontScale">正文大小 <b id="fontScaleValue">100%</b></label>
+          <input type="range" id="fontScale" min="85" max="125" step="5" value="100">
+        </div>
+        <div class="note-card">切换即时生效，不影响账号和其他设备。</div>
+      </section>
+
+      <!-- 数据 -->
+      <section class="dpanel" id="dpanel-data">
+        <div class="section-title"><b>我的数据</b><span>对话记录保存在本机 SQLite</span></div>
+        <div class="data-row">
+          <div><b>导出全部对话</b><span>生成一个 JSON 文件，包含所有会话与消息</span></div>
+          <button class="btn" id="exportData"><svg><use href="#i-download"/></svg>导出</button>
+        </div>
+        <div class="data-row">
+          <div><b>清空所有对话</b><span>删除全部会话和消息，不可恢复</span></div>
+          <button class="btn danger" id="clearAllData"><svg><use href="#i-trash"/></svg>清空</button>
+        </div>
+        <div class="data-row">
+          <div><b>安全说明</b><span>密码使用 scrypt 哈希；供应商 Key 使用 AES-256-GCM 加密存储</span></div>
+          <span class="badge good">已启用</span>
+        </div>
+        <div class="note-card">迁移到其他机器时，请连同 <span class="mono">data/workbench.db</span> 和 <span class="mono">data/secret.key</span> 一起复制，否则账号与已加密 Key 会失效。</div>
+      </section>
+    </div>
+  </aside>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<!-- ============================ 工作台 ============================ -->
+<div class="wb-wrap" id="workbenchDrawer" hidden>
+  <div class="wb-scrim" data-close-workbench></div>
+  <aside class="wb-panel" role="dialog" aria-modal="true" aria-labelledby="workbenchTitle">
+    <header class="wb-head">
+      <div>
+        <span class="kicker" id="wbHeadKicker">WORKBENCH</span>
+        <h2 id="workbenchTitle">工作台</h2>
+        <p id="wbHeadSub">任务、文件、最近对话，都在这里。</p>
+      </div>
+      <button class="iconbtn" type="button" data-close-workbench title="关闭"><svg><use href="#i-close"/></svg></button>
+    </header>
+    <nav class="wb-tabs" id="wbTabs">
+      <button type="button" class="active" data-wtab="overview"><svg><use href="#i-grid"/></svg>概览</button>
+      <button type="button" data-wtab="tasks" data-front="schedule"><svg><use href="#i-clock"/></svg>定时任务</button>
+      <button type="button" data-wtab="caps" data-front="skills"><svg><use href="#i-spark"/></svg>技能与插件</button>
+      <button type="button" data-wtab="files" data-front="files"><svg><use href="#i-file"/></svg>生成文件</button>
+    </nav>
+    <div class="wb-body">
+      <section class="wb-pane active" id="wpanel-overview">
+        <div class="wb-hero" id="wbHero">
+          <div class="wb-hero-copy">
+            <span class="wb-hero-kicker" id="wbHeroKicker">定制专属工作台</span>
+            <h3 id="wbHeroTitle">轻松开工，从一组常用任务开始</h3>
+            <p id="wbHeroSub">选一个模板，快捷提示和定时任务都会跟着换。</p>
+            <div class="wb-hero-caps" id="wbHeroCaps" hidden></div>
+            <div class="wb-hero-actions">
+              <button type="button" class="wb-hero-action" id="wbHeroBrowse">浏览推荐 <span>›</span></button>
+              <button type="button" class="wb-hero-action ghost" id="wbHeroCustom">+ 自定义工作台</button>
+              <button type="button" class="wb-hero-action ghost" id="wbHeroExit" hidden>退出工作台</button>
+              <button type="button" class="wb-hero-action ghost" id="wbHeroShare" hidden>分享</button>
+            </div>
+          </div>
+          <div class="wb-hero-art" id="wbHeroArt" aria-hidden="true">
+            <span class="wb-art-card a">◧</span>
+            <span class="wb-art-card b">▤</span>
+            <span class="wb-art-orb">✦</span>
+          </div>
+        </div>
+        <div class="wb-section" id="wbMyTemplateSection" hidden>
+          <div class="wb-section-head">
+            <b>我的工作台</b>
+            <span>自己创建或从分享导入</span>
+          </div>
+          <div class="wb-template-grid" id="wbMyTemplateGrid"></div>
+        </div>
+        <div class="wb-section" id="wbTemplateSection">
+          <div class="wb-section-head">
+            <b>推荐工作台</b>
+            <button type="button" class="linkbtn wb-new-template" id="wbNewTemplate"><svg><use href="#i-plus"/></svg>新建工作台</button>
+          </div>
+          <div class="wb-template-grid" id="wbTemplateGrid"></div>
+        </div>
+        <div class="wb-stats" id="wbStats">
+          <div><span>对话</span><b id="wbStatConv">0</b></div>
+          <div data-front="files"><span>生成文件</span><b id="wbStatFiles">0</b></div>
+          <div data-front="schedule"><span>启用任务</span><b id="wbStatTasks">0</b></div>
+          <div><span>近 24h 运行</span><b id="wbStatRuns">0</b></div>
+        </div>
+        <div class="wb-section">
+          <div class="wb-section-head"><b id="wbQuickTitle">快捷开始</b><span>点一下，直接填进输入框</span></div>
+          <div class="wb-quick" id="wbQuick"></div>
+        </div>
+        <div class="wb-section" data-front="schedule">
+          <div class="wb-section-head"><b>接下来要执行</b><button type="button" class="linkbtn" data-wtab-go="tasks">管理任务</button></div>
+          <div class="wb-list" id="wbUpcoming"><div class="wb-empty">还没有定时任务</div></div>
+        </div>
+        <div class="wb-section" data-front="files">
+          <div class="wb-section-head"><b>最近文件</b><button type="button" class="linkbtn" data-wtab-go="files">全部文件</button></div>
+          <div class="wb-list" id="wbRecentFiles"><div class="wb-empty">还没有生成文件</div></div>
+        </div>
+        <div class="wb-section">
+          <div class="wb-section-head"><b>最近对话</b><button type="button" class="linkbtn" id="wbNewChat">新建对话</button></div>
+          <div class="wb-list" id="wbRecentChats"><div class="wb-empty">还没有对话</div></div>
+        </div>
+      </section>
+
+      <section class="wb-pane" id="wpanel-tasks" hidden>
+        <div class="wb-action-row">
+          <div><b>定时任务</b><span>到点自动开一个新会话执行，并保留结果。</span></div>
+          <button class="btn primary sm" type="button" id="wbNewTask"><svg><use href="#i-plus"/></svg>新建任务</button>
+        </div>
+        <div class="wb-section wb-task-reco">
+          <div class="wb-section-head"><b>为你推荐</b><span>点 + 直接套用，创建前还能改</span></div>
+          <div class="wb-reco-tasks" id="wbTaskReco"></div>
+        </div>
+        <div class="wb-task-form" id="wbTaskForm" hidden>
+          <div class="wb-form-title"><b id="wbTaskFormTitle">新建定时任务</b><button class="iconbtn small" type="button" id="wbTaskCancel" title="取消"><svg><use href="#i-close"/></svg></button></div>
+          <label class="wb-field"><span>任务名称</span><input id="wbTaskTitle" maxlength="80" placeholder="例如：每天早上生成行业简报"></label>
+          <label class="wb-field"><span>要执行的内容</span><textarea id="wbTaskPrompt" rows="4" maxlength="3000" placeholder="写清楚要模型做什么，例如：整理今天的 AI 行业动态，输出 5 条，带来源链接。"></textarea></label>
+          <div class="wb-form-grid">
+            <label class="wb-field"><span>重复方式</span>
+              <select id="wbTaskFreq">
+                <option value="once">只执行一次</option>
+                <option value="daily">每天</option>
+                <option value="weekly">每周</option>
+                <option value="monthly">每月</option>
+              </select>
+            </label>
+            <label class="wb-field" id="wbTaskOnceWrap"><span>执行时间</span><input id="wbTaskRunAt" type="datetime-local"></label>
+            <label class="wb-field" id="wbTaskTimeWrap" hidden><span>几点执行</span><input id="wbTaskTime" type="time" value="09:00"></label>
+            <label class="wb-field" id="wbTaskMonthWrap" hidden><span>每月几号</span><input id="wbTaskMonthDay" type="number" min="1" max="31" value="1"></label>
+          </div>
+          <div class="wb-weekdays" id="wbTaskWeekdays" hidden>
+            <span>每周哪几天</span>
+            <label><input type="checkbox" value="1">周一</label>
+            <label><input type="checkbox" value="2">周二</label>
+            <label><input type="checkbox" value="3">周三</label>
+            <label><input type="checkbox" value="4">周四</label>
+            <label><input type="checkbox" value="5">周五</label>
+            <label><input type="checkbox" value="6">周六</label>
+            <label><input type="checkbox" value="7">周日</label>
+          </div>
+          <div class="wb-form-grid">
+            <label class="wb-field"><span>模型</span><select id="wbTaskModel"><option value="">自动选择</option></select></label>
+            <label class="wb-field"><span>智能体</span><select id="wbTaskAgent"><option value="">通用助手</option></select></label>
+            <label class="wb-field"><span>输出格式</span>
+              <select id="wbTaskFormat">
+                <option value="">只要回答</option>
+                <option value="docx">Word 文档</option>
+                <option value="xlsx">Excel 表格</option>
+                <option value="pptx">PPT 演示</option>
+                <option value="pdf">PDF 文档</option>
+                <option value="md">Markdown</option>
+                <option value="txt">纯文本</option>
+              </select>
+            </label>
+          </div>
+          <label class="wb-check-row"><input type="checkbox" id="wbTaskWeb"><span>允许联网检索</span><small>价格、新闻、竞品这类任务需要开启</small></label>
+          <div class="wb-form-actions">
+            <span class="hint" id="wbTaskHint">任务会在本机运行，结果进入最近对话。</span>
+            <button class="btn primary sm" type="button" id="wbTaskSave">保存任务</button>
+          </div>
+        </div>
+        <div class="wb-list wb-task-list" id="wbTaskList"><div class="wb-empty">读取中…</div></div>
+      </section>
+
+      <section class="wb-pane" id="wpanel-files" hidden>
+        <div class="wb-action-row">
+          <div><b>生成文件</b><span>Word、Excel、PPT、PDF 都是真实文件，可直接下载。<i id="wbFilePolicy">默认保留 30 天，到期后自动删除</i></span></div>
+          <button class="btn ghost sm" type="button" id="wbRefreshFiles"><svg><use href="#i-refresh"/></svg>刷新</button>
+        </div>
+        <div class="wb-file-notice" id="wbFileNotice" hidden></div>
+        <div class="wb-list" id="wbFileList"><div class="wb-empty">读取中…</div></div>
+      </section>
+
+      <section class="wb-pane" id="wpanel-caps" hidden>
+        <div class="caps-hero">
+          <div class="caps-hero-copy">
+            <span class="caps-eyebrow">CAPABILITY STUDIO</span>
+            <h3>把 AI 调成你要的样子</h3>
+            <p>技能决定怎么回答，插件决定它能动手做什么。</p>
+            <div class="caps-summary" id="wbCapSummary"></div>
+          </div>
+          <div class="caps-hero-art" aria-hidden="true">
+            <span class="caps-art-orb">✦</span>
+            <span class="caps-art-pill a">SKILL</span>
+            <span class="caps-art-pill b">PLUGIN</span>
+          </div>
+        </div>
+
+        <div class="caps-block">
+          <div class="caps-block-head">
+            <div><b>回答技能</b><small>选一个，立即成为默认回答方式</small></div>
+            <span id="wbCapSkillState">正在读取…</span>
+          </div>
+          <div class="wb-skill-grid" id="wbSkillGrid"></div>
+        </div>
+
+        <div class="caps-block">
+          <div class="caps-block-head">
+            <div><b>插件能力</b><small>开关和格式立即生效，不需要重开会话</small></div>
+            <span>3 个已接入</span>
+          </div>
+          <div class="wb-plugin-grid" id="wbPluginGrid"></div>
+        </div>
+
+        <div class="wb-cap-note" id="wbCapNote"></div>
+      </section>
+    </div>
+  </aside>
+</div>
+
+<div class="collab-modal" id="collabModal" hidden>
+  <div class="collab-modal-card" role="dialog" aria-modal="true" aria-labelledby="collabTitle">
+    <div class="collab-modal-head">
+      <b id="collabTitle">协作</b>
+      <button class="iconbtn small" id="collabClose" type="button" title="关闭"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="collab-modal-body" id="collabBody"></div>
+  </div>
+</div>
+
+<script src="/app.js?v=0.8.1.12"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

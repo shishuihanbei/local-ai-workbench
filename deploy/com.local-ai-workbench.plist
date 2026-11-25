@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.local-ai-workbench</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__APP_DIR__/.venv/bin/python</string>
+        <string>__APP_DIR__/run.py</string>
+        <string>--host</string>
+        <string>0.0.0.0</string>
+        <string>--port</string>
+        <string>9100</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__APP_DIR__</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONUTF8</key>
+        <string>1</string>
+        <key>WORKBENCH_DATA</key>
+        <string>__APP_DIR__/data</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>__APP_DIR__/data/logs/launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>__APP_DIR__/data/logs/launchd.err</string>
+</dict>
+</plist>

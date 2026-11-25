@@ -1,0 +1,2896 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管理控制台 · 本地 AI 工作台</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="console.css?v=0.8.1.7">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16M4 12h10M4 19h6"/><circle cx="18.5" cy="17.5" r="2.6"/></svg></div>
+    <div>
+      <h1>管理控制台</h1>
+      <p id="subtitle">调用观测 · 混合路由 · 本地部署</p>
+    </div>
+  </div>
+  <button class="btn ghost nav-toggle" id="navToggle" type="button" aria-controls="tabs" aria-expanded="false" title="打开页面导航">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+    <span>导航</span>
+  </button>
+  <div class="top-actions">
+    <span class="api-tag" id="apiTag">API 0.8.1</span>
+    <button class="btn ghost guide-trigger" id="pageGuideBtn" type="button" title="查看当前页面的功能、步骤、案例和注意事项" aria-haspopup="dialog" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.7 9.2a2.4 2.4 0 0 1 4.7.8c0 1.6-2.4 1.7-2.4 3.2M12 16.8h.01"/></svg>
+      <span>说明</span>
+    </button>
+    <button class="btn ghost" id="frontendBtn" hidden>前端页面</button>
+    <button class="btn ghost" id="tunnelBtn" hidden>内网穿透</button>
+    <button class="btn ghost" id="refreshBtn" title="只刷新当前页签的数据，不会退出登录">刷新数据</button>
+    <button class="btn ghost" id="logoutBtn" hidden>退出</button>
+  </div>
+</header>
+
+<div class="console-layout" id="consoleLayout">
+<nav class="tabs" id="tabs" hidden>
+  <div class="nav-mobile-head">
+    <b>全部页面</b>
+    <button class="iconbtn" id="navClose" title="关闭导航" type="button">×</button>
+  </div>
+  <label class="nav-search" for="navSearch">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>
+    <input id="navSearch" placeholder="搜索页面" autocomplete="off" spellcheck="false">
+    <kbd>ESC</kbd>
+  </label>
+
+  <div class="nav-group">
+    <div class="nav-group-title">运行观测</div>
+    <button class="tab active" data-tab="overview">概览</button>
+    <button class="tab" data-tab="requests" title="调用记录">调用记录</button>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">用户与组织</div>
+    <button class="tab" data-tab="users">用户</button>
+    <button class="tab" data-tab="partners" title="组织成员目录">伙伴</button>
+    <button class="tab" data-tab="squads" title="小队与共享会话">小队</button>
+    <button class="tab" data-tab="announcements" title="公告">公告</button>
+    <button class="tab" data-tab="tickets" title="服务台工单">服务台</button>
+    <button class="tab" data-tab="conv-shares" title="对话分享">对话分享</button>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">模型与能力</div>
+    <button class="tab" data-tab="models">模型</button>
+    <button class="tab" data-tab="providers">供应商</button>
+    <button class="tab" data-tab="routes">路由</button>
+    <button class="tab" data-tab="skills" title="自定义技能">技能</button>
+    <button class="tab" data-tab="prompts" title="提示词中心">提示词</button>
+    <button class="tab" data-tab="agents" title="智能体">智能体</button>
+    <button class="tab" data-tab="kb">知识库</button>
+    <button class="tab" data-tab="library" title="资料库">资料</button>
+    <button class="tab" data-tab="memory" title="长期记忆">记忆</button>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">内容与访问</div>
+    <button class="tab" data-tab="org" title="前端页面、Logo、备案与安全水印">外观</button>
+    <button class="tab" data-tab="front" title="前台功能开关与图标库">前台功能</button>
+    <button class="tab" data-tab="moderation" title="敏感词与内容审核">安全</button>
+    <button class="tab" data-tab="auth" title="登录方式">登录</button>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">接入与运行</div>
+    <button class="tab" data-tab="api">API</button>
+    <button class="tab" data-tab="network">网络</button>
+    <button class="tab" data-tab="websearch" title="联网检索总开关与测试">联网</button>
+    <button class="tab" data-tab="parsing" title="附件 OCR 与重新解析">解析</button>
+    <button class="tab" data-tab="deploy">部署</button>
+    <button class="tab" data-tab="cluster" title="多机算力池">算力</button>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">系统与数据</div>
+    <button class="tab" data-tab="backup" title="备份迁移">备份</button>
+    <button class="tab" data-tab="audit" title="管理员操作日志">审计</button>
+    <button class="tab" data-tab="database" title="数据库中心">数据库</button>
+    <button class="tab" data-tab="share" title="网站分享">分享</button>
+  </div>
+
+  <div class="nav-empty" id="navEmpty" hidden>没有匹配的页面</div>
+</nav>
+<div class="nav-scrim" id="navScrim" hidden></div>
+
+<main id="main" hidden>
+
+  <div class="tab-pane" id="pane-overview">
+    <section class="backup-hero page-hero hero-overview">
+      <div class="backup-hero-text">
+        <span class="eyebrow">实时观测 · 最近 24 小时</span>
+        <h1>今天的调用，一眼看清</h1>
+        <p>调用量、Token、成本、错误率、首字延迟和模型用量集中在这里。先看有没有异常，再去「调用记录」查具体请求。</p>
+        <div class="hero-tags"><span>调用趋势</span><span>成本与延迟</span><span>模型排行</span></div>
+      </div>
+      <div class="backup-hero-mark"><strong>24h</strong><span>自动汇总</span></div>
+    </section>
+
+    <section class="cards" id="statCards"></section>
+    <section class="panel">
+      <div class="panel-head"><h2>逐小时调用</h2><span class="hint" id="seriesHint">最近 24 小时</span></div>
+      <div class="chart" id="chart"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>模型用量</h2><span class="hint">按调用次数</span></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>模型</th><th>调用</th><th>Token</th><th>成本</th><th>平均首字</th></tr></thead>
+          <tbody id="usageRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">先看异常，再查单次请求</span></div>
+      <ol class="migrate-steps">
+        <li><b>先看顶部卡片</b><span>调用次数、Token、成本、错误率、首字和总耗时，快速判断今天是否正常。</span></li>
+        <li><b>对照逐小时柱状</b><span>哪一小时突然变高或掉到零，通常就是异常发生的时段。</span></li>
+        <li><b>再看模型用量</b><span>找出调用最多、成本最高或首字最慢的模型，决定要不要换路由。</span></li>
+        <li><b>定位单次请求</b><span>需要看具体原因时，到「调用记录」按模型、状态或 trace_id 搜索。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-requests" hidden>
+    <section class="backup-hero page-hero hero-requests">
+      <div class="backup-hero-text">
+        <span class="eyebrow">请求级追踪 · trace_id</span>
+        <h1>每一次调用，都能追到原因</h1>
+        <p>按模型、来源和状态筛选请求。点任意一行，可以看到 Token、首字延迟、总耗时、成本和当时的路由决策。</p>
+        <div class="hero-tags"><span>关键词搜索</span><span>状态筛选</span><span>调用明细</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>TRACE</strong><span>全程可追踪</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>调用记录</h2>
+        <span class="hint" id="reqHint">请求级事实表 · 含 Token / 延迟 / 成本 / 决策</span>
+      </div>
+      <div class="filters">
+        <input id="fq" placeholder="搜索 prompt / trace / 用户 / 会话ID或名 / 错误">
+        <input id="fmodel" placeholder="模型" style="max-width:150px">
+        <select id="fstatus">
+          <option value="">全部状态</option>
+          <option value="ok">ok</option>
+          <option value="error">error</option>
+          <option value="stopped">stopped</option>
+        </select>
+        <select id="fprovider">
+          <option value="">全部来源</option>
+          <option value="local">本地</option>
+          <option value="cloud">云端</option>
+        </select>
+        <button class="btn small" id="searchBtn">查询</button>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>时间</th><th>用户</th><th>会话</th><th>模型</th><th>来源</th><th>Token</th><th>首字</th><th>耗时</th><th>成本</th><th>状态</th></tr></thead>
+          <tbody id="reqRows"></tbody>
+        </table>
+      </div>
+      <div class="pager"><button class="btn small" id="prevPage">上一页</button><span id="pageInfo"></span><button class="btn small" id="nextPage">下一页</button></div>
+    </section>
+    <section class="panel" id="reqDetail" hidden>
+      <div class="panel-head"><h2>明细</h2><span class="hint" id="detailHint"></span></div>
+      <div class="detail" id="detailBody"></div>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">从筛选到单次明细</span></div>
+      <ol class="migrate-steps">
+        <li><b>先搜关键词</b><span>输入 prompt、trace_id、用户名、会话ID或名称（支持带 #）或错误文字；找不到就清空，再按条件筛。</span></li>
+        <li><b>叠加筛选</b><span>模型、状态、来源可以组合，例如只看本地 error 请求。</span></li>
+        <li><b>点一行看明细</b><span>明细里能看到 Token、首字延迟、总耗时、成本和路由决策。</span></li>
+        <li><b>翻页与刷新</b><span>用“上一页 / 下一页”查更早记录；只刷新当前页签，不会退出登录。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-providers" hidden>
+    <section class="backup-hero page-hero hero-providers">
+      <div class="backup-hero-text">
+        <span class="eyebrow">第三方 API · Key 加密</span>
+        <h1>接上云端模型，Key 只存密文</h1>
+        <p>选择常见供应商会自动带出地址和模型，也可以完全自定义。保存后列表只显示 Key 掩码，原文不会回显。</p>
+        <div class="hero-tags"><span>AES-256-GCM</span><span>预设 / 自定义</span><span>按量计价</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>AES</strong><span>Key 密文存储</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>第三方供应商</h2><span class="hint">Key 以 AES-256-GCM 加密存储，列表只回掩码</span></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>名称</th><th>类型</th><th>地址</th><th>Key</th><th>价格 / 百万 Token</th><th>状态</th><th class="right">操作</th></tr></thead>
+          <tbody id="providerRows"></tbody>
+        </table>
+      </div>
+      <div class="form-grid">
+        <select id="pvPreset"><option value="">选择常见供应商（可修改）</option></select>
+        <input id="pvName" placeholder="名称，如 deepseek">
+        <input id="pvBase" placeholder="Base URL，如 https://api.deepseek.com/v1">
+        <input id="pvKey" placeholder="API Key（加密存储，不回显）" type="password">
+        <input id="pvModels" placeholder="模型列表，逗号分隔">
+        <input id="pvIn" placeholder="输入价 / 百万 token" type="number" step="0.01">
+        <input id="pvOut" placeholder="输出价 / 百万 token" type="number" step="0.01">
+        <button class="btn primary" id="addProvider">添 加</button>
+        <div class="form-note" id="pvPresetNote">选择常见供应商会自动填入地址和模型，所有字段仍可修改；不在列表里就选最后一项“自定义”。</div>
+      </div>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">Key 只保存密文，原文不回显</span></div>
+      <ol class="migrate-steps">
+        <li><b>先选供应商</b><span>从下拉框选常见供应商；没有就选“自定义”，手动填地址。</span></li>
+        <li><b>填地址和 Key</b><span>Base URL 一般以 <code>/v1</code> 结尾；Key 粘贴后加密保存。</span></li>
+        <li><b>补齐模型与价格</b><span>模型列表用逗号分隔；输入/输出价格用于成本统计，不确定可先留空。</span></li>
+        <li><b>去路由页绑定</b><span>添加后到「路由」建策略，选择这个供应商，模型才会真正走云端。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-routes" hidden>
+    <section class="backup-hero page-hero hero-routes">
+      <div class="backup-hero-text">
+        <span class="eyebrow">本地优先 · 云端优先 · 手动</span>
+        <h1>让请求走对模型，也走对供应商</h1>
+        <p>路由决定一次请求优先走本地还是云端。日常用 local_first，云端更稳时用 cloud_first，特殊模型再用手动指定。</p>
+        <div class="hero-tags"><span>3 种策略</span><span>模型映射</span><span>供应商绑定</span></div>
+      </div>
+      <div class="backup-hero-mark"><strong>3</strong><span>种路由策略</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>路由策略</h2><span class="hint">local_first / cloud_first / manual</span></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>名称</th><th>策略</th><th>供应商</th><th>模型映射</th><th>状态</th><th class="right">操作</th></tr></thead>
+          <tbody id="routeRows"></tbody>
+        </table>
+      </div>
+      <div class="form-grid">
+        <input id="rtName" placeholder="路由名称">
+        <select id="rtStrategy">
+          <option value="local_first">local_first（本地优先）</option>
+          <option value="cloud_first">cloud_first（云端优先）</option>
+          <option value="manual">manual（手动指定）</option>
+        </select>
+        <select id="rtProvider"><option value="local">本地部署（llama.cpp）</option></select>
+        <div class="rt-map-field">
+          <input id="rtMap" placeholder='模型映射 JSON，如 {"7b":"deepseek-chat"}'>
+          <button class="btn small" id="rtAutoMap" type="button">自动匹配</button>
+        </div>
+        <div class="hint form-note" id="rtMapHint">正在读取可用模型和供应商…</div>
+        <button class="btn primary" id="addRoute">添 加</button>
+      </div>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">先简单，再按需要细化</span></div>
+      <ol class="migrate-steps">
+        <li><b>给路由起名</b><span>用能看懂的名字，例如“日常本地优先”或“长文走云端”。</span></li>
+        <li><b>选策略</b><span>本地模型够用就 local_first；云端更稳就 cloud_first；指定模型用 manual。</span></li>
+        <li><b>绑定供应商和映射</b><span>下拉框分「本地部署」和「云端供应商」；需要云端时选供应商，点“自动匹配”，系统会按模型家族填映射。</span></li>
+        <li><b>回前端验证</b><span>切换模型发一条消息，再到「调用记录」确认来源是 local 还是 cloud。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-org" hidden>
+    <section class="backup-hero page-hero hero-users">
+      <div class="backup-hero-text">
+        <span class="eyebrow">站点品牌 · Logo · 登录页 · 备案</span>
+        <h1>不改代码，直接改出你自己的前台</h1>
+        <p>上传 Logo、改名称和登录页文案、填 ICP 与公安备案，右侧实时预览。所有内容只写在本机 data/config.json，不会上传云端。</p>
+        <div class="hero-tags"><span>Logo 即传即用</span><span>登录页文案</span><span>备案与版权</span><span>安全水印</span></div>
+      </div>
+      <div class="backup-hero-mark"><strong>UI</strong><span>外观与品牌</span></div>
+    </section>
+
+    <section class="panel brand-panel">
+      <div class="panel-head">
+        <h2>前端页面</h2>
+        <span class="hint">改完点保存，用户端刷新即生效</span>
+      </div>
+
+      <div class="brand-editor-grid">
+        <div class="brand-fields">
+          <div class="brand-subhead"><b>Logo 与品牌</b><span>建议使用正方形透明 PNG，显示更干净</span></div>
+          <div class="brand-logo-row">
+            <div class="brand-logo-preview" id="brandLogoPreview">
+              <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 6l4.6 11.4L40 22l-11.4 4.6L24 38l-4.6-11.4L8 22l11.4-4.6L24 6z"/><circle cx="24" cy="22" r="3.2"/></svg>
+              <img id="brandLogoPreviewImg" alt="当前 Logo" hidden>
+            </div>
+            <div class="brand-logo-copy">
+              <div class="brand-logo-actions">
+                <button class="btn" id="brandLogoUploadBtn" type="button">上传 Logo</button>
+                <button class="btn ghost" id="brandLogoRemoveBtn" type="button">恢复默认</button>
+                <input id="brandLogoFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+              </div>
+              <p class="hint" id="brandLogoHint">PNG / JPG / WebP / GIF，最大 3 MB。上传后立即生效，无需保存。</p>
+            </div>
+          </div>
+
+          <div class="form-grid brand-form-grid">
+            <label class="brand-field"><span>品牌名称</span><input id="orgName" maxlength="60" autocomplete="off" placeholder="如 某某科技有限公司"></label>
+            <label class="brand-field"><span>简称</span><input id="orgShort" maxlength="30" autocomplete="off" placeholder="不填则与品牌名称一致"></label>
+            <label class="brand-field"><span>品牌副标题</span><input id="brandTagline" maxlength="60" autocomplete="off" placeholder="Local AI Workbench"></label>
+            <label class="brand-field"><span>品牌主色</span>
+              <span class="brand-color-field">
+                <input id="brandPrimary" type="color" value="#4f6ef7" aria-label="选择品牌主色">
+                <input id="brandPrimaryText" maxlength="7" autocomplete="off" spellcheck="false" placeholder="#4f6ef7">
+              </span>
+            </label>
+          </div>
+
+          <div class="brand-subhead"><b>登录页文案</b><span>大标题支持换行，登录页会按原样展示</span></div>
+          <div class="form-grid brand-form-grid">
+            <label class="brand-field span-2"><span>登录页大标题</span><textarea id="brandLoginTitle" rows="2" maxlength="120" placeholder="你的模型，&#10;只为你的账号工作。"></textarea></label>
+            <label class="brand-field span-2"><span>登录页说明</span><textarea id="brandLoginLead" rows="3" maxlength="320" placeholder="一句话说明这个工作台能做什么"></textarea></label>
+            <label class="brand-field"><span>登录卡片副标题</span><input id="brandAuthSubtitle" maxlength="120" autocomplete="off" placeholder="使用工作台账号继续对话"></label>
+            <label class="brand-field"><span>登录页脚文案</span><input id="brandLoginFoot" maxlength="120" autocomplete="off" placeholder="数据保存在你自己的机器上 · 不上传云端"></label>
+          </div>
+
+          <div class="brand-subhead"><b>页脚与备案</b><span>备案链接留空时使用官方查询入口，只接受 http / https</span></div>
+          <div class="form-grid brand-form-grid">
+            <label class="brand-field"><span>ICP 备案号</span><input id="brandIcp" maxlength="80" autocomplete="off" placeholder="如 皖ICP备2026000000号"></label>
+            <label class="brand-field"><span>ICP 备案链接</span><input id="brandIcpUrl" maxlength="500" autocomplete="off" placeholder="https://beian.miit.gov.cn/"></label>
+            <label class="brand-field"><span>公安备案号</span><input id="brandPolice" maxlength="100" autocomplete="off" placeholder="如 皖公网安备 34000000000000号"></label>
+            <label class="brand-field"><span>公安备案链接</span><input id="brandPoliceUrl" maxlength="500" autocomplete="off" placeholder="https://beian.mps.gov.cn/"></label>
+            <label class="brand-field span-2"><span>页脚版权</span><input id="brandCopyright" maxlength="120" autocomplete="off" placeholder="留空自动生成：© 年份 + 品牌名称"></label>
+          </div>
+
+          <details class="brand-advanced">
+            <summary>企业档案（选填）</summary>
+            <div class="form-grid brand-form-grid">
+              <label class="brand-field"><span>域名</span><input id="orgDomain" maxlength="120" autocomplete="off" placeholder="example.com"></label>
+              <label class="brand-field"><span>行业</span><input id="orgIndustry" maxlength="40" autocomplete="off" placeholder="软件与信息服务"></label>
+              <label class="brand-field"><span>规模</span><input id="orgSize" maxlength="40" autocomplete="off" placeholder="50–100 人"></label>
+              <label class="brand-field"><span>联系人</span><input id="orgContactName" maxlength="40" autocomplete="off" placeholder="联系人姓名"></label>
+              <label class="brand-field span-2"><span>联系人邮箱</span><input id="orgContactEmail" maxlength="120" autocomplete="off" placeholder="name@example.com"></label>
+            </div>
+          </details>
+
+          <div class="brand-subhead"><b>安全水印</b><span>支持占位符 {user}、{org}、{date}</span></div>
+          <div class="form-grid brand-form-grid">
+            <label class="checkline brand-check"><input id="wmEnabled" type="checkbox"> 开启登录后全局水印</label>
+            <input id="wmText" maxlength="100" autocomplete="off" placeholder="水印文案，如 {user} · {org} · 内部资料">
+          </div>
+        </div>
+
+        <aside class="brand-preview-side">
+          <div class="brand-preview-head"><b>登录页预览</b><span>边改边看</span></div>
+          <div class="brand-preview-card" id="brandPreviewCard">
+            <div class="brand-preview-top">
+              <div class="brand-preview-logo" id="brandPreviewLogo">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 6l4.6 11.4L40 22l-11.4 4.6L24 38l-4.6-11.4L8 22l11.4-4.6L24 6z"/><circle cx="24" cy="22" r="3.2"/></svg>
+                <img id="brandPreviewLogoImg" alt="" hidden>
+              </div>
+              <div class="brand-preview-name">
+                <b id="brandPreviewName">本地 AI 工作台</b>
+                <small id="brandPreviewTagline">Local AI Workbench</small>
+              </div>
+            </div>
+            <h3 id="brandPreviewTitle">你的模型，<br>只为你的账号工作。</h3>
+            <p id="brandPreviewLead">本地模型、云端接口、知识库与调用记录统一在一处。登录后即可对话、生成自己的 API Key，并随时管理账号安全。</p>
+            <div class="brand-preview-auth">
+              <span>欢迎回来</span>
+              <b>登录账号</b>
+              <small id="brandPreviewSub">使用工作台账号继续对话</small>
+              <i></i>
+            </div>
+            <div class="brand-preview-foot">
+              <div id="brandPreviewFoot">数据保存在你自己的机器上 · 不上传云端</div>
+              <div class="brand-preview-legal" id="brandPreviewLegal"></div>
+            </div>
+          </div>
+          <div class="brand-preview-actions">
+            <button class="btn primary" id="saveOrgBtn" type="button">保存全部设置</button>
+            <span class="hint" id="orgSaveHint"></span>
+          </div>
+          <p class="hint brand-preview-tip">Logo 单独保存并立即生效；文字和配色点“保存全部设置”后生效。</p>
+        </aside>
+      </div>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-front" hidden>
+    <section class="front-hero">
+      <div class="front-hero-copy">
+        <span class="eyebrow">前台功能 · 保存即生效</span>
+        <h1>决定用户端显示哪些入口</h1>
+        <p>关闭后入口从用户端移除，已有数据和历史记录保留；联网、知识库、资料库、记忆同时复用原来的能力总开关。</p>
+      </div>
+      <div class="front-hero-actions">
+        <span class="front-save-state" id="frontSaveState">正在读取…</span>
+        <button class="btn ghost" id="frontIconLibBtn" type="button" title="管理预设图标和自定义图标">图标库</button>
+        <button class="btn primary" id="frontSaveBtn" type="button" disabled>保存并生效</button>
+      </div>
+    </section>
+
+    <div class="front-overview" id="frontStats"></div>
+
+    <div class="front-layout">
+      <section class="front-list-panel">
+        <div class="front-toolbar">
+          <div class="front-filters" id="frontFilters"></div>
+          <label class="front-search" for="frontSearch">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>
+            <input id="frontSearch" placeholder="搜索功能或影响入口" autocomplete="off">
+          </label>
+        </div>
+        <div class="front-groups" id="frontGroups"><div class="front-loading">正在读取前台功能…</div></div>
+        <div class="front-empty" id="frontEmpty" hidden>没有匹配的功能。可以换一个关键词，或切到“全部”。</div>
+        <div class="front-note">
+          <b>基础对话始终显示</b>
+          <span>登录、对话、历史记录、模型切换、账号与主题不受这里控制，避免把自己锁在门外。</span>
+        </div>
+      </section>
+
+      <aside class="front-preview-panel">
+        <div class="front-preview-head">
+          <div><b>用户端预览</b><span>与你当前编辑的状态一致</span></div>
+          <span class="front-preview-state" id="frontPreviewState">已生效</span>
+        </div>
+        <div class="front-preview-app">
+          <div class="front-preview-side">
+            <div class="front-preview-brand"><span class="front-preview-logo">✦</span><div><b>AI 工作台</b><small>本地运行</small></div></div>
+            <div class="front-preview-new">＋ 新建对话</div>
+            <div class="front-preview-nav" id="frontPreviewSide"></div>
+            <div class="front-preview-sep"></div>
+            <div class="front-preview-conv">最近对话</div>
+            <div class="front-preview-convline"></div>
+            <div class="front-preview-convline short"></div>
+          </div>
+          <div class="front-preview-main">
+            <div class="front-preview-top" id="frontPreviewTop"><span>新对话</span><span class="front-preview-model">模型 ▾</span></div>
+            <div class="front-preview-welcome">
+              <span class="front-preview-mark">✦</span>
+              <b>今天想聊点什么？</b>
+              <small>模型在你这台机器上运行</small>
+            </div>
+            <div class="front-preview-suggest" id="frontPreviewSuggest"></div>
+            <div class="front-preview-composer" id="frontPreviewTools"></div>
+            <div class="front-preview-settings" id="frontPreviewSettings"></div>
+          </div>
+        </div>
+        <div class="front-preview-tip">
+          <b>只影响入口显示</b>
+          <span>定时任务、生成文件、分享等关闭后不会删除数据；需要真正停用能力时，用“联网 / 知识库 / 资料库 / 记忆”这类能力开关。</span>
+        </div>
+      </aside>
+    </div>
+
+    <div class="front-dirty" id="frontDirtyBar" hidden>
+      <div><b id="frontDirtyText">有未保存的更改</b><span>保存后用户端才会变更</span></div>
+      <div class="front-dirty-actions">
+        <button class="btn ghost" id="frontUndoBtn" type="button">撤销</button>
+        <button class="btn primary" id="frontDirtySaveBtn" type="button">保存并生效</button>
+      </div>
+    </div>
+
+    <div class="front-modal" id="frontIconModal" hidden>
+      <div class="front-modal-scrim" data-front-modal-close></div>
+      <div class="front-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="frontIconTitle">
+        <div class="front-modal-head">
+          <div><span class="eyebrow">图标自定义</span><h2 id="frontIconTitle">图标库</h2></div>
+          <button class="iconbtn" type="button" data-front-modal-close title="关闭">×</button>
+        </div>
+        <div class="front-modal-body">
+          <div class="front-icon-target">
+            <label for="frontIconTarget">应用到功能</label>
+            <select id="frontIconTarget"></select>
+            <span class="hint">选择功能后，点下方图标即可替换</span>
+          </div>
+          <div class="front-icon-stage">
+            <div class="front-icon-big" id="frontIconBig"></div>
+            <div class="front-icon-stage-copy">
+              <b id="frontIconPickName">默认图标</b>
+              <span>图标底色</span>
+              <div class="front-tone-row" id="frontToneRow"></div>
+            </div>
+          </div>
+          <div class="front-icon-section">
+            <div class="front-section-head"><b>预设图标</b><span>线性图标，统一风格</span></div>
+            <div class="front-icon-grid" id="frontPresetGrid"></div>
+          </div>
+          <div class="front-icon-section">
+            <div class="front-section-head">
+              <b>自定义图标</b>
+              <span>PNG / WebP / SVG，透明底，160KB 以内</span>
+              <button class="btn ghost small" id="frontIconUploadBtn" type="button">上传图标</button>
+              <input id="frontIconFile" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden>
+            </div>
+            <div class="front-icon-grid front-icon-library" id="frontIconLibrary"></div>
+            <div class="front-icon-empty" id="frontIconEmpty" hidden>还没有自定义图标。上传一个透明底图片，就会出现在这里。</div>
+          </div>
+        </div>
+        <div class="front-modal-foot">
+          <span class="hint" id="frontIconHint"></span>
+          <button class="btn ghost" type="button" data-front-modal-close>取消</button>
+          <button class="btn primary" id="frontIconApplyBtn" type="button">应用到当前功能</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="pane-moderation" hidden>
+    <section class="backup-hero page-hero hero-users">
+      <div class="backup-hero-text">
+        <span class="eyebrow">敏感词 · 输入 / 输出检测 · 命中记录</span>
+        <h1>在模型前后加一道内容闸门</h1>
+        <p>用户输入先检测，模型输出再检测。可以拦截、替换或只记录；命中的词、用户、模型和片段都会留痕，方便事后核查。</p>
+        <div class="hero-tags"><span>词库分类</span><span>三种动作</span><span>跨块流式过滤</span></div>
+      </div>
+      <div class="backup-hero-mark"><strong>SAFE</strong><span>内容安全</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>检测策略</h2><span class="hint" id="moderationSaveHint">保存后立即对新请求生效</span></div>
+      <div class="form-grid">
+        <label class="checkline"><input id="modEnabled" type="checkbox"> 开启内容安全检测</label>
+        <div>
+          <div class="hint" style="margin:0 0 6px">用户输入命中时</div>
+          <select id="modInputAction">
+            <option value="block">拦截（返回 400，不发给模型）</option>
+            <option value="replace">替换后继续</option>
+            <option value="warn">仅告警并记录</option>
+          </select>
+        </div>
+        <div>
+          <div class="hint" style="margin:0 0 6px">模型输出命中时</div>
+          <select id="modOutputAction">
+            <option value="replace">替换敏感词后展示</option>
+            <option value="block">整段拦截</option>
+            <option value="warn">仅告警并记录</option>
+          </select>
+        </div>
+        <input id="modReplace" placeholder="替换字符，如 ***" maxlength="20" autocomplete="off">
+        <input id="modMinChars" type="number" min="1" max="20" placeholder="最短命中长度，默认 1">
+      </div>
+      <div class="row-actions" style="margin-top:14px">
+        <button class="btn primary" id="saveModerationBtn">保存检测策略</button>
+        <span class="hint">关闭后不会检测，也不会产生新命中记录。</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>敏感词库</h2>
+        <span class="hint" id="moderationWordHint">支持分类、备注、启停与批量粘贴</span>
+      </div>
+      <div class="filters">
+        <input id="modWordSearch" placeholder="搜索词、分类或备注" autocomplete="off">
+        <input id="modWordInput" placeholder="新增一个敏感词" maxlength="80" autocomplete="off">
+        <input id="modWordCategory" placeholder="分类，如 涉密 / 辱骂" maxlength="40" autocomplete="off">
+        <button class="btn primary small" id="addModWordBtn">加入词库</button>
+      </div>
+      <div style="margin:2px 0 12px;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:12px">
+        <div class="panel-head"><h3>批量粘贴</h3><span class="hint">每行一个，或用逗号、分号分隔；重复词会自动跳过</span></div>
+        <textarea id="modWordBulk" rows="4" placeholder="例如：&#10;内部机密&#10;项目代号&#10;客户名单"></textarea>
+        <div class="row-actions" style="margin-top:8px">
+          <button class="btn small" id="bulkModWordsBtn">批量导入</button>
+          <input id="modBulkCategory" placeholder="这批词的分类（可空）" maxlength="40" autocomplete="off">
+          <span class="hint" id="modBulkHint"></span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>敏感词</th><th>分类</th><th>备注</th><th>状态</th><th>加入时间</th><th class="right">操作</th></tr></thead>
+          <tbody id="modWordRows"></tbody>
+        </table>
+      </div>
+      <div class="hint" id="modWordEmpty" hidden>词库还是空的，先加入几个词再开启检测。</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>命中记录</h2>
+        <span class="hint" id="moderationHitHint">只保留最近记录，按时间倒序</span>
+      </div>
+      <div class="filters">
+        <select id="modHitDirection">
+          <option value="">全部方向</option>
+          <option value="input">用户输入</option>
+          <option value="output">模型输出</option>
+        </select>
+        <button class="btn small" id="refreshModHitsBtn">刷新</button>
+        <button class="btn ghost small" id="clearModHitsBtn">清空命中记录</button>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>时间</th><th>用户</th><th>方向</th><th>动作</th><th>命中词</th><th>片段</th><th>模型</th></tr></thead>
+          <tbody id="modHitRows"></tbody>
+        </table>
+      </div>
+      <div class="hint" id="modHitEmpty" hidden>还没有命中记录。</div>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-users" hidden>
+    <section class="backup-hero page-hero hero-users">
+      <div class="backup-hero-text">
+        <span class="eyebrow">账号 · 权限 · 可用模型</span>
+        <h1>一个账号，一套可用模型</h1>
+        <p>新建用户后单独勾选可用模型。普通用户的模型切换只显示被允许的项；管理员自动拥有全部模型。</p>
+        <div class="hero-tags"><span>按用户授权</span><span>自助注册开关</span><span>账号启用 / 禁用</span></div>
+      </div>
+      <div class="backup-hero-mark"><strong>1:1</strong><span>账号对权限</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>用户管理</h2>
+        <span class="hint" id="userHint">每个用户可单独分配可调用的模型</span>
+      </div>
+      <div class="filters">
+        <button class="btn primary small" id="newUserBtn">新建用户</button>
+        <button class="btn small" id="importUsersBtn">批量导入</button>
+        <button class="btn small" id="exportUsersBtn">导出 CSV</button>
+        <label class="checkline"><input id="allowRegister" type="checkbox"> 允许访客自助注册</label>
+      </div>
+      <div class="hint" style="margin:-2px 0 12px">开启后，登录页会出现“注册”；新用户默认只获得全部本地模型，第三方 API 模型仍需管理员分配。</div>
+      <div id="userImportPanel" hidden style="margin-bottom:12px;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:14px">
+        <div class="panel-head"><h2>批量导入成员</h2><span class="hint">每行一个账号，支持表头；格式：用户名,密码,角色,部门,可用模型,日配额,月配额</span></div>
+        <div class="form-grid">
+          <select id="importGroup"><option value="">默认不分组</option></select>
+          <select id="importRole"><option value="user">默认普通用户</option><option value="admin">默认管理员</option></select>
+          <input id="importDaily" type="number" min="0" placeholder="默认每日配额，0 = 不限">
+          <input id="importMonthly" type="number" min="0" placeholder="默认每月配额，0 = 不限">
+        </div>
+        <textarea id="userImportText" rows="7" placeholder="例如：&#10;username,password,role,group,allowed_models,daily_token_limit,monthly_token_limit&#10;zhangsan,Passw0rd-2026,user,研发组,*,10000,200000"></textarea>
+        <div class="row-actions" style="margin-top:10px">
+          <button class="btn primary small" id="submitImportBtn">开始导入</button>
+          <button class="btn ghost small" id="cancelImportBtn">取消</button>
+        </div>
+        <div class="hint" id="importResult"></div>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>用户</th><th>角色 / 用户组</th><th>状态</th><th>可用模型</th><th>Token 用量</th><th>最近登录</th><th class="right">操作</th></tr></thead>
+          <tbody id="userRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="userEditor" hidden>
+      <div class="panel-head">
+        <h2 id="userEditorTitle">新建用户</h2>
+        <span class="hint">管理员自动拥有全部模型；普通用户只显示已分配模型</span>
+      </div>
+      <div class="form-grid">
+        <input id="euName" placeholder="用户名（2–32 位）" autocomplete="off">
+        <input id="euPass" type="password" placeholder="密码（至少 8 位；编辑时留空不改）" autocomplete="new-password">
+        <select id="euRole">
+          <option value="user">普通用户</option>
+          <option value="admin">管理员</option>
+        </select>
+        <select id="euAdminRole"><option value="">超级管理员（全部权限）</option></select>
+        <select id="euGroup"><option value="">不分组</option></select>
+        <label class="checkline"><input id="euDisabled" type="checkbox"> 禁用该账号</label>
+        <input id="euDaily" type="number" min="0" placeholder="每日 Token 上限，0 = 不限">
+        <input id="euMonthly" type="number" min="0" placeholder="每月 Token 上限，0 = 不限">
+      </div>
+      <div class="hint" style="margin:-4px 0 12px">配额按本地自然日和自然月统计 <code>requests</code> 表；管理员不受限制。</div>
+      <div class="model-picker">
+        <div class="model-picker-head">
+          <b>可调用模型</b>
+          <label class="checkline"><input id="euAll" type="checkbox"> 全部模型（含以后新增）</label>
+        </div>
+        <div class="model-grid" id="euModels"></div>
+      </div>
+      <div class="row-actions editor-actions">
+        <button class="btn primary" id="saveUserBtn">保存</button>
+        <button class="btn ghost" id="cancelUserBtn">取消</button>
+      </div>
+    </section>
+
+    <section class="panel" id="groupPanel">
+      <div class="panel-head">
+        <h2>用户组</h2>
+        <span class="hint">只影响分组和部门树，不影响模型权限；删除会把成员改为未分组</span>
+      </div>
+      <div class="filters">
+        <button class="btn primary small" id="newGroupBtn">新建部门 / 用户组</button>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>名称</th><th>上级</th><th>负责人</th><th>成员</th><th>说明</th><th class="right">操作</th></tr></thead>
+          <tbody id="groupRows"></tbody>
+        </table>
+      </div>
+      <div class="form-grid" id="groupEditor" hidden style="margin-top:12px">
+        <input id="egName" placeholder="部门 / 用户组名称（40 字内）" maxlength="40" autocomplete="off">
+        <input id="egDesc" placeholder="说明（选填，200 字内）" maxlength="200" autocomplete="off">
+        <select id="egParent"><option value="">无上级（顶层）</option></select>
+        <select id="egLeader"><option value="">未指定负责人</option></select>
+        <input id="egSort" type="number" placeholder="排序，越小越靠前" value="0">
+        <div class="row-actions"><button class="btn primary small" id="saveGroupBtn">保存</button><button class="btn ghost small" id="cancelGroupBtn">取消</button></div>
+      </div>
+    </section>
+
+    <section class="panel" id="rolePanel">
+      <div class="panel-head">
+        <h2>管理员角色</h2>
+        <span class="hint">只对角色为“管理员”的账号生效；未绑定的管理员仍是超级管理员</span>
+      </div>
+      <div class="filters">
+        <button class="btn primary small" id="newRoleBtn">新建角色</button>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>角色</th><th>成员</th><th>权限范围</th><th class="right">操作</th></tr></thead>
+          <tbody id="roleRows"></tbody>
+        </table>
+      </div>
+      <div class="form-grid" id="roleEditor" hidden style="margin-top:12px">
+        <input id="erName" placeholder="角色名称，如 IT 管理员" maxlength="40" autocomplete="off">
+        <div class="row-actions"><button class="btn primary small" id="saveRoleBtn">保存</button><button class="btn ghost small" id="cancelRoleBtn">取消</button></div>
+        <div style="grid-column:1/-1" class="model-grid" id="erPerms"></div>
+      </div>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">每个账号单独授权模型</span></div>
+      <ol class="migrate-steps">
+        <li><b>新建用户</b><span>点“新建用户”，用户名 2–32 位；编辑时密码留空表示不修改。</span></li>
+        <li><b>设角色与状态</b><span>普通用户只看到被分配的模型；禁用后无法登录，但数据保留。</span></li>
+        <li><b>勾选可用模型</b><span>逐个勾选，或勾“全部模型”包含以后新增；管理员自动拥有全部。</span></li>
+        <li><b>保存后登录验证</b><span>用该账号打开前端，确认模型下拉只出现被允许的模型。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-skills" hidden>
+    <section class="backup-hero page-hero hero-users">
+      <div class="backup-hero-text">
+        <span class="eyebrow">自定义技能 · 提示词注入</span>
+        <h1>把常用玩法固化成技能</h1>
+        <p>内置技能默认可用，提示词和启停可在「提示词中心」统一调整；管理员新增的自定义技能会出现在用户端技能菜单，选中后由服务端注入提示词，不改变普通对话。</p>
+        <div class="hero-tags"><span>名称与说明</span><span>系统提示词</span><span>启停与排序</span></div>
+      </div>
+      <div class="backup-hero-mark"><strong>+</strong><span>按需扩展</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>技能列表</h2>
+        <span class="hint" id="skillAdminHint">内置 6 个 · 自定义技能可编辑和停用</span>
+      </div>
+      <div class="filters">
+        <button class="btn primary small" id="newSkillBtn">新建技能</button>
+        <span class="hint">停用后用户端立即不可见，但已有对话记录不受影响。</span>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>技能</th><th>类型</th><th>说明</th><th>状态</th><th class="right">操作</th></tr></thead>
+          <tbody id="skillAdminRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="skillEditor" hidden>
+      <div class="panel-head">
+        <h2 id="skillEditorTitle">新建技能</h2>
+        <span class="hint">提示词会追加到本轮系统提示词，只作用于选中该技能的消息</span>
+      </div>
+      <div class="form-grid">
+        <input id="esName" placeholder="技能名称（1–20 字）" maxlength="20" autocomplete="off">
+        <input id="esHint" placeholder="一句话说明（选填，40 字内）" maxlength="40" autocomplete="off">
+        <select id="esIcon"></select>
+        <input id="esSort" type="number" placeholder="排序，越小越靠前" value="0">
+        <label class="checkline"><input id="esEnabled" type="checkbox" checked> 在用户端启用</label>
+        <textarea id="esPrompt" rows="6" placeholder="提示词，例如：当前启用「周报整理」技能。请按“进展 / 风险 / 下周计划”整理，保留数字和负责人。" style="grid-column:1/-1;resize:vertical"></textarea>
+      </div>
+      <div class="row-actions editor-actions">
+        <button class="btn primary" id="saveSkillBtn">保存</button>
+        <button class="btn ghost" id="cancelSkillBtn">取消</button>
+      </div>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">技能只在服务端拼提示词，不额外调用模型</span></div>
+      <ol class="migrate-steps">
+        <li><b>建技能</b><span>名称和提示词必填；说明会显示在用户端技能菜单里。</span></li>
+        <li><b>写清边界</b><span>提示词只描述这类任务的做法，别把具体业务数据写死；用户上传的文件和输入仍会正常带入。</span></li>
+        <li><b>启停</b><span>停用后新消息选不到该技能，已有回复里的技能标签保留。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-prompts" hidden>
+    <section class="prompt-hero">
+      <div class="prompt-hero-copy">
+        <span class="eyebrow">提示词中心 · 保存即生效</span>
+        <h1>统一管理运行时提示词</h1>
+        <p>核心人格、技能、功能规则、输出格式和工作台模板集中编辑；保存后下一条消息使用新内容，历史回复不变。</p>
+      </div>
+      <div class="prompt-rev">
+        <span>当前修订</span>
+        <strong id="promptRevision">—</strong>
+        <small id="promptRevisionHint">保存后下一条消息生效</small>
+      </div>
+    </section>
+
+    <section class="cards prompt-stats" id="promptStats"></section>
+
+    <section class="panel prompt-chain-panel">
+      <div class="panel-head">
+        <h2>实际拼装顺序</h2>
+        <span class="hint">与对话运行时一致；点任意环节可定位对应提示词</span>
+      </div>
+      <div class="prompt-chain" id="promptChain"></div>
+    </section>
+
+    <section class="prompt-layout">
+      <aside class="prompt-list-panel">
+        <div class="prompt-list-head">
+          <div><h2>提示词资产</h2><span class="hint" id="promptListHint">正在加载…</span></div>
+          <button class="btn small ghost" id="promptSyncBtn" type="button" title="只重新读取列表与修订号；保存本身已经即时生效">刷新列表</button>
+        </div>
+        <div class="prompt-search">
+          <input id="promptSearch" placeholder="搜索名称、说明或键名" autocomplete="off">
+          <div class="prompt-filters" id="promptFilters">
+            <button class="chip active" data-pfilter="all" type="button">全部</button>
+            <button class="chip" data-pfilter="core" type="button">核心</button>
+            <button class="chip" data-pfilter="skill" type="button">技能</button>
+            <button class="chip" data-pfilter="plugin" type="button">功能</button>
+            <button class="chip" data-pfilter="format" type="button">格式</button>
+            <button class="chip" data-pfilter="workbench" type="button">工作台</button>
+            <button class="chip" data-pfilter="agent" type="button">智能体</button>
+          </div>
+        </div>
+        <div class="prompt-list" id="promptList"></div>
+      </aside>
+
+      <section class="prompt-editor-panel">
+        <div class="prompt-empty" id="promptEmpty">
+          <span>⌘</span>
+          <h2>选择一个提示词开始编辑</h2>
+          <p>左侧列出了核心规则、技能、功能规则、输出格式和工作台模板。智能体提示词可查看后跳转编辑。</p>
+        </div>
+
+        <div class="prompt-editor" id="promptEditor" hidden>
+          <div class="prompt-editor-head">
+            <div class="prompt-title">
+              <span class="prompt-kind" id="promptKindBadge">核心</span>
+              <h2 id="promptTitle">—</h2>
+              <p id="promptDescription"></p>
+              <div class="prompt-badges" id="promptBadges"></div>
+            </div>
+            <div class="prompt-head-actions">
+              <button class="btn primary" id="promptSaveBtn" type="button">保存并生效</button>
+              <button class="btn ghost" id="promptPreviewBtn" type="button">预览拼装</button>
+            </div>
+          </div>
+
+          <div class="prompt-editor-body" id="promptGenericEditor">
+            <div class="prompt-field-head">
+              <label for="promptContent">提示词内容</label>
+              <span id="promptCounter">0 字 · 约 0 tokens</span>
+            </div>
+            <textarea id="promptContent" class="prompt-content" rows="15" spellcheck="false"
+              placeholder="在这里编辑提示词。只写任务做法、输出边界和必要约束，不要把账号、密钥或具体隐私写死。"></textarea>
+            <div class="prompt-editor-note" id="promptEditorNote"></div>
+          </div>
+
+          <div class="prompt-wb-editor" id="promptWbEditor" hidden>
+            <div class="wb-form-grid">
+              <label>模板名称<input id="pwName" maxlength="30"></label>
+              <label>图标<input id="pwIcon" maxlength="8"></label>
+              <label class="wide">说明<input id="pwDesc" maxlength="120"></label>
+              <label class="wide">欢迎语<input id="pwWelcome" maxlength="80"></label>
+              <label class="wide">欢迎补充<textarea id="pwWelcomeSub" rows="2" maxlength="200"></textarea></label>
+            </div>
+            <div class="wb-quick-head">
+              <div><b>推荐任务</b><span class="hint">最多 8 个；标签会显示在用户端首页</span></div>
+              <button class="btn small ghost" id="pwAddQuick" type="button">加一条</button>
+            </div>
+            <div class="wb-quick-list" id="pwQuickList"></div>
+            <div class="wb-default-tags" id="pwDefaultTags"></div>
+          </div>
+
+          <div class="prompt-editor-foot">
+            <div class="prompt-foot-left">
+              <label class="checkline" id="promptEnabledWrap"><input id="promptEnabled" type="checkbox"> 在用户端启用</label>
+              <button class="btn small ghost" id="promptResetBtn" type="button">恢复默认</button>
+              <button class="btn small ghost" id="promptRestoreLatestBtn" type="button" hidden>恢复上一版</button>
+            </div>
+            <span class="hint" id="promptSaveState">修改后点“保存并生效”</span>
+          </div>
+
+          <details class="prompt-versions" id="promptVersionsBox">
+            <summary>版本历史 <span id="promptVersionCount">0</span></summary>
+            <div id="promptVersionList"></div>
+          </details>
+        </div>
+      </section>
+    </section>
+
+    <section class="panel prompt-preview-panel" id="promptPreviewPanel" hidden>
+      <div class="panel-head">
+        <h2>拼装预览</h2>
+        <span class="hint" id="promptPreviewMeta"></span>
+        <button class="btn small ghost" id="promptPreviewClose" type="button">收起</button>
+      </div>
+      <div class="prompt-preview-tools">
+        <select id="promptPvSkill"><option value="">不选技能</option></select>
+        <select id="promptPvFormat"><option value="">不生成文件</option><option value="docx">Word</option><option value="xlsx">Excel</option><option value="pptx">PPT</option><option value="pdf">PDF</option><option value="md">Markdown</option></select>
+        <label class="checkline"><input id="promptPvKb" type="checkbox"> 知识库</label>
+        <label class="checkline"><input id="promptPvLib" type="checkbox"> 资料库</label>
+        <label class="checkline"><input id="promptPvMem" type="checkbox"> 记忆</label>
+        <label class="checkline"><input id="promptPvWeb" type="checkbox"> 联网</label>
+        <button class="btn small" id="promptPvRun" type="button">刷新预览</button>
+      </div>
+      <pre class="prompt-preview-text" id="promptPreviewText"></pre>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">改提示词不会影响历史回复，下一条消息才使用新内容</span></div>
+      <ol class="migrate-steps">
+        <li><b>先看拼装顺序</b><span>基础人格 → 技能 → 知识库 → 资料库 → 记忆 → 输出格式 → 联网。越靠后的规则越具体。</span></li>
+        <li><b>只改必要段落</b><span>内置技能和功能规则都有默认值；改动后显示“已覆盖默认”，可随时恢复。</span></li>
+        <li><b>保存即生效</b><span>保存会生成新版本并提升修订号；失败或改坏时可从版本历史恢复，不需要重启服务。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-auth" hidden>
+    <section class="backup-hero page-hero hero-auth">
+      <div class="backup-hero-text">
+        <span class="eyebrow">QQ · 微信 · 手机号 · 邮箱</span>
+        <h1>登录方式，按需要开启</h1>
+        <p>默认用户名密码登录。需要第三方登录时，先选供应商，再填应用信息并开启。密钥只保存在本机，页面不回显原文。</p>
+        <div class="hero-tags"><span>4 种第三方方式</span><span>常见供应商预设</span><span>可自定义接口</span></div>
+      </div>
+      <div class="backup-hero-mark"><strong>4</strong><span>种第三方登录</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>登录方式配置</h2>
+        <span class="hint" id="authHint">默认用户名密码；手机号、邮箱、QQ、微信按需开启</span>
+      </div>
+      <div class="auth-status" id="authStatusRow"></div>
+      <div class="hint" id="authNote">密钥只保存在本机，页面不会回显原文；环境变量优先于这里的文件配置。</div>
+    </section>
+    <div id="authProviderCards" class="auth-cards"></div>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">先保留用户名登录，再逐步开启</span></div>
+      <ol class="migrate-steps">
+        <li><b>先确认保底方式</b><span>用户名密码默认可用，建议不要关闭，避免第三方配置出错后进不来。</span></li>
+        <li><b>选要开的登录方式</b><span>QQ、微信、手机号、邮箱按需开启；不用的一直保持关闭。</span></li>
+        <li><b>选供应商并填应用信息</b><span>常见供应商会自动带出接口地址；自定义供应商需要自己填授权地址和回调地址。</span></li>
+        <li><b>开启后实测一次</b><span>用无痕窗口走一遍登录；失败先看回调地址是否和供应商后台完全一致。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-api" hidden>
+    <section class="backup-hero page-hero hero-api">
+      <div class="backup-hero-text">
+        <span class="eyebrow">OpenAI 兼容 · API Key</span>
+        <h1>把模型能力接到手机和脚本</h1>
+        <p>先生成自己的 Key，再按使用场景复制地址：本机、同一 Wi-Fi、或外网。下面的示例可以直接改成你的 Key 调用。</p>
+        <div class="hero-tags"><span>本机 / 内网 / 外网</span><span>流式与非流式</span><span>Key 可撤销</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>API</strong><span>兼容 OpenAI</span></div>
+    </section>
+
+    <section class="panel api-hero">
+      <div class="api-hero-head">
+        <div>
+          <h2>接口地址与调用范围</h2>
+          <p class="tunnel-lead">给手机、脚本或其他程序使用的 OpenAI 兼容接口。生成 Key 后，按下面的地址调用即可。</p>
+        </div>
+        <span class="scope-badge" id="apiScopeBadge">检测中…</span>
+      </div>
+      <div class="hint" id="apiScopeHint"></div>
+      <div class="api-url-grid" id="apiUrls"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>我的 API Key</h2>
+        <span class="hint" id="apiKeyHint">Key 等同于密码，只显示一次，请妥善保存</span>
+      </div>
+      <div class="form-grid">
+        <input id="apiKeyName" placeholder="给 Key 起个名字，例如 手机 / 脚本" maxlength="40" autocomplete="off">
+        <button class="btn primary" id="createApiKeyBtn">生成 API Key</button>
+        <label class="checkline" id="apiAllWrap" hidden><input id="apiAllKeys" type="checkbox"> 显示所有人的 Key</label>
+      </div>
+      <div class="api-secret" id="apiNewKey" hidden>
+        <div class="api-secret-head">
+          <b>新 Key 已生成，只显示这一次</b>
+          <span>关闭页面后就看不到了，请现在复制。</span>
+        </div>
+        <div class="api-secret-row">
+          <input id="apiNewKeyValue" readonly autocomplete="off">
+          <button class="btn primary" id="apiNewKeyCopy">复制</button>
+          <button class="btn" id="apiNewKeyHide">我已保存</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead id="apiKeyHead"></thead>
+          <tbody id="apiKeyRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>怎么用</h2>
+        <span class="hint">兼容 OpenAI SDK / 大多数客户端，支持流式和非流式</span>
+      </div>
+      <div class="api-doc-grid">
+        <div class="api-doc-card">
+          <div class="api-doc-head"><b>curl 示例</b><button class="btn small" id="apiCopyCurl">复制</button></div>
+          <pre id="apiCurl"></pre>
+        </div>
+        <div class="api-doc-card">
+          <div class="api-doc-head"><b>Python 示例</b><button class="btn small" id="apiCopyPython">复制</button></div>
+          <pre id="apiPython"></pre>
+        </div>
+      </div>
+      <div class="api-model-block">
+        <div class="api-doc-head"><b>当前可用模型</b><span class="hint">请求里填模型 ID；不填则使用默认模型</span></div>
+        <div class="api-model-chips" id="apiModels"></div>
+      </div>
+      <div class="api-notes">
+        <div><b>地址怎么选：</b>本机程序用“本机地址”；同一 Wi-Fi 下的手机/电脑用“内网地址”；人在外面用“外网地址”。</div>
+        <div><b>外网使用：</b>先到“网络”页开启内网穿透，目标选“管理控制台”，等状态变成“已开启，可以使用”后再复制外网地址。</div>
+        <div><b>安全：</b>不要把 Key 发到群里或截图里；怀疑泄露就立即撤销，再生成一个新的。</div>
+        <div><b>接口：</b><span class="mono" id="apiEndpointText">/v1/chat/completions</span>，模型列表：<span class="mono" id="apiModelsEndpointText">/v1/models</span>。</div>
+      </div>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">先生成 Key，再选对地址</span></div>
+      <ol class="migrate-steps">
+        <li><b>生成并保存 Key</b><span>给 Key 起名，点“生成 API Key”；它只显示一次，先复制再关提示。</span></li>
+        <li><b>判断使用场景</b><span>本机程序用本机地址；同一 Wi-Fi 用内网地址；人在外面用外网地址。</span></li>
+        <li><b>复制示例调用</b><span>curl 或 Python 示例里替换 Key 和模型 ID，先发一条最短消息测试。</span></li>
+        <li><b>外网先开穿透</b><span>到「网络」页开启穿透，目标选“模型 API”，地址出现后再复制。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-network" hidden>
+    <section class="backup-hero page-hero hero-network">
+      <div class="backup-hero-text">
+        <span class="eyebrow">本地前端 · 内网穿透</span>
+        <h1>让手机和外面的人，安全连进来</h1>
+        <p>先设置本地前端地址，一键跳转。需要外网访问时开启免费穿透，目标可选管理控制台、模型 API 或前端页面。</p>
+        <div class="hero-tags"><span>默认免费</span><span>无需公网 IP</span><span>随时可停止</span></div>
+      </div>
+      <div class="backup-hero-mark"><strong>0</strong><span>公网 IP 要求</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>前端页面</h2>
+        <span class="hint">按当前访问地址自动生成，也可改为独立前端</span>
+      </div>
+      <div class="form-grid">
+        <input id="frontendUrl" placeholder="打开控制台时自动填入当前访问地址" autocomplete="off">
+        <button class="btn" id="saveFrontendBtn">保存地址</button>
+        <button class="btn primary" id="openFrontendPage">打开前端页面</button>
+      </div>
+      <div class="hint" id="frontendHint" style="margin-top:10px"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>内网穿透</h2>
+        <span class="status-line"><i class="dot" id="tunnelDot"></i><span id="tunnelState">检测中…</span></span>
+      </div>
+      <p class="tunnel-lead">把本机服务临时发布到公网。不需要公网 IP，也不用设置路由器，默认免费。</p>
+
+      <div id="tunnelSetup">
+        <label class="field">
+          <span>要远程访问什么？</span>
+          <select id="tunnelTarget">
+            <option value="panel">管理控制台（推荐）</option>
+            <option value="api">模型 API</option>
+            <option value="frontend">本地前端页面</option>
+          </select>
+        </label>
+        <div class="tunnel-actions">
+          <button class="btn primary big" id="tunnelStartBtn">一键开启免费穿透</button>
+          <button class="btn" id="tunnelDownloadBtn" hidden>下载穿透组件</button>
+        </div>
+        <div class="tunnel-note">首次使用如果提示缺少组件，点“下载穿透组件”，会自动安装 Cloudflare 官方免费工具。</div>
+
+        <details class="tunnel-advanced" id="tunnelAdvanced">
+          <summary>我有固定域名（进阶，可选）</summary>
+          <div class="form-grid">
+            <select id="tunnelMode">
+              <option value="quick">免费临时地址（推荐）</option>
+              <option value="token">固定域名（需要 Token）</option>
+            </select>
+            <input id="tunnelToken" type="password" placeholder="隧道 Token（留空沿用已保存）" autocomplete="off">
+            <input id="tunnelDomain" placeholder="固定域名，例如 ai.example.com" autocomplete="off">
+          </div>
+          <div class="tunnel-note">不懂就保持“免费临时地址”。固定域名需要你自己的 Cloudflare 账号和 Token。</div>
+        </details>
+      </div>
+
+      <div class="tunnel-actions" id="tunnelActions" hidden>
+        <button class="btn primary big" id="tunnelOpenBtn" hidden>打开公网地址</button>
+        <button class="btn" id="tunnelCopyBtn" hidden>复制地址</button>
+        <button class="btn danger big" id="tunnelStopBtn">停止穿透</button>
+      </div>
+
+      <div class="tunnel-sum" id="tunnelSummary"></div>
+      <div class="hint" id="tunnelHint" style="margin-top:8px"></div>
+
+      <details class="tunnel-advanced">
+        <summary>查看连接日志（排查问题用）</summary>
+        <div class="log-box"><pre id="tunnelLog">暂无日志</pre></div>
+      </details>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">本地跳转和外网访问分开设置</span></div>
+      <ol class="migrate-steps">
+        <li><b>前端地址自动生成</b><span>打开控制台时按你当前访问的主机地址自动填入；只有使用独立前端时才需要手动改成对应 URL，保存后点“打开前端页面”验证。</span></li>
+        <li><b>选要发布的目标</b><span>远程看后台选“管理控制台”；给程序调用选“模型 API”；只聊天选“前端页面”。</span></li>
+        <li><b>一键开启免费穿透</b><span>保持“免费临时地址”，缺组件时点“下载穿透组件”，等状态变成已开启。</span></li>
+        <li><b>复制地址或停止</b><span>把公网地址发给需要的人；不用时点“停止穿透”，地址立即失效。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-websearch" hidden>
+    <section class="backup-hero page-hero hero-websearch">
+      <div class="backup-hero-text">
+        <span class="eyebrow">联网检索 · 真实网页 · 可追溯来源</span>
+        <h1>让模型查得到，也说得清来源</h1>
+        <p>由工作台后端发起检索并抓取正文，再把干净文本交给模型。这里控制总开关、检索条数和抓取页数，也可以直接用真实问题验证当前线路。</p>
+        <div class="hero-tags"><span>中文优先 360</span><span>英文优先 Bing</span><span>关闭后全局生效</span></div>
+      </div>
+      <div class="backup-hero-mark page-hero-mark text"><strong>WEB</strong><span>可追溯来源</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>总开关与检索规模</h2>
+        <span class="status-line"><i class="dot" id="websearchDot"></i><span id="websearchState">加载中…</span></span>
+      </div>
+      <div class="ws-config-grid">
+        <label class="ws-switch">
+          <input type="checkbox" id="websearchEnabled">
+          <span><b>允许联网检索</b><small>关闭后，用户端联网开关和定时任务都会跳过检索，不会偷偷出网。</small></span>
+        </label>
+        <label class="ws-field">
+          <span>最多保留搜索结果</span>
+          <input type="number" id="websearchSources" min="1" max="10" step="1">
+          <small>1–10 条，包含新闻底稿。</small>
+        </label>
+        <label class="ws-field">
+          <span>最多抓取网页正文</span>
+          <input type="number" id="websearchPages" min="0" max="4" step="1">
+          <small>0–4 篇；抓得越多越慢，但资料更完整。</small>
+        </label>
+      </div>
+      <div class="tunnel-actions">
+        <button class="btn primary" id="saveWebsearchBtn">保存设置</button>
+        <button class="btn" id="clearWebsearchCacheBtn">清空检索缓存</button>
+        <span class="hint" id="websearchHint">中文问题优先 360，英文问题优先 Bing，结果不足时自动互补。</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>跑一次真实检索</h2>
+        <span class="hint">只测试当前配置，不会写入对话</span>
+      </div>
+      <div class="ws-test-row">
+        <input id="websearchQuery" placeholder="例如：2026年11月24日 新闻联播 主要内容" autocomplete="off">
+        <button class="btn primary" id="websearchTestBtn">开始测试</button>
+      </div>
+      <div class="hint" id="websearchTestHint" style="margin-top:10px">测试会真实访问搜索源；首次可能稍慢。</div>
+      <div class="ws-results" id="websearchResults" hidden></div>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-parsing" hidden>
+    <section class="backup-hero page-hero hero-parsing">
+      <div class="backup-hero-text">
+        <span class="eyebrow">附件解析 · OCR · 后台重跑</span>
+        <h1>上传记录、识别状态和重新解析，都在这里</h1>
+        <p>聊天里的图片、PDF、Word、Excel、PPT 都会落到本机。正文为空或识别不理想时，不用重新上传，直接在这里重跑 OCR 和文档提取。</p>
+        <div class="hero-tags"><span>RapidOCR</span><span>扫描 PDF 逐页识别</span><span>后台串行不堵聊天</span></div>
+      </div>
+      <div class="backup-hero-mark page-hero-mark text"><strong>OCR</strong><span>重新解析</span></div>
+    </section>
+
+    <section class="db-stat-grid parse-stat-grid">
+      <div class="db-stat"><div class="k">附件总数</div><div class="v" id="parseStatTotal">—</div><div class="s">全部用户上传</div></div>
+      <div class="db-stat"><div class="k">已提取正文</div><div class="v" id="parseStatParsed">—</div><div class="s">可直接进入对话上下文</div></div>
+      <div class="db-stat"><div class="k">正文为空</div><div class="v warn" id="parseStatEmpty">—</div><div class="s">可批量重新解析</div></div>
+      <div class="db-stat"><div class="k">解析报错</div><div class="v" id="parseStatErrors">—</div><div class="s">原文件丢失或格式异常</div></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>解析引擎</h2>
+        <span class="status-line"><i class="dot" id="parseEngineDot"></i><span id="parseEngineState">检测中…</span></span>
+      </div>
+      <div class="hint" id="parseEngineHint">正在读取 OCR 引擎状态…</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>上传记录</h2>
+        <span class="hint" id="parsePageHint">按上传时间倒序</span>
+      </div>
+      <div class="db-toolbar">
+        <div class="db-search-wrap">
+          <input id="parseQuery" placeholder="搜索文件名或上传者" autocomplete="off">
+          <select id="parseStatus" class="db-select">
+            <option value="all">全部状态</option>
+            <option value="empty">正文为空</option>
+            <option value="parsed">已提取正文</option>
+            <option value="error">解析报错</option>
+            <option value="image">图片</option>
+            <option value="document">文档</option>
+            <option value="text">文本</option>
+          </select>
+          <button class="btn" id="parseSearchBtn">筛选</button>
+        </div>
+        <div class="db-toolbar-actions">
+          <button class="btn" id="parseRefreshBtn">刷新</button>
+          <button class="btn" id="parseSelectedBtn" disabled>解析选中</button>
+          <button class="btn primary" id="parseEmptyBtn">重新解析空正文</button>
+        </div>
+      </div>
+      <div class="progress" id="parseProgress" hidden>
+        <div class="bar"><i id="parseBar"></i></div>
+        <div class="progress-text" id="parseProgressText"></div>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl parse-table">
+          <thead><tr>
+            <th style="width:34px"><input type="checkbox" id="parseSelectAll" title="选择本页全部"></th>
+            <th>文件 / 上传者</th>
+            <th style="width:78px">类型</th>
+            <th style="width:80px">大小</th>
+            <th style="width:92px">正文</th>
+            <th style="width:140px">解析状态</th>
+            <th style="width:160px">操作</th>
+          </tr></thead>
+          <tbody id="parseRows"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button class="btn small" id="parsePrev">上一页</button>
+        <span class="hint" id="parsePagerHint">—</span>
+        <button class="btn small" id="parseNext">下一页</button>
+      </div>
+    </section>
+
+    <section class="panel" id="parsePreviewPanel" hidden>
+      <div class="panel-head">
+        <h2 id="parsePreviewName">正文预览</h2>
+        <div class="db-toolbar-actions">
+          <button class="btn small" id="parsePreviewDownload">下载原件</button>
+          <button class="btn small" id="parsePreviewClose">收起</button>
+        </div>
+      </div>
+      <div class="hint" id="parsePreviewMeta"></div>
+      <pre class="parse-preview-text" id="parsePreviewText"></pre>
+    </section>
+  </div>
+
+
+  <div class="tab-pane" id="pane-deploy" hidden>
+    <section class="backup-hero page-hero hero-deploy">
+      <div class="backup-hero-text">
+        <span class="eyebrow">硬件探测 · 单平台部署 · 安装跳过</span>
+        <h1>每个平台单独部署，装过的不再重复下载</h1>
+        <p>每张平台卡都有自己的“一键部署”：没装就自动安装并启动，已经装好就跳过下载直接连接。GitHub 打不开时自动切换加速线路，也可以先点“网络诊断”。</p>
+        <div class="hero-tags"><span>硬件评估</span><span>单平台一键部署</span><span>已安装跳过</span><span>GitHub 加速</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>HW</strong><span>按机器适配</span></div>
+    </section>
+
+    <section class="cards" id="hwCards"></section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>部署平台</h2>
+        <div class="panel-tools">
+          <span class="hint">勾选只是选择启用哪些平台；“一键部署”才会安装并启动</span>
+          <button class="btn small" id="networkCheck" title="检查 GitHub 直连、加速镜像、PyPI 和官网">网络诊断</button>
+          <button class="btn small" id="refreshPlatforms" title="重新扫描本机所有平台，包括还没勾选的平台">更新</button>
+        </div>
+      </div>
+      <div class="hint" style="margin:0 0 10px">
+        <span class="badge mm">多模态</span>
+        表示平台支持文本加图片等多模态输入；“多模态（部分）”只对特定模型生效；“多模态看服务”由自定义服务自身决定。
+      </div>
+      <div class="hint" id="networkHint" style="margin:0 0 10px">网络：GitHub 直连失败时会自动改用加速镜像。</div>
+      <div class="hint" style="margin:0 0 10px">GitHub 完全打不开时：把 llama.cpp 官方压缩包（含 llama-server.exe）或 OllamaSetup.exe 放进 data\installers，再点“一键部署”，会自动使用本地安装包。</div>
+      <div class="platform-grid" id="platformCards"></div>
+      <div class="platform-foot">
+        <div class="model-note" id="platformNote">正在读取平台状态…</div>
+        <div class="platform-foot-tools">
+          <label class="proxy-line">GitHub 加速
+            <input id="githubProxy" value="auto" placeholder="auto / off / 自定义前缀" autocomplete="off">
+          </label>
+          <button class="btn" id="deploySelected" title="对已勾选的平台逐个执行一键部署">部署已选平台</button>
+          <button class="btn" id="savePlatforms">保存选择</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel custom-openai-guide" id="customOpenaiGuide" hidden>
+      <div class="panel-head">
+        <h2>自定义 OpenAI 兼容怎么接</h2>
+        <div class="panel-tools">
+          <span class="hint">这张卡不安装软件，只测试地址是否连通</span>
+          <button class="btn small" id="customGuideToggle" type="button" aria-expanded="true">关闭说明</button>
+        </div>
+      </div>
+      <div id="customGuideBody">
+        <div class="tutorial-lead">
+          <b>一句话说明：</b>先在电脑或服务器上准备一个兼容 <code>/v1/models</code> 和 <code>/v1/chat/completions</code> 的服务，再回工作台填地址、测试、保存，最后到「供应商」和「路由」两页完成接入。工作台不会替你安装这个服务，平台卡上的按钮叫“测试连接”，不会下载任何东西。
+        </div>
+
+        <div class="tutorial-cards">
+          <div class="tutorial-card">
+            <b>它到底是什么</b>
+            <p>一个通用入口：只要对方提供 OpenAI 格式的模型列表和聊天接口，就能接进来，不限制是 Ollama、LM Studio、vLLM 还是第三方 API。</p>
+          </div>
+          <div class="tutorial-card">
+            <b>和「供应商」页的区别</b>
+            <p>部署页这张卡只检查地址通不通；真正保存 Key、模型名并让聊天走它，要去「供应商」页新建供应商。</p>
+          </div>
+          <div class="tutorial-card">
+            <b>什么服务能接</b>
+            <p>判断标准只有两条：<code>GET /v1/models</code> 能返回模型列表；<code>POST /v1/chat/completions</code> 能正常聊天。</p>
+          </div>
+        </div>
+
+        <div class="tutorial-block">
+          <h3>照着做：六步接入</h3>
+          <ol class="tutorial-steps custom-steps">
+            <li><b>先启动外部服务。</b>本机装 Ollama、LM Studio、vLLM，或者直接买第三方 API。没启动服务，工作台这边填什么地址都不会通。</li>
+            <li><b>在部署页填“服务地址”并测试。</b>找到“自定义 OpenAI 兼容”卡片，地址填服务根地址，例如 Ollama 填 <code>http://127.0.0.1:11434</code>，点“测试连接”。成功时会显示“连接正常 · N 个模型”。</li>
+            <li><b>点“保存选择”。</b>测试通过不等于保存；不点保存，刷新页面后地址会回到默认值。</li>
+            <li><b>去「供应商」页建供应商。</b>预设选“自定义 / 其他 OpenAI 兼容接口”，Base URL 要带 <code>/v1</code>，例如 <code>http://127.0.0.1:11434/v1</code>；本机服务 Key 可留空；模型名必须和 <code>/v1/models</code> 返回的一模一样。</li>
+            <li><b>去「路由」页绑定。</b>新建策略，供应商选刚才建的，点“自动匹配”或手动把工作台模型映射到对方的模型名。只加供应商不建路由，网页聊天不一定会走它。</li>
+            <li><b>回前端实测。</b>选对应模型发一句“你好”；能正常回复就说明整条链路通了。普通用户还要在「用户」页把模型分配给他。</li>
+          </ol>
+        </div>
+
+        <div class="tutorial-note">
+          <b>最容易填错的地方：</b>部署页填“根地址”（一般不带 <code>/v1</code>），供应商页填“Base URL”（一般必须带 <code>/v1</code>）。因为供应商页会在后面自动拼 <code>/models</code> 和 <code>/chat/completions</code>，少一段就会 404。
+        </div>
+
+        <div class="tutorial-block">
+          <h3>地址对照表（照抄这一列）</h3>
+          <div class="guide-table-wrap">
+            <table class="guide-table">
+              <thead><tr><th>服务</th><th>部署页“服务地址”</th><th>供应商页“Base URL”</th><th>模型名示例</th></tr></thead>
+              <tbody>
+                <tr><td>Ollama</td><td><code>http://127.0.0.1:11434</code></td><td><code>http://127.0.0.1:11434/v1</code></td><td><code>qwen2.5:7b</code></td></tr>
+                <tr><td>LM Studio</td><td><code>http://127.0.0.1:1234</code></td><td><code>http://127.0.0.1:1234/v1</code></td><td>LM Studio 里显示的模型名</td></tr>
+                <tr><td>vLLM</td><td><code>http://127.0.0.1:8000</code></td><td><code>http://127.0.0.1:8000/v1</code></td><td><code>Qwen/Qwen2.5-7B-Instruct</code></td></tr>
+                <tr><td>llama.cpp server</td><td><code>http://127.0.0.1:8080</code></td><td><code>http://127.0.0.1:8080/v1</code></td><td>启动时加载的模型名</td></tr>
+                <tr><td>第三方 API</td><td>服务商文档里的根地址</td><td>文档里的 Base URL，通常以 <code>/v1</code> 结尾</td><td><code>deepseek-chat</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="hint">地址不是猜的：以服务商文档和 <code>/v1/models</code> 实际返回为准。远程服务器要把 <code>127.0.0.1</code> 换成对方 IP。</p>
+        </div>
+
+        <div class="tutorial-block">
+          <h3>没有现成服务？按系统选一种装</h3>
+
+          <details class="custom-source" open>
+            <summary><b>方案 A · Ollama（Windows 最省事，推荐新手）</b><span>约 5 分钟</span></summary>
+            <div class="custom-source-body">
+              <ol class="tutorial-steps">
+                <li>打开 Ollama 官网下载 <code>OllamaSetup.exe</code>，双击安装。装完托盘会出现 Ollama 图标，服务默认监听 <code>11434</code> 端口。</li>
+                <li>打开 PowerShell，拉一个模型。内存 8GB 建议先试小模型；16GB 以上再试 7B。</li>
+                <li>浏览器打开 <code>http://127.0.0.1:11434/v1/models</code>，能看到一串 JSON 就说明 OpenAI 兼容接口已经就绪。</li>
+                <li>回部署页，“自定义 OpenAI 兼容”填 <code>http://127.0.0.1:11434</code>，点“测试连接”。</li>
+              </ol>
+              <pre class="guide-code">ollama pull qwen2.5:7b
+# 内存较小就用：ollama pull qwen2.5:1.5b</pre>
+              <p class="hint">如果提示 <code>ollama serve</code> 已在运行，不用管；说明后台服务已经启动了。</p>
+            </div>
+          </details>
+
+          <details class="custom-source">
+            <summary><b>方案 B · LM Studio（有图形界面，适合不想敲命令）</b><span>约 10 分钟</span></summary>
+            <div class="custom-source-body">
+              <ol class="tutorial-steps">
+                <li>从 LM Studio 官网下载安装，打开后先在模型页搜索并下载一个 GGUF 模型，例如 Qwen2.5 7B 的 Q4 量化版。</li>
+                <li>切到左侧 <b>Developer</b>（开发者）页，点 <b>Start Server</b>，默认端口 <code>1234</code>。</li>
+                <li>浏览器打开 <code>http://127.0.0.1:1234/v1/models</code>，能返回模型列表即成功。</li>
+                <li>部署页填 <code>http://127.0.0.1:1234</code>；供应商页 Base URL 填 <code>http://127.0.0.1:1234/v1</code>，Key 留空。</li>
+              </ol>
+              <p class="hint">LM Studio 必须保持“Server 已启动”状态；关掉软件或停止服务后，工作台会显示未连接。</p>
+            </div>
+          </details>
+
+          <details class="custom-source">
+            <summary><b>方案 C · vLLM（Linux + NVIDIA 显卡，追求速度）</b><span>适合进阶用户</span></summary>
+            <div class="custom-source-body">
+              <ol class="tutorial-steps">
+                <li>准备 Linux 或 Windows 的 WSL2，安装 NVIDIA 驱动和 CUDA 运行环境；纯 CPU 的 Windows 不建议硬装 vLLM。</li>
+                <li>在虚拟环境里安装：<code>pip install vllm</code>。</li>
+                <li>启动服务，首次会从 Hugging Face 下载模型，体积通常几个 GB 到几十 GB。</li>
+                <li>浏览器打开 <code>http://127.0.0.1:8000/v1/models</code>，能返回模型名后再回工作台接入。</li>
+              </ol>
+              <pre class="guide-code">vllm serve Qwen/Qwen2.5-7B-Instruct --host 0.0.0.0 --port 8000</pre>
+              <p class="hint">vLLM 的模型名通常是 Hugging Face 仓库名，例如 <code>Qwen/Qwen2.5-7B-Instruct</code>，不要自己改短名。</p>
+            </div>
+          </details>
+
+          <details class="custom-source">
+            <summary><b>方案 D · 第三方 API（不用装软件，花钱买 Key）</b><span>最快</span></summary>
+            <div class="custom-source-body">
+              <ol class="tutorial-steps">
+                <li>在服务商控制台创建 API Key，并确认它提供 OpenAI 兼容接口，而不是只有自家私有协议。</li>
+                <li>从文档抄三样东西：Base URL、Key、准确的模型 ID。常见形式是 <code>https://api.xxx.com/v1</code>。</li>
+                <li>部署页先填根地址测试；供应商页填完整 Base URL，Key 粘贴进去，模型名用文档里的 ID。</li>
+                <li>供应商列表点“测试”，看到“连通，xx ms，发现 N 个模型”再建路由。</li>
+              </ol>
+              <p class="hint">不要把 Key 写进地址里，也不要手动加 <code>Bearer </code> 前缀；工作台保存时会自动按标准方式发送。</p>
+            </div>
+          </details>
+        </div>
+
+        <div class="tutorial-block">
+          <h3>常见错误怎么排查</h3>
+          <div class="guide-table-wrap">
+            <table class="guide-table">
+              <thead><tr><th>现象</th><th>最常见原因</th><th>怎么处理</th></tr></thead>
+              <tbody>
+                <tr><td>测试显示“未连接：ConnectError”</td><td>服务没启动、端口填错，或只监听了 <code>127.0.0.1</code></td><td>先在本机浏览器打开 <code>/v1/models</code>；远程访问要让服务监听 <code>0.0.0.0</code> 并放行防火墙端口</td></tr>
+                <tr><td>HTTP 404</td><td>路径少了或多了 <code>/v1</code></td><td>部署页填根地址；供应商页 Base URL 带 <code>/v1</code>；用浏览器直接访问 <code>/v1/models</code> 验证</td></tr>
+                <tr><td>HTTP 401 / 403</td><td>Key 没填、填错、额度用完，或该服务要求额外请求头</td><td>重新复制 Key，不要带 <code>Bearer</code>；到服务商控制台确认 Key 状态</td></tr>
+                <tr><td>连接正常，但模型列表是 0 个</td><td>服务启动了但没加载模型</td><td>先在服务里加载/拉取模型；Ollama 用 <code>ollama list</code> 确认模型存在</td></tr>
+                <tr><td>聊天时报“model not found”</td><td>模型名和工作台里填的不一致</td><td>以 <code>/v1/models</code> 返回的 <code>id</code> 为准，大小写和斜杠都要一致</td></tr>
+                <tr><td>供应商测试通过，网页聊天还是走本地</td><td>只加了供应商，没建路由或没分配模型</td><td>到「路由」页建云端策略；普通用户还要在「用户」页分配模型</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tutorial-block">
+          <h3>验收清单</h3>
+          <ul class="custom-check">
+            <li>部署卡显示“已连接”，详情里能看到模型数量。</li>
+            <li>点过“保存选择”，刷新部署页后地址还在。</li>
+            <li>供应商页“测试”提示连通，并且发现了模型。</li>
+            <li>路由页有对应策略，模型映射不是空的。</li>
+            <li>前端发一句“你好”能收到回复，调用记录里能看到这个供应商。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel local-deploy-panel">
+      <div class="panel-head">
+        <h2>本地部署开关</h2>
+        <span class="hint">按上方勾选的平台开启；不勾选默认 llama.cpp</span>
+      </div>
+      <div class="install-row">
+        <div class="install-info">
+          <div class="status-line">
+            <span class="dot" id="localDeployDot"></span>
+            <b id="localDeployTitle">正在检测…</b>
+            <span class="badge off" id="localDeployBadge">检测中</span>
+          </div>
+          <div class="hint" id="localDeployDesc">正在读取本地部署状态…</div>
+          <div class="mono" id="localDeployMeta"></div>
+        </div>
+        <div class="install-act">
+          <button class="btn primary" id="localDeployBtn" data-next="on" disabled>开启本地部署</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>本地部署状态</h2>
+        <span class="hint" id="installHint">正在检测…；安装请优先用上方平台卡的一键部署</span>
+      </div>
+      <div class="install-row">
+        <div class="install-info" id="installInfo"></div>
+        <div class="install-act">
+          <button class="btn" id="installBtn" hidden>备用安装 llama.cpp</button>
+        </div>
+      </div>
+      <div class="progress" id="installProgress" hidden>
+        <div class="bar"><i id="installBar"></i></div>
+        <div class="progress-text" id="installText"></div>
+      </div>
+      <div class="deps" id="depsRow"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>服务</h2><span class="hint">模型服务与接口</span></div>
+      <div class="svc-row" id="svcRow"></div>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">先评估，再单平台部署，最后开开关</span></div>
+      <ol class="migrate-steps">
+        <li><b>先看硬件卡</b><span>CPU、内存、显存和磁盘决定能跑多大模型；显存小于 4GB 优先 CPU 推理。</span></li>
+        <li><b>每张卡单独部署</b><span>点平台卡里的“一键部署”；没安装会自动下载安装，已安装会跳过下载，只做启动或连接。</span></li>
+        <li><b>GitHub 打不开先诊断</b><span>点右上角“网络诊断”；自动加速不可用时可填自己的加速前缀，保存后再部署。</span></li>
+        <li><b>保存选择再开开关</b><span>勾选要用的平台，点“保存选择”，再开“本地部署开关”；装完回「模型」页下载模型。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-cluster" hidden>
+    <section class="backup-hero page-hero hero-cluster">
+      <div class="backup-hero-text">
+        <span class="eyebrow">局域网多机 · 同模型副本池 · 统一入口</span>
+        <h1>几台机器跑同一个模型，对外只报一个名字</h1>
+        <p>每台机器继续用自己熟悉的 Ollama / LM Studio / vLLM / llama.cpp 起服务。工作台只做三件事：记地址、检查在线、把请求分给当前最闲的一台。单次请求仍然只在一台机器上算，不跨机切分层。</p>
+        <div class="hero-tags"><span>节点注册</span><span>健康检查</span><span>加权最少连接</span><span>故障转移</span><span>OpenAI 兼容 /v1</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>N×</strong><span>副本并发</span></div>
+    </section>
+
+    <section class="cards" id="clusterCards"></section>
+
+    <div class="cluster-grid">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>节点</h2>
+          <div class="panel-tools">
+            <span class="hint">地址统一填到 /v1；带不带 /v1 都会自动补</span>
+            <button class="btn small" id="clusterRefresh" title="重新探测所有节点的 /v1/models">检查全部</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl cluster-node-table">
+            <thead><tr><th>机器</th><th>地址</th><th>状态</th><th>模型</th><th>权重/并发</th><th>操作</th></tr></thead>
+            <tbody id="clusterNodeRows"></tbody>
+          </table>
+        </div>
+        <p class="hint" id="clusterNodeHint">还没有节点。先在右边填写一台局域网机器的地址，保存后会自动探测一次。</p>
+      </section>
+
+      <section class="panel" id="clusterNodeFormPanel">
+        <div class="panel-head">
+          <h2 id="clusterNodeFormTitle">加入一台机器</h2>
+          <div class="panel-tools">
+            <span class="hint">只保存配置，不在这台机器上装服务</span>
+            <button class="btn small" id="clusterNodeCancel" hidden>取消编辑</button>
+          </div>
+        </div>
+        <div class="form-grid">
+          <input id="clusterNodeName" placeholder="机器名，例如 书房-4090" autocomplete="off">
+          <input id="clusterNodeBase" placeholder="http://192.168.1.40:11434/v1" autocomplete="off">
+          <input id="clusterNodeKey" type="password" placeholder="API Key（本机服务通常留空）" autocomplete="new-password">
+          <input id="clusterNodeWeight" type="number" min="1" max="100" value="1" title="权重越大，分到的请求越多">
+          <input id="clusterNodeMax" type="number" min="1" max="100" value="4" title="这台机器同时处理几个请求">
+          <input id="clusterNodeNote" placeholder="备注，例如 24G 显存 / 只跑 q4" autocomplete="off">
+          <label class="checkline"><input type="checkbox" id="clusterNodeEnabled" checked> 启用这台机器</label>
+          <div class="form-note">
+            地址示例：Ollama <code>http://192.168.1.40:11434/v1</code>；LM Studio <code>http://192.168.1.41:1234/v1</code>；vLLM <code>http://192.168.1.42:8000/v1</code>。
+            先在浏览器直接打开 <code>地址/models</code>，能看到模型列表再保存。
+          </div>
+        </div>
+        <div class="cluster-form-foot">
+          <button class="btn primary" id="clusterNodeSave">保存节点</button>
+          <button class="btn" id="clusterNodeProbe" title="不保存，先测试地址通不通">测试地址</button>
+          <span class="hint" id="clusterProbeResult"></span>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>模型池</h2>
+        <div class="panel-tools">
+          <span class="hint">池名就是对外模型名；池内每台机器必须跑同一个模型</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>统一模型名</th><th>调度</th><th>成员</th><th>超时/重试</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody id="clusterPoolRows"></tbody>
+        </table>
+      </div>
+      <p class="hint" id="clusterPoolHint">还没有模型池。先在下面把几台机器加进同一个池，再用池名调用。</p>
+    </section>
+
+    <div class="cluster-grid">
+      <section class="panel">
+        <div class="panel-head">
+          <h2 id="clusterPoolFormTitle">新建模型池</h2>
+          <div class="panel-tools">
+            <button class="btn small" id="clusterPoolCancel" hidden>取消编辑</button>
+          </div>
+        </div>
+        <div class="form-grid">
+          <input id="clusterPoolName" placeholder="统一模型名，例如 qwen3-8b-pool" autocomplete="off">
+          <select id="clusterPoolStrategy">
+            <option value="weighted_least">加权最少连接（推荐）</option>
+            <option value="round_robin">轮询</option>
+          </select>
+          <input id="clusterPoolTimeout" type="number" min="3" max="300" value="30" title="单次请求等待秒数">
+          <input id="clusterPoolRetries" type="number" min="0" max="5" value="1" title="失败后最多再换几台机器">
+          <input id="clusterPoolNote" placeholder="备注，例如 三台 4090 跑 q4_K_M" autocomplete="off">
+          <div class="form-note">“重试 1 次”表示第一台失败后再换一台；要覆盖三台机器，填 2。流式请求只在还没吐出第一个字之前换机器。</div>
+        </div>
+        <div class="cluster-member-head">
+          <span>成员机器</span>
+          <button class="btn small" id="clusterAddMember">加一台</button>
+        </div>
+        <div id="clusterPoolMembers" class="cluster-members"></div>
+        <div class="cluster-form-foot">
+          <button class="btn primary" id="clusterPoolSave">保存模型池</button>
+          <span class="hint">保存后，池名会自动出现在 /v1/models 里。</span>
+        </div>
+      </section>
+
+      <section class="panel cluster-entry">
+        <div class="panel-head">
+          <h2>统一调用入口</h2>
+          <div class="panel-tools">
+            <button class="btn small" id="clusterCopyExample">复制示例</button>
+          </div>
+        </div>
+        <p class="hint">脚本、Cherry Studio、OpenAI SDK 都填这个地址；模型名填池名。API Key 用「API」页生成的用户 Key。</p>
+        <pre id="clusterExample" class="cluster-code"></pre>
+        <div class="cluster-distribution" id="clusterDistribution"></div>
+      </section>
+    </div>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>它和「自定义 OpenAI 兼容」的区别</h2><span class="hint">一句话：一个地址 vs 一组地址</span></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>对比</th><th>自定义 OpenAI 兼容</th><th>多机算力池</th></tr></thead>
+          <tbody>
+            <tr><td>接的是什么</td><td>一台已经跑起来的服务</td><td>多台机器上的同一个模型</td></tr>
+            <tr><td>地址数量</td><td>一个 Base URL</td><td>每个节点一个 Base URL</td></tr>
+            <tr><td>能否合并算力</td><td>不能，只转发到那一个地址</td><td>能合并并发/吞吐，单请求仍在一台机器</td></tr>
+            <tr><td>一台挂了</td><td>直接失败</td><td>自动换下一台（首字前）</td></tr>
+            <tr><td>适合场景</td><td>Ollama / LM Studio / vLLM / 第三方 API 单点接入</td><td>几台局域网机器跑同一模型，给多人/脚本统一调用</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">真正的“分布式推理”（把一层层切到多台机器）需要同构硬件、低延迟网络和专用推理框架，家用 Wi-Fi 下通常更慢；本页做的是副本池。</p>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-models" hidden>
+    <section class="backup-hero page-hero hero-models">
+      <div class="backup-hero-text">
+        <span class="eyebrow">分类清单 · 独立引擎</span>
+        <h1>模型按用途分类，不再一锅炖</h1>
+        <p>文字、代码、视觉、OCR、绘画、视频、语音、向量和重排序分开展示。没下载的模型不会出现在前端切换列表里。</p>
+        <div class="hero-tags"><span>9 类用途</span><span>本机适配建议</span><span>独立引擎登记</span></div>
+      </div>
+      <div class="backup-hero-mark"><strong>9</strong><span>类模型用途</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>模型清单</h2>
+        <div class="panel-tools">
+          <span class="hint" id="modelHint"></span>
+          <button class="btn small" id="refreshModels" title="把内置清单里缺失的模型补回来，不覆盖已有模型">更新</button>
+        </div>
+      </div>
+      <div class="model-filters" id="modelFilters"></div>
+      <div class="model-note" id="modelNote">按用途分类展示。文字/代码模型可直接下载并用 llama.cpp 加载；绘画、视频、语音、向量等需要独立引擎，当前只做清单收录，不能一键下载或加载。</div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr><th>模型</th><th>类别</th><th>独立引擎</th><th>体积</th><th>状态</th><th>本机建议</th><th class="right">操作</th></tr>
+          </thead>
+          <tbody id="modelRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>独立引擎清单</h2>
+        <span class="hint">后期部署参考，本期只登记不安装</span>
+      </div>
+      <div class="engine-summary" id="engineSummary"></div>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">先按用途找，再看本机建议</span></div>
+      <ol class="migrate-steps">
+        <li><b>按用途筛选</b><span>顶部标签切换文字、代码、视觉、绘画、视频等类别；先缩小范围再挑模型。</span></li>
+        <li><b>点“更新”补齐清单</b><span>只补内置清单里缺失的模型，不覆盖已有模型或你改过的信息。</span></li>
+        <li><b>文字/代码模型可下载加载</b><span>看“本机建议”和体积，下载后用 llama.cpp 加载；没下载不会出现在前端切换。</span></li>
+        <li><b>其他类型看独立引擎</b><span>绘画、视频、语音等需要独立引擎，本期只登记清单，部署时按引擎名称准备。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-kb" hidden>
+    <section class="backup-hero page-hero hero-kb">
+      <div class="backup-hero-text">
+        <span class="eyebrow">本地文档 · 自动切块 · 检索增强</span>
+        <h1>把资料放进来，让回答有据可查</h1>
+        <p>管理员维护公共库，普通用户可以在用户端建自己的个人库。这里能看到两类文档，按库类型和账号筛选后可以直接删除。</p>
+        <div class="hero-tags"><span>公共库</span><span>用户个人库</span><span>FTS5 全文检索</span><span>对话自动引用</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>KB</strong><span>本地知识库</span></div>
+    </section>
+
+    <section class="cards" id="kbCards"></section>
+
+    <section class="backup-grid kb-backup-grid">
+      <article class="backup-card accent">
+        <div class="backup-card-top"><span class="backup-icon">01</span><span class="badge good">导出</span></div>
+        <h2>备份全部知识库</h2>
+        <p>把公共库和用户个人库的文档、正文、归属一起导成 JSON；恢复时个人文档会回到原账号。</p>
+        <button class="btn primary wide" id="kbBackupBtn">下载知识库备份</button>
+        <small id="kbBackupHint">包含标题、来源和正文；不包含向量索引缓存。下载后可自己存到网盘或 U 盘。</small>
+      </article>
+      <article class="backup-card">
+        <div class="backup-card-top"><span class="backup-icon">02</span><span class="badge">恢复</span></div>
+        <h2>恢复知识库</h2>
+        <p>选择本工作台导出的 JSON 备份。公共库和用户个人库都会按归属追加恢复，同名文档自动跳过。</p>
+        <input type="file" id="kbRestoreFile" accept=".json,application/json" hidden>
+        <button class="btn wide" id="kbRestorePick">选择备份文件</button>
+        <button class="btn primary wide" id="kbRestoreBtn" disabled>恢复备份</button>
+        <small id="kbRestoreHint">还没有选择文件。恢复前可以先下载一份当前备份。</small>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>全部知识库文档</h2>
+        <div class="panel-tools">
+          <span class="hint" id="kbDocHint">正在读取…</span>
+          <button class="btn small" id="kbRefresh">刷新</button>
+          <button class="btn small" id="kbUploadBtn">上传公共文件</button>
+          <button class="btn primary small" id="kbNewBtn">添加公共文本</button>
+          <input type="file" id="kbFile" accept=".txt,.md,.markdown,.csv,.json,.log,.py,.html,.htm,.pdf,.docx,.xlsx,.xlsm,.xls,.pptx,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff" hidden>
+        </div>
+      </div>
+      <div class="filters">
+        <select id="kbScopeFilter" aria-label="按库类型筛选">
+          <option value="all">全部库</option>
+          <option value="global">公共库</option>
+          <option value="personal">个人库</option>
+        </select>
+        <select id="kbUserFilter" aria-label="按账号筛选">
+          <option value="">全部账号</option>
+        </select>
+        <input id="kbFilter" placeholder="按标题、来源或账号筛选">
+      </div>
+      <div class="kb-doc-notice" id="kbUploadNotice" hidden></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>文档</th><th>归属</th><th>库</th><th>来源</th><th>字数</th><th>添加时间</th><th class="right">操作</th></tr></thead>
+          <tbody id="kbRows"></tbody>
+        </table>
+      </div>
+      <div class="hint" style="margin-top:10px">个人库文档归创建者所有，管理员可在这里查看和删除；删除会同时清理检索索引，不影响其他账号。</div>
+      <div class="kb-doc-view" id="kbDocView" hidden>
+        <div class="kb-doc-head">
+          <div><span class="kicker">DOCUMENT</span><h3 id="kbDocTitle">文档正文</h3></div>
+          <button class="btn ghost sm" id="kbDocClose">收起</button>
+        </div>
+        <div class="kb-doc-meta" id="kbDocMeta"></div>
+        <pre class="kb-doc-content" id="kbDocContent"></pre>
+      </div>
+    </section>
+
+    <section class="panel" id="kbEditor" hidden>
+      <div class="panel-head">
+        <h2>添加文本</h2>
+        <span class="hint">标题用于检索结果展示，正文会自动切成约 420 字的片段</span>
+      </div>
+      <div class="kb-editor-grid">
+        <input id="kbTitle" placeholder="标题，例如：产品使用手册 / 会议纪要" maxlength="200" autocomplete="off">
+        <textarea id="kbContent" placeholder="把要入库的正文粘贴到这里。支持 Markdown 纯文本，不要放图片或附件。"></textarea>
+      </div>
+      <div class="kb-editor-foot">
+        <div class="hint" id="kbEditorHint">正文为空不会入库；支持 Word/PDF/Excel/PPT 和图片 OCR，扫描件默认前 15 页，单文件不超过 20MB。</div>
+        <div class="row-actions">
+          <button class="btn primary" id="kbSave">保存并切块</button>
+          <button class="btn ghost" id="kbCancel">取消</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>检索测试</h2>
+        <span class="hint">先用问题试一次，确认能命中再回对话页使用</span>
+      </div>
+      <div class="filters">
+        <input id="kbQuery" placeholder="输入一个问题或关键词，例如：退款流程要几天？">
+        <button class="btn primary small" id="kbSearch">检索</button>
+        <button class="btn small" id="kbClear">清空</button>
+      </div>
+      <div class="kb-results" id="kbResults">
+        <div class="kb-empty">还没有检索。输入问题后点“检索”，这里会显示命中的片段。</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>公共知识库检索</h2>
+        <span class="hint">默认关闭；开启后，用户还要在自己的知识库设置里勾选「公共知识库」才会参与检索</span>
+      </div>
+      <div class="kb-settings">
+        <label class="checkline"><input id="kbEnabled" type="checkbox"> 开启公共知识库检索</label>
+        <label class="kb-topk">每次返回段落 <input id="kbTopK" type="number" min="1" max="10" step="1"></label>
+        <button class="btn primary small" id="kbSaveSettings">保存设置</button>
+      </div>
+      <div class="hint" id="kbSettingsHint">默认关闭，关闭时任何账号都不会引用公共库；个人库由用户自己开关。</div>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">先入库，再检索，最后备份</span></div>
+      <ol class="migrate-steps">
+        <li><b>先准备干净文本</b><span>把 PDF / 网页先转成 txt 或 md，去掉页眉页脚和无关广告，再上传。</span></li>
+        <li><b>入库并检查列表</b><span>添加文本或上传文件后，确认标题、来源和字数正确；切块是自动的。</span></li>
+        <li><b>用真实问题试检索</b><span>在“检索测试”里输入用户会问的问题，看命中片段是否真的相关。</span></li>
+        <li><b>回对话页验证</b><span>打开对话设置里的“使用本机知识库检索”，提问后看回复下方是否出现知识库标签。</span></li>
+        <li><b>定期备份</b><span>点“下载知识库备份”保存 JSON；恢复时同名文档自动跳过，不会删除现有资料。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-library" hidden>
+    <section class="backup-hero page-hero hero-kb">
+      <div class="backup-hero-text">
+        <span class="eyebrow">可反复选用 · 总库 + 个人库 · 聊天带入</span>
+        <h1>把常用资料放进资料库</h1>
+        <p>总库由管理员统一维护，用户只能调用和删除自己上传的个人资料。资料不会只用一次，聊天框中可反复选择并带入。</p>
+        <div class="hero-tags"><span>总库</span><span>个人资料</span><span>重复使用</span><span>引用计数</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>LIB</strong><span>资料库</span></div>
+    </section>
+
+    <section class="cards" id="libCards"></section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>总资料库开关</h2>
+        <span class="hint">默认关闭；开启后用户还要在自己的资料库设置里勾选「总资料库」才会在聊天框中出现</span>
+      </div>
+      <div class="kb-settings">
+        <label class="checkline"><input id="libEnabled" type="checkbox"> 开启总资料库</label>
+        <label class="kb-topk">单次最多资料 <input id="libMaxDocs" type="number" min="1" max="30" step="1"></label>
+        <label class="kb-topk">最多字数 <input id="libMaxChars" type="number" min="1000" max="48000" step="1000"></label>
+        <button class="btn primary small" id="libSaveSettings">保存设置</button>
+      </div>
+      <div class="hint" id="libSettingsHint">默认关闭；关闭后聊天框不会列出总库资料，个人资料仍可由用户自己开启。</div>
+    </section>
+
+    <section class="backup-grid kb-backup-grid">
+      <article class="backup-card accent">
+        <div class="backup-card-top"><span class="backup-icon">01</span><span class="badge good">导出</span></div>
+        <h2>备份全部资料库</h2>
+        <p>把总库和用户个人资料一起导出成 JSON，包含正文、归属和引用次数。</p>
+        <button class="btn primary wide" id="libBackupBtn">下载资料库备份</button>
+      </article>
+      <article class="backup-card">
+        <div class="backup-card-top"><span class="backup-icon">02</span><span class="badge">恢复</span></div>
+        <h2>恢复资料库</h2>
+        <p>个人资料会按原账号恢复；找不到原账号的条目会跳过。</p>
+        <input type="file" id="libRestoreFile" accept=".json,application/json" hidden>
+        <button class="btn wide" id="libRestorePick">选择备份文件</button>
+        <button class="btn primary wide" id="libRestoreBtn" disabled>恢复备份</button>
+        <small id="libRestoreHint">还没有选择文件。</small>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>全部资料</h2>
+        <div class="panel-tools">
+          <span class="hint" id="libDocHint">正在读取…</span>
+          <button class="btn small" id="libRefresh">刷新</button>
+          <button class="btn small" id="libUploadBtn">上传总库文件</button>
+          <button class="btn primary small" id="libNewBtn">添加总库文本</button>
+          <input type="file" id="libFile" accept=".txt,.md,.markdown,.csv,.json,.log,.py,.html,.htm,.pdf,.docx,.xlsx,.xlsm,.xls,.pptx,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff" hidden>
+        </div>
+      </div>
+      <div class="filters">
+        <select id="libScopeFilter" aria-label="按库类型筛选">
+          <option value="all">全部资料</option>
+          <option value="global">总资料库</option>
+          <option value="personal">个人资料</option>
+        </select>
+        <select id="libUserFilter" aria-label="按账号筛选">
+          <option value="">全部账号</option>
+        </select>
+        <input id="libFilter" placeholder="按标题、来源或账号筛选">
+        <select id="libFolderFilter" aria-label="按文件夹筛选"><option value="">全部文件夹</option></select>
+        <select id="libTagFilter" aria-label="按标签筛选"><option value="">全部标签</option></select>
+      </div>
+      <div class="kb-doc-notice" id="libUploadNotice" hidden></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>资料</th><th>分类</th><th>归属</th><th>库</th><th>来源</th><th>字数</th><th>引用</th><th>最近使用</th><th class="right">操作</th></tr></thead>
+          <tbody id="libRows"></tbody>
+        </table>
+      </div>
+      <div class="hint" style="margin-top:10px">用户只能删除自己上传的个人资料，不能删除总库；总库文档也不会出现在用户的删除入口里。</div>
+      <div class="kb-doc-view" id="libDocView" hidden>
+        <div class="kb-doc-head">
+          <div><span class="kicker">LIBRARY DOC</span><h3 id="libDocTitle">资料正文</h3></div>
+          <button class="btn ghost sm" id="libDocClose">收起</button>
+        </div>
+        <div class="kb-doc-meta" id="libDocMeta"></div>
+        <pre class="kb-doc-content" id="libDocContent"></pre>
+      </div>
+    </section>
+
+    <section class="panel" id="libEditor" hidden>
+      <div class="panel-head">
+        <h2>添加总库资料</h2>
+        <span class="hint">保存后用户可在聊天框中反复选用</span>
+      </div>
+      <div class="kb-editor-grid">
+        <input id="libTitle" placeholder="资料标题，例如：设备说明书 / 项目参数" maxlength="200" autocomplete="off">
+        <textarea id="libContent" placeholder="把要长期复用的正文粘贴到这里。"></textarea>
+        <div class="kb-editor-classify">
+          <input id="libFolder" placeholder="文件夹，可留空，例如：合同资料" maxlength="80" autocomplete="off">
+          <input id="libTags" placeholder="标签，逗号分隔，例如：合同, 付款" maxlength="200" autocomplete="off">
+        </div>
+      </div>
+      <div class="kb-editor-foot">
+        <div class="hint" id="libEditorHint">正文为空不会入库；支持 Word/PDF/Excel/PPT 和图片 OCR，扫描件默认前 15 页，单文件不超过 20MB。</div>
+        <div class="row-actions">
+          <button class="btn primary" id="libSave">保存资料</button>
+          <button class="btn ghost" id="libCancel">取消</button>
+        </div>
+      </div>
+    </section>
+    <section class="panel" id="libOrganize" hidden>
+      <div class="panel-head">
+        <h2>整理资料分类</h2>
+        <span class="hint" id="libOrgDocTitle">选择一篇资料</span>
+      </div>
+      <div class="kb-editor-grid">
+        <input id="libOrgTitle" placeholder="资料标题" maxlength="200" autocomplete="off">
+        <div class="kb-editor-classify">
+          <input id="libOrgFolder" placeholder="文件夹，留空表示未分类" maxlength="80" autocomplete="off">
+          <input id="libOrgTags" placeholder="标签，逗号分隔" maxlength="200" autocomplete="off">
+        </div>
+      </div>
+      <div class="kb-editor-foot">
+        <div class="hint" id="libOrgHint">管理员可整理任意资料；用户只能整理自己的个人资料。</div>
+        <div class="row-actions">
+          <button class="btn primary" id="libOrgSave">保存分类</button>
+          <button class="btn ghost" id="libOrgCancel">取消</button>
+        </div>
+      </div>
+      <div class="inline-error" id="libOrgError" hidden></div>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-memory" hidden>
+    <section class="backup-hero page-hero hero-kb">
+      <div class="backup-hero-text">
+        <span class="eyebrow">跨对话 · 由你决定</span>
+        <h1>长期记忆默认关闭，想用再打开</h1>
+        <p>关闭时只带本次会话的最近上下文；打开后，账号的自述和偏好会跨对话保留，并按相关度注入对话。</p>
+        <div class="hero-tags"><span>默认短期</span><span>一键开关</span><span>按账号隔离</span><span>可手动增删</span></div>
+      </div>
+      <div class="backup-hero-mark page-hero-mark text"><strong>记忆</strong><span>MEMORY</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>长期记忆开关</h2>
+        <span class="badge unknown" id="memoryState">读取中…</span>
+      </div>
+      <div class="memory-toggle-row">
+        <div>
+          <div class="memory-title" id="memoryTitle">正在读取当前状态…</div>
+          <div class="hint" id="memoryHint">关闭后不会写入新记忆，也不会把旧记忆带进对话；已有条目会保留，随时可以再打开。</div>
+        </div>
+        <button class="btn primary big" id="memoryToggleBtn" type="button">读取中…</button>
+      </div>
+      <div class="hint" style="margin-top:10px">这里是管理员总开关，关闭后所有账号都不使用；打开后，每个用户还要在用户端「设置 → 记忆」自己打开自己的开关，默认仍是关闭。</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>记忆条目</h2>
+        <span class="hint" id="memoryStats">—</span>
+        <button class="btn small" id="refreshMemory" type="button">刷新</button>
+      </div>
+      <div class="form-grid">
+        <select id="memoryUser" aria-label="选择账号"></select>
+        <input id="memoryInput" maxlength="160" placeholder="手动添加一句，如：用户叫张三，常用 Windows 和 NAS">
+        <button class="btn primary" id="memoryAdd" type="button">添加记忆</button>
+      </div>
+      <div class="hint" id="memoryAddHint">手动添加适合纠正或补充；自动记忆只保存你明确说出的“我叫 / 我是 / 我喜欢 / 记住…”这类原句。</div>
+      <div class="table-wrap" style="margin-top:12px">
+        <table class="tbl">
+          <thead><tr><th>账号</th><th>内容</th><th>来源</th><th>命中</th><th>更新时间</th><th class="right">操作</th></tr></thead>
+          <tbody id="memoryRows"><tr><td colspan="6" class="empty">正在读取…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="hint">当前最多展示最近 300 条；每个账号超过上限时，会优先淘汰权重最低、最久未更新的条目。</div>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">先决定要不要长期记忆</span></div>
+      <ol class="migrate-steps">
+        <li><b>默认不用长期记忆</b><span>开关关闭时，对话只依赖最近 20 条消息和附件，刷新页面也不会改变这一点。</span></li>
+        <li><b>需要时再打开</b><span>先点上面的总开关，允许使用长期记忆；然后用户在用户端「设置 → 记忆」打开自己的开关。两层都打开才会写入和注入，其他账号看不到。</span></li>
+        <li><b>自动只记明确自述</b><span>“我叫…”“我是…”“我习惯…”“记住…”会入库；闲聊和问题不会被当成事实。</span></li>
+        <li><b>随时纠正</b><span>记错了就删除或手动补一条；改动下一轮对话立即生效。</span></li>
+        <li><b>用完可关</b><span>关掉后不再注入，也不写新记忆；条目仍在，重新打开即可继续用。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-audit" hidden>
+    <section class="backup-hero page-hero hero-requests">
+      <div class="backup-hero-text">
+        <span class="eyebrow">管理员操作 · 全量留痕</span>
+        <h1>谁改了什么，都能查</h1>
+        <p>登录、用户、模型、知识库、数据库、技能和算力池的管理动作都会写入本地审计表；按时间、动作和状态筛选。</p>
+        <div class="hero-tags"><span>关键词搜索</span><span>动作前缀</span><span>失败留痕</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>AUDIT</strong><span>不可抵赖</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>操作日志</h2>
+        <span class="hint" id="auditHint">最近记录 · 支持按用户、动作、目标、详情和 IP 搜索</span>
+      </div>
+      <div class="filters">
+        <input id="faq" placeholder="搜索用户 / 动作 / 目标 / 详情 / IP">
+        <input id="faAction" placeholder="动作前缀，如 user. / model." style="max-width:210px">
+        <select id="faStatus">
+          <option value="">全部状态</option>
+          <option value="ok">成功</option>
+          <option value="fail">失败</option>
+          <option value="locked">已锁定</option>
+        </select>
+        <select id="faDays">
+          <option value="0">全部时间</option>
+          <option value="1">最近 1 天</option>
+          <option value="7">最近 7 天</option>
+          <option value="30">最近 30 天</option>
+        </select>
+        <button class="btn small" id="auditSearchBtn">查询</button>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>时间</th><th>账号</th><th>动作</th><th>目标</th><th>详情</th><th>IP</th><th>状态</th></tr></thead>
+          <tbody id="auditRows"></tbody>
+        </table>
+      </div>
+      <div class="pager"><button class="btn small" id="auditPrev">上一页</button><span id="auditPageInfo"></span><button class="btn small" id="auditNext">下一页</button></div>
+    </section>
+
+    <section class="panel usage-guide">
+      <div class="panel-head"><h2>使用说明</h2><span class="hint">审计表只读，不在页面里修改</span></div>
+      <ol class="migrate-steps">
+        <li><b>查动作</b><span>动作前缀例如 <code>user.</code>、<code>model.</code>、<code>database.</code>、<code>skill.</code>，可快速锁定一类操作。</span></li>
+        <li><b>查人</b><span>搜索框同时匹配账号、目标、详情和 IP；排查“谁动了这个用户/这张表”时直接搜用户名或表名。</span></li>
+        <li><b>看状态</b><span>失败操作也会留痕；配合调用记录页，可以区分“模型调用失败”和“管理配置失败”。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-backup" hidden>
+    <section class="backup-hero">
+      <div class="backup-hero-text">
+        <span class="eyebrow">数据安全 · 换机无忧</span>
+        <h1>备份、迁移、恢复，一处完成</h1>
+        <p>数据库、密钥、登录方式和配置一起打包。迁移包已经带好程序和启动脚本，新电脑解压后双击就能继续用。</p>
+      </div>
+      <div class="backup-hero-mark">
+        <strong>3</strong>
+        <span>种数据保护方式</span>
+      </div>
+    </section>
+
+    <section class="backup-grid">
+      <article class="backup-card">
+        <div class="backup-card-top"><span class="backup-icon">01</span><span class="badge good">日常</span></div>
+        <h2>一键备份</h2>
+        <p>把当前数据库、加密主密钥、配置和登录方式打包成一个 zip，适合定期存档。</p>
+        <button class="btn primary wide" id="backupBtn">生成并下载备份</button>
+        <small>会包含 secret.key，请放在可信位置。</small>
+      </article>
+
+      <article class="backup-card accent">
+        <div class="backup-card-top"><span class="backup-icon">02</span><span class="badge warn">换机</span></div>
+        <h2>一键迁移</h2>
+        <p>生成整机迁移包：程序 + 数据 + 启动脚本。新电脑解压后双击“一键迁移-双击我.bat”。</p>
+        <button class="btn primary wide" id="migrationBtn">生成到默认文件夹</button>
+        <div class="migration-dir-line">默认目录：<span class="mono" id="migrationDirHint">读取中…</span></div>
+        <small>不包含模型文件和 .venv；生成后可直接打开文件夹，或下载到浏览器。</small>
+      </article>
+
+      <article class="backup-card">
+        <div class="backup-card-top"><span class="backup-icon">03</span><span class="badge">回滚</span></div>
+        <h2>上传恢复</h2>
+        <p>上传之前下载的备份 zip，恢复账号、对话、调用记录和加密配置。</p>
+        <button class="btn wide" id="restorePick">选择备份并恢复</button>
+        <input type="file" id="restoreFile" accept=".zip,application/zip" hidden>
+        <small>恢复前会自动生成 pre-restore 安全备份。</small>
+      </article>
+    </section>
+
+    <section class="retention-panel">
+      <div class="retention-head">
+        <div>
+          <span class="eyebrow">磁盘空间 · 自动治理</span>
+          <h2>生成文档保留策略</h2>
+          <p>聊天里生成的 Word、Excel、PPT、PDF 等文件到期后自动删除，用户端会提前显示到期时间和剩余天数。</p>
+        </div>
+        <span class="badge good" id="retentionBadge">生效中</span>
+      </div>
+      <div class="retention-stats">
+        <div><span>当前保留</span><b id="retentionFiles">—</b><small id="retentionSize">读取中…</small></div>
+        <div><span>3 天内到期</span><b id="retentionSoon">—</b><small>用户端会显示橙色提醒</small></div>
+        <div><span>过期待清理</span><b id="retentionPending">—</b><small>下一次检查会删除</small></div>
+        <div><span>已自动清理</span><b id="retentionCleaned">—</b><small>历史消息保留“已清理”状态</small></div>
+      </div>
+      <div class="retention-form">
+        <label for="retentionDays">保留天数
+          <input id="retentionDays" type="number" min="1" max="365" step="1" inputmode="numeric">
+        </label>
+        <button class="btn primary" type="button" id="saveRetentionBtn">保存周期并清理</button>
+        <button class="btn" type="button" id="runRetentionBtn">立即清理过期</button>
+      </div>
+      <div class="hint" id="retentionHint">保存新周期会按文件生成时间重算所有未清理文件的到期时间，并立即删除已经到期的文件。</div>
+    </section>
+
+    <section class="backup-status-panel">
+      <div class="status-line">
+        <b id="backupTitle">建议每周备份一次</b>
+        <span class="badge" id="backupBadge">就绪</span>
+      </div>
+      <div class="hint" id="backupDesc">搬机器、换服务器或升级前，先下载备份。恢复后需要重启工作台，管理员可能需重新登录。</div>
+      <div class="mono" id="backupMeta">正在读取备份记录…</div>
+      <div class="backup-notice" id="backupNotice" hidden>
+        <div class="notice-text" id="backupNoticeText"></div>
+        <div class="notice-actions">
+          <button class="btn small" id="openMigrationFolderBtn" hidden>打开文件夹</button>
+          <button class="btn small" id="downloadMigrationFileBtn" hidden>下载到浏览器</button>
+          <button class="btn small primary" id="confirmRestoreBtn" hidden>确认恢复</button>
+          <button class="btn small" id="cancelRestoreBtn" hidden>取消</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>最近备份</h2>
+        <div class="panel-tools">
+          <span class="hint">备份和迁移包各保留最近 10 份；都会出现在这里</span>
+          <button class="btn small" id="refreshBackups">刷新</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl backup-table">
+          <thead>
+            <tr><th>文件</th><th>类型</th><th>生成时间</th><th>大小</th><th>内容</th><th class="right">操作</th></tr>
+          </thead>
+          <tbody id="backupRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel migrate-guide">
+      <div class="panel-head"><h2>使用说明 · 迁移到新机</h2><span class="hint">给不熟悉命令行的使用者</span></div>
+      <ol class="migrate-steps">
+        <li><b>生成迁移包</b><span>点上面的“生成到默认文件夹”，zip 会保存在工作台的 <code>data/migrations</code>；也可以点“下载到浏览器”。</span></li>
+        <li><b>复制到新电脑</b><span>解压到普通目录，例如 <code>D:\LocalAI\workbench</code>，不要放 Program Files。</span></li>
+        <li><b>双击一键迁移</b><span>运行“一键迁移-双击我.bat”，首次会自动装依赖并启动。</span></li>
+        <li><b>检查模型目录</b><span>新机没有模型时，进「部署 / 模型」页复制模型或重新下载。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-database" hidden>
+    <section class="backup-hero db-hero">
+      <div class="backup-hero-text">
+        <span class="eyebrow">数据中枢 · 看得到也改得动</span>
+        <h1>数据库中心</h1>
+        <p>先看清当前工作台的数据：有哪些表、每一行是什么、哪里可以改。需要更大容量时，再把数据一键复制到自己的 MySQL / PostgreSQL，之后继续在这里浏览和管理。</p>
+      </div>
+      <div class="backup-hero-mark"><strong>SQL</strong><span>浏览 · 修改 · 外迁</span></div>
+    </section>
+
+    <section class="db-stat-grid" id="dbStatGrid"></section>
+
+    <section class="db-subtabs" aria-label="数据库功能">
+      <button class="db-subtab active" data-dbtab="browse">数据浏览</button>
+      <button class="db-subtab" data-dbtab="sql">SQL 控制台</button>
+      <button class="db-subtab" data-dbtab="connections">外部连接</button>
+      <button class="db-subtab" data-dbtab="migrate">一键迁移</button>
+    </section>
+
+    <div class="db-view" id="dbView-browse">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>表与数据</h2>
+          <div class="panel-tools">
+            <span class="hint">当前查看：</span>
+            <select class="db-select" id="dbConnSelect" aria-label="选择数据库连接"></select>
+            <button class="btn small" id="dbRefreshAll">刷新</button>
+          </div>
+        </div>
+
+        <div class="db-toolbar">
+          <div class="db-search-wrap">
+            <input id="dbRowSearch" placeholder="在当前表里搜索（输入关键词后按回车）">
+            <button class="btn small" id="dbRowSearchBtn">搜索</button>
+          </div>
+          <div class="db-toolbar-actions">
+            <button class="btn small primary" id="dbNewRow" disabled>新增一行</button>
+            <button class="btn small" id="dbExportCsv" disabled>导出本表 CSV</button>
+          </div>
+        </div>
+
+        <div class="db-browser">
+          <aside class="db-side">
+            <div class="db-side-head">
+              <div class="db-side-title"><b>表清单</b><span id="dbTableCount">0 张</span></div>
+              <button class="btn tiny" id="dbCreateTableBtn">新建表</button>
+            </div>
+            <input id="dbTableFilter" placeholder="过滤表名，例如 users">
+            <div class="db-table-list" id="dbTableList"></div>
+          </aside>
+          <div class="db-main">
+            <div class="db-main-head">
+              <div>
+                <h3 id="dbTableName">先选一张表</h3>
+                <span class="hint" id="dbTableMeta">左侧点表名，右侧显示数据。</span>
+              </div>
+              <div class="db-main-actions">
+                <button class="btn small" id="dbTableRenameBtn" hidden>重命名</button>
+                <button class="btn small" id="dbTableTruncateBtn" hidden>清空数据</button>
+                <button class="btn small danger" id="dbTableDropBtn" hidden>删除表</button>
+                <span class="badge off" id="dbPageBadge">—</span>
+              </div>
+            </div>
+            <div class="table-wrap db-table-wrap" id="dbTableWrap">
+              <table class="tbl db-grid">
+                <thead id="dbThead"></thead>
+                <tbody id="dbTbody">
+                  <tr><td class="db-empty">正在读取数据库…</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="db-pager">
+              <button class="btn small" id="dbPrevPage" disabled>上一页</button>
+              <span class="hint" id="dbPageInfo">—</span>
+              <button class="btn small" id="dbNextPage" disabled>下一页</button>
+            </div>
+            <details class="db-schema" id="dbSchemaDetails">
+              <summary>查看表结构、索引和外键</summary>
+              <div id="dbSchemaBody"><span class="hint">选中表后加载。</span></div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="db-grid-2">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>健康检查</h2>
+            <button class="btn small" id="dbHealthBtn">重新检查</button>
+          </div>
+          <div id="dbHealthBody" class="db-health"><span class="hint">正在检查…</span></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head"><h2>备份与导出</h2><span class="hint">建议改数据前先备份</span></div>
+          <div class="db-action-list">
+            <button class="btn" id="dbBackupBtn">下载数据库快照<small>当前工作台 SQLite 的一致性副本</small></button>
+            <button class="btn" id="dbExportMysql">导出 MySQL 脚本<small>建表 + 数据 + 索引，可直接导入 MySQL</small></button>
+            <button class="btn" id="dbExportPg">导出 PostgreSQL 脚本<small>建表 + 数据 + 索引，可直接导入 PostgreSQL</small></button>
+            <button class="btn" id="dbVacuumBtn">空间整理 VACUUM<small>回收删除数据后留下的空闲页，仅 SQLite</small></button>
+          </div>
+          <div class="hint" id="dbOpsHint" style="margin-top:10px">备份文件会下载到浏览器，不会覆盖现有数据。</div>
+        </article>
+      </section>
+
+      <section class="panel migrate-guide">
+        <div class="panel-head"><h2>使用说明 · 小白版</h2><span class="hint">先看数据，再动手改</span></div>
+        <ol class="migrate-steps">
+          <li><b>先选表</b><span>左边点一张表，右边就显示它的数据；看到“行数”和“字段类型”心里就有底了。</span></li>
+          <li><b>搜索和翻页</b><span>在输入框搜关键词，只会匹配文字字段；一次显示 30 行，用“上一页 / 下一页”看更多。</span></li>
+          <li><b>改数据</b><span>点行尾“编辑”改一行；“新增一行”填字段后保存；删除前会让你再确认一次。</span></li>
+          <li><b>不确定就先备份</b><span>点“下载数据库快照”，出问题还能回到备份页恢复。复杂改动用 SQL 控制台，默认只读。</span></li>
+          <li><b>建表与删表</b><span>“新建表”用图形界面加字段；表头的“重命名 / 清空数据 / 删除表”属于结构操作，清空和删除必须输入完整表名，系统会先自动快照。核心业务表已禁止改名和删除。</span></li>
+        </ol>
+      </section>
+    </div>
+
+    <div class="db-view" id="dbView-sql" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>SQL 控制台</h2>
+          <div class="panel-tools">
+            <select class="db-select" id="dbSqlConn" aria-label="SQL 使用的数据库"></select>
+            <select class="db-select" id="dbSqlLimit" aria-label="返回行数">
+              <option value="50">最多 50 行</option>
+              <option value="100" selected>最多 100 行</option>
+              <option value="200">最多 200 行</option>
+            </select>
+          </div>
+        </div>
+        <div class="db-sql-notice">
+          <b>默认只读。</b>只允许 SELECT / WITH / SHOW / EXPLAIN；确实要改数据时，打开下面的“允许写操作”，执行前还会再确认一次。
+        </div>
+        <textarea class="db-sql-editor" id="dbSqlText" spellcheck="false" placeholder="SELECT * FROM users LIMIT 10;"></textarea>
+        <div class="db-sql-bar">
+          <div class="db-samples">
+            <button class="btn small" data-dbsample="SELECT name, type FROM sqlite_master WHERE type IN ('table','view') ORDER BY name">看所有表</button>
+            <button class="btn small" data-dbsample="SELECT * FROM settings LIMIT 20">看设置表</button>
+            <button class="btn small" data-dbsample="SELECT id, username, created_at FROM users ORDER BY id DESC LIMIT 20">看最近用户</button>
+          </div>
+          <div class="db-sql-actions">
+            <label class="db-check"><input type="checkbox" id="dbAllowWrite"> 允许写操作</label>
+            <button class="btn primary" id="dbRunSql">执行 SQL</button>
+          </div>
+        </div>
+        <div class="db-sql-meta" id="dbSqlMeta">还没有执行。</div>
+        <div class="table-wrap db-table-wrap" id="dbSqlWrap" hidden>
+          <table class="tbl db-grid"><thead id="dbSqlThead"></thead><tbody id="dbSqlTbody"></tbody></table>
+        </div>
+        <div class="db-sql-error" id="dbSqlError" hidden></div>
+      </section>
+    </div>
+
+    <div class="db-view" id="dbView-connections" hidden>
+      <section class="db-grid-2">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>已配置的连接</h2>
+            <div class="panel-tools">
+              <span class="hint">密码加密保存，不回显</span>
+              <button class="btn small" id="dbConnRefresh">刷新</button>
+            </div>
+          </div>
+          <div id="dbConnList" class="db-conn-list"><span class="hint">正在加载…</span></div>
+        </article>
+
+        <article class="panel db-conn-form-panel">
+          <div class="panel-head">
+            <h2 id="dbFormTitle">新增外部数据库</h2>
+            <button class="btn small" id="dbConnReset">清空表单</button>
+          </div>
+          <div class="db-url-box">
+            <label class="db-label">直接粘贴连接串（可选）</label>
+            <div class="db-url-row">
+              <input id="dbConnUrl" placeholder="mysql://用户名:密码@127.0.0.1:3306/数据库名">
+              <button class="btn small" id="dbParseUrl">解析并填入</button>
+            </div>
+            <span class="hint">支持 mysql://、mariadb://、postgresql://、sqlite:///；密码里有特殊字符也能识别。</span>
+          </div>
+          <form id="dbConnForm" class="db-form">
+            <label class="db-label">数据库类型
+              <select id="dbConnEngine">
+                <option value="mysql">MySQL / MariaDB</option>
+                <option value="postgres">PostgreSQL</option>
+                <option value="sqlite">SQLite 文件</option>
+              </select>
+              <span class="hint" id="dbEngineHint">本机或服务器上的 MySQL，需要账号有建库/建表权限。</span>
+            </label>
+            <label class="db-label">显示名称
+              <input id="dbConnName" placeholder="例如：我的云服务器 MySQL">
+            </label>
+            <div class="db-form-grid" id="dbNetworkFields">
+              <label class="db-label">主机<input id="dbConnHost" placeholder="127.0.0.1 或数据库域名"></label>
+              <label class="db-label">端口<input id="dbConnPort" type="number" placeholder="3306"></label>
+              <label class="db-label">数据库名<input id="dbConnDatabase" placeholder="例如 workbench"></label>
+              <label class="db-label">用户名<input id="dbConnUser" placeholder="root"></label>
+              <label class="db-label">密码<input id="dbConnPassword" type="password" autocomplete="new-password" placeholder="编辑时留空表示不修改"></label>
+            </div>
+            <label class="db-label db-sqlite-field" id="dbSqliteField" hidden>SQLite 文件路径
+              <input id="dbConnPath" placeholder="例如 D:\data\my.db">
+              <span class="hint">文件不存在也可以先保存，第一次迁移或写入时自动创建。</span>
+            </label>
+            <div class="db-form-row" id="dbSslRow">
+              <label class="db-check"><input type="checkbox" id="dbConnSsl"> 使用 SSL</label>
+              <span class="hint">远程数据库一般建议开启；如果服务器不支持会连接失败。</span>
+            </div>
+            <label class="db-label">备注（可选）<input id="dbConnNote" placeholder="例如：公司内网测试库"></label>
+            <div class="db-form-actions">
+              <button class="btn" type="button" id="dbConnTestNew">先测试连接</button>
+              <button class="btn primary" type="submit" id="dbConnSave">保存连接</button>
+            </div>
+          </form>
+          <div class="db-form-status" id="dbConnStatus"></div>
+          <div class="db-sql-notice" style="margin-top:12px">
+            保存后，在“数据浏览”的右上角选中它，就能像看工作台数据库一样浏览、搜索、改数据。外部库密码使用本机密钥加密，只留在本机。
+          </div>
+        </article>
+      </section>
+    </div>
+
+    <div class="db-view" id="dbView-migrate" hidden>
+      <section class="panel db-migrate-panel">
+        <div class="panel-head">
+          <h2>把当前工作台数据复制到外部数据库</h2>
+          <span class="badge warn">不会切换主库</span>
+        </div>
+        <div class="db-sql-notice">
+          <b>先把边界说清楚：</b>这里做的是“完整复制一份到目标库”。复制完成后，工作台仍然使用本地 SQLite 作为主库，避免外部库断网时整个系统打不开；目标库里的数据可以在“数据浏览”里继续管理。
+        </div>
+        <div class="db-migrate-form">
+          <label class="db-label">迁移到
+            <select id="dbMigrateTarget" class="db-select"></select>
+          </label>
+          <div class="db-migrate-checks">
+            <label class="db-check"><input type="checkbox" id="dbMigrateCreate" checked> 目标库/数据库不存在时自动创建</label>
+            <label class="db-check"><input type="checkbox" id="dbMigrateOverwrite"> 覆盖目标库里的同名表（危险）</label>
+          </div>
+          <div class="db-form-actions">
+            <button class="btn" id="dbPreflight">先检查目标库</button>
+            <button class="btn primary big" id="dbStartMigrate">开始一键迁移</button>
+          </div>
+        </div>
+        <div class="db-migrate-progress" id="dbMigrateProgress" hidden>
+          <div class="bar"><i id="dbMigrateBar"></i></div>
+          <div class="progress-text" id="dbMigrateText">准备中…</div>
+          <div class="db-migrate-log" id="dbMigrateLog"></div>
+        </div>
+        <div class="db-preflight-result" id="dbPreflightResult"></div>
+        <div class="table-wrap db-table-wrap" id="dbMigrateVerifiedWrap" hidden>
+          <table class="tbl db-grid">
+            <thead><tr><th>表</th><th>源库行数</th><th>目标库行数</th><th>结果</th></tr></thead>
+            <tbody id="dbMigrateVerified"></tbody>
+          </table>
+        </div>
+        <div class="db-form-status" id="dbMigrateStatus"></div>
+        <div class="db-migrate-actions">
+          <button class="btn small" id="dbMigrateBrowse" hidden>去浏览迁移后的库</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>最近迁移记录</h2><span class="hint">只记录成功发起的迁移结果</span></div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th>时间</th><th>目标</th><th>类型</th><th>表</th><th>行</th><th>结果</th><th>提醒</th></tr></thead>
+            <tbody id="dbHistoryRows"><tr><td class="db-empty">还没有迁移记录。</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div class="db-modal" id="dbTableActionModal" hidden>
+      <div class="db-modal-card db-modal-small">
+        <div class="db-modal-head">
+          <div>
+            <h2 id="dbTableActionTitle">表操作</h2>
+            <span class="hint" id="dbTableActionSub"></span>
+          </div>
+          <button class="btn small" id="dbTableActionClose">关闭</button>
+        </div>
+        <div class="db-modal-body db-modal-single">
+          <p class="hint" id="dbTableActionDesc"></p>
+          <label class="db-label" id="dbTableActionInputWrap">输入表名确认
+            <input id="dbTableActionInput" placeholder="">
+          </label>
+        </div>
+        <div class="db-modal-foot">
+          <div class="db-form-status" id="dbTableActionStatus"></div>
+          <div class="db-modal-right">
+            <button class="btn" id="dbTableActionCancel">取消</button>
+            <button class="btn primary" id="dbTableActionConfirm">确认</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="db-modal" id="dbCreateTableModal" hidden>
+      <div class="db-modal-card">
+        <div class="db-modal-head">
+          <div>
+            <h2>新建数据表</h2>
+            <span class="hint">给表起英文名，再添加字段。主键建议保留默认的整数自增 id。</span>
+          </div>
+          <button class="btn small" id="dbCreateTableClose">关闭</button>
+        </div>
+        <div class="db-modal-body db-modal-single">
+          <label class="db-label">表名
+            <input id="dbNewTableName" placeholder="例如：customer_notes，只能用字母、数字、下划线">
+          </label>
+          <div class="db-newcols-head">
+            <b>字段</b>
+            <span class="hint">主键只能选一个；勾选“自增”时类型必须是整数。</span>
+            <button class="btn tiny" id="dbAddColumnBtn">+ 添加字段</button>
+          </div>
+          <div class="db-newcols" id="dbNewColumns"></div>
+        </div>
+        <div class="db-modal-foot">
+          <div class="db-form-status" id="dbCreateTableStatus"></div>
+          <div class="db-modal-right">
+            <button class="btn" id="dbCreateTableCancel">取消</button>
+            <button class="btn primary" id="dbCreateTableSubmit">创建表</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="db-modal" id="dbRowModal" hidden>
+      <div class="db-modal-card">
+        <div class="db-modal-head">
+          <div>
+            <h2 id="dbModalTitle">编辑一行</h2>
+            <span class="hint" id="dbModalSub"></span>
+          </div>
+          <button class="btn small" id="dbModalClose">关闭</button>
+        </div>
+        <div class="db-modal-body" id="dbModalBody"></div>
+        <div class="db-modal-foot">
+          <button class="btn danger" id="dbModalDelete" hidden>删除这一行</button>
+          <div class="db-modal-right">
+            <button class="btn" id="dbModalCancel">取消</button>
+            <button class="btn primary" id="dbModalSave">保存</button>
+          </div>
+        </div>
+        <div class="db-form-status" id="dbModalStatus"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="pane-share" hidden>
+    <section class="backup-hero share-hero">
+      <div class="backup-hero-text">
+        <span class="eyebrow">干净程序包 · 不带数据</span>
+        <h1>网站分享，对方装好就是一台新机</h1>
+        <p>只打包工作台程序和启动脚本。数据库、账号、密钥、供应商配置和模型都不会带过去；对方首次启动后自己初始化管理员、建用户、配模型。</p>
+      </div>
+      <div class="backup-hero-mark"><strong>0</strong><span>数据随包带走</span></div>
+    </section>
+
+    <section class="backup-grid">
+      <article class="backup-card accent">
+        <div class="backup-card-top"><span class="backup-icon">01</span><span class="badge good">干净</span></div>
+        <h2>生成分享包</h2>
+        <p>把工作台程序、启动脚本和说明打成一个 zip，适合发给朋友或另一台电脑。</p>
+        <button class="btn primary wide" id="shareBtn">生成到默认文件夹</button>
+        <div class="migration-dir-line">默认目录：<span class="mono" id="shareDirHint">读取中…</span></div>
+        <small>不含数据库、账号、密钥、配置和模型。</small>
+      </article>
+
+      <article class="backup-card">
+        <div class="backup-card-top"><span class="backup-icon">02</span><span class="badge">内容</span></div>
+        <h2>包里只有程序</h2>
+        <ul class="share-list">
+          <li>backend、frontend 程序</li>
+          <li>启动 / 停止 / 重启脚本</li>
+          <li>依赖清单和使用说明</li>
+          <li>一键开始-双击我.bat</li>
+        </ul>
+        <small>安装后没有历史账号、对话或调用记录。</small>
+      </article>
+
+      <article class="backup-card">
+        <div class="backup-card-top"><span class="backup-icon">03</span><span class="badge">新机</span></div>
+        <h2>对方怎么用</h2>
+        <ol class="share-list">
+          <li>解压到普通目录</li>
+          <li>双击「一键开始-双击我.bat」</li>
+          <li>首次启动自动装依赖</li>
+          <li>初始化管理员，重建自己的数据</li>
+        </ol>
+        <small>需要 Python 3.10+；模型要自己下载或复制。</small>
+      </article>
+    </section>
+
+    <section class="backup-status-panel">
+      <div class="status-line">
+        <b id="shareTitle">生成分享包，发给需要的人</b>
+        <span class="badge" id="shareBadge">就绪</span>
+      </div>
+      <div class="hint" id="shareDesc">分享包不包含你的任何数据，对方安装后是一台全新的工作台。</div>
+      <div class="mono" id="shareMeta">正在读取分享记录…</div>
+      <div class="backup-notice" id="shareNotice" hidden>
+        <div class="notice-text" id="shareNoticeText"></div>
+        <div class="notice-actions">
+          <button class="btn small" id="openShareFolderBtn" hidden>打开文件夹</button>
+          <button class="btn small" id="downloadShareFileBtn" hidden>下载到浏览器</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>最近分享包</h2>
+        <div class="panel-tools">
+          <span class="hint">默认保留最近 10 份</span>
+          <button class="btn small" id="refreshShares">刷新</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl backup-table">
+          <thead>
+            <tr><th>文件</th><th>类型</th><th>生成时间</th><th>大小</th><th>内容</th><th class="right">操作</th></tr>
+          </thead>
+          <tbody id="shareRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel migrate-guide">
+      <div class="panel-head"><h2>使用说明 · 分享给别人</h2><span class="hint">对方不需要你的任何数据</span></div>
+      <ol class="migrate-steps">
+        <li><b>生成分享包</b><span>点上面的“生成到默认文件夹”，zip 会保存在 <code>data/shares</code>。</span></li>
+        <li><b>发给对方</b><span>复制 zip 或点“下载到浏览器”，通过网盘、U 盘或聊天工具传过去。</span></li>
+        <li><b>对方解压启动</b><span>解压到普通目录，双击“一键开始-双击我.bat”，首次自动装依赖。</span></li>
+        <li><b>重建自己的数据</b><span>初始化管理员后，自己建用户、接供应商、生成 API Key、下载模型。</span></li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-agents" hidden>
+    <section class="backup-hero page-hero">
+      <div class="backup-hero-text">
+        <span class="eyebrow">人格 · 模型 · 可见范围</span>
+        <h1>把常用角色做成智能体</h1>
+        <p>智能体会把自己的系统提示词和推荐模型带进对话。公开智能体所有成员可用，小队智能体只对小队成员可见。</p>
+        <div class="hero-tags"><span>系统提示词</span><span>推荐模型</span><span>公开 / 小队 / 私有</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>AI</strong><span>角色目录</span></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>智能体列表</h2><button class="btn small" id="refreshAgents">刷新</button></div>
+      <div class="table-wrap">
+        <table class="tbl"><thead><tr><th>名称</th><th>描述</th><th>模型</th><th>可见</th><th>状态</th><th class="right">操作</th></tr></thead>
+        <tbody id="agentRows"></tbody></table>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2 id="agentEditorTitle">新建智能体</h2><span class="hint">名称唯一，提示词最多 4000 字</span></div>
+      <div class="form-grid">
+        <input id="agName" placeholder="名称，如 代码审查员">
+        <input id="agAvatar" placeholder="头像 emoji，如 🤖" maxlength="8">
+        <input id="agModel" placeholder="推荐模型，留空则沿用用户当前模型">
+        <select id="agVisibility"><option value="public">公开</option><option value="squad">仅小队</option><option value="private">私有</option></select>
+        <input id="agSort" type="number" placeholder="排序，越小越靠前" value="0">
+        <label class="checkline"><input type="checkbox" id="agEnabled" checked> 启用</label>
+        <input id="agDesc" placeholder="一句话描述" maxlength="200">
+        <textarea id="agPrompt" rows="5" placeholder="系统提示词，例如：你是严谨的代码审查员，先指出风险，再给修改建议。"></textarea>
+        <button class="btn primary" id="saveAgent">保存智能体</button>
+        <button class="btn ghost" id="resetAgent">新建</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-partners" hidden>
+    <section class="backup-hero page-hero">
+      <div class="backup-hero-text">
+        <span class="eyebrow">组织成员目录</span>
+        <h1>谁在同一个工作台里</h1>
+        <p>伙伴页汇总账号、用户组、管理员角色、最近登录和所属小队。成员的新增、停用仍在「用户」页完成。</p>
+        <div class="hero-tags"><span>账号目录</span><span>组织归属</span><span>小队关系</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>人</strong><span>成员目录</span></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>成员目录</h2><span class="hint">只读视图，账号管理请到「用户」页</span></div>
+      <div class="filters"><input id="partnerSearch" placeholder="搜索账号、用户组或管理员角色"><button class="btn small" id="refreshPartners">查询</button></div>
+      <div class="table-wrap">
+        <table class="tbl"><thead><tr><th>账号</th><th>用户组</th><th>管理员角色</th><th>所属小队</th><th>最近登录</th><th>状态</th></tr></thead>
+        <tbody id="partnerRows"></tbody></table>
+      </div>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-squads" hidden>
+    <section class="backup-hero page-hero">
+      <div class="backup-hero-text">
+        <span class="eyebrow">小队 · 共享会话</span>
+        <h1>让一组人共用智能体和对话</h1>
+        <p>小队把成员、智能体和共享对话放在一起。成员只能看到共享到本小队的会话，不会看到别人的全部对话。</p>
+        <div class="hero-tags"><span>成员</span><span>小队智能体</span><span>共享会话</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>组</strong><span>团队空间</span></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>小队列表</h2><button class="btn small" id="refreshSquads">刷新</button></div>
+      <div class="table-wrap">
+        <table class="tbl"><thead><tr><th>名称</th><th>所有者</th><th>成员</th><th>智能体</th><th>共享对话</th><th class="right">操作</th></tr></thead>
+        <tbody id="squadRows"></tbody></table>
+      </div>
+      <div class="form-grid">
+        <input id="sqName" placeholder="小队名称">
+        <input id="sqDesc" placeholder="一句话说明这个小队做什么">
+        <button class="btn primary" id="createSquad">创建小队</button>
+      </div>
+    </section>
+    <section class="panel" id="squadDetail" hidden>
+      <div class="panel-head"><h2 id="sdTitle">小队详情</h2><button class="btn small" id="closeSquad">关闭</button></div>
+      <div class="hint" id="sdMeta"></div>
+      <h3>成员</h3>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>账号</th><th>用户组</th><th>角色</th><th class="right">操作</th></tr></thead><tbody id="sdMemberRows"></tbody></table></div>
+      <div class="form-grid">
+        <input id="sdMemberName" placeholder="输入用户名添加成员">
+        <select id="sdMemberRole"><option value="member">成员</option><option value="owner">共同所有者</option></select>
+        <button class="btn" id="addSquadMember">加入小队</button>
+      </div>
+      <h3>智能体</h3>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>名称</th><th>可见范围</th><th class="right">操作</th></tr></thead><tbody id="sdAgentRows"></tbody></table></div>
+      <div class="form-grid">
+        <input id="sdAgentId" type="number" placeholder="智能体 ID">
+        <button class="btn" id="addSquadAgent">绑定智能体</button>
+      </div>
+      <h3>共享对话</h3>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>标题</th><th>共享人</th><th>时间</th></tr></thead><tbody id="sdConvRows"></tbody></table></div>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-announcements" hidden>
+    <section class="backup-hero page-hero">
+      <div class="backup-hero-text">
+        <span class="eyebrow">全员公告</span>
+        <h1>把重要的事放在每个人眼前</h1>
+        <p>启用的公告会显示在用户端顶部；置顶公告优先展示。适用维护通知、使用规范和安全提醒。</p>
+        <div class="hero-tags"><span>级别</span><span>置顶</span><span>启用 / 停用</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>告</strong><span>全员通知</span></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>公告列表</h2><button class="btn small" id="refreshAnnouncements">刷新</button></div>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>标题</th><th>级别</th><th>置顶</th><th>状态</th><th>创建人</th><th>时间</th><th class="right">操作</th></tr></thead><tbody id="announcementRows"></tbody></table></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>发布公告</h2><span class="hint">标题 100 字、正文 4000 字以内</span></div>
+      <div class="form-grid">
+        <input id="anTitle" placeholder="公告标题">
+        <select id="anLevel"><option value="info">通知</option><option value="warning">提醒</option><option value="important">重要</option></select>
+        <label class="checkline"><input type="checkbox" id="anPinned"> 置顶</label>
+        <label class="checkline"><input type="checkbox" id="anEnabled" checked> 立即启用</label>
+        <textarea id="anContent" rows="4" placeholder="公告正文"></textarea>
+        <button class="btn primary" id="createAnnouncement">发布公告</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-tickets" hidden>
+    <section class="backup-hero page-hero">
+      <div class="backup-hero-text">
+        <span class="eyebrow">服务台 · 工单闭环</span>
+        <h1>接住问题，跟进到关闭</h1>
+        <p>用户从用户端提交问题，管理员在这里分派、回复和改状态。每个工单保留完整对话记录。</p>
+        <div class="hero-tags"><span>待处理</span><span>处理中</span><span>已解决</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>帮</strong><span>服务台</span></div>
+    </section>
+    <section class="cards" id="ticketStats"></section>
+    <section class="panel">
+      <div class="panel-head"><h2>工单列表</h2><span class="hint" id="ticketHint">按状态和优先级排序</span></div>
+      <div class="filters">
+        <select id="tkStatus"><option value="">全部状态</option><option value="open">待处理</option><option value="processing">处理中</option><option value="resolved">已解决</option><option value="closed">已关闭</option></select>
+        <select id="tkPriority"><option value="">全部优先级</option><option value="high">高</option><option value="normal">普通</option><option value="low">低</option></select>
+        <input id="tkSearch" placeholder="搜索标题、内容或提交人">
+        <button class="btn small" id="refreshTickets">查询</button>
+      </div>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>#</th><th>标题</th><th>提交人</th><th>分类</th><th>优先级</th><th>状态</th><th>处理人</th><th>更新时间</th></tr></thead><tbody id="ticketRows"></tbody></table></div>
+    </section>
+    <section class="panel" id="ticketDetail" hidden>
+      <div class="panel-head"><h2 id="tdTitle">工单</h2><button class="btn small" id="closeTicket">关闭</button></div>
+      <div class="hint" id="tdMeta"></div>
+      <div class="detail" id="tdMessages"></div>
+      <div class="form-grid">
+        <select id="tdStatus"><option value="open">待处理</option><option value="processing">处理中</option><option value="resolved">已解决</option><option value="closed">已关闭</option></select>
+        <input id="tdAssignee" type="number" placeholder="处理人用户 ID（可空）">
+        <textarea id="tdReply" rows="3" placeholder="回复用户…"></textarea>
+        <button class="btn primary" id="saveTicket">保存状态并回复</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="tab-pane" id="pane-conv-shares" hidden>
+    <section class="backup-hero page-hero">
+      <div class="backup-hero-text">
+        <span class="eyebrow">对话快照 · 只读分享</span>
+        <h1>分享一次对话，不暴露整个账号</h1>
+        <p>分享链接保存的是分享时的消息快照，后续继续聊天不会改变已分享内容。可以设置公开或仅小队可见，并随时撤销。</p>
+        <div class="hero-tags"><span>快照</span><span>公开 / 小队</span><span>有效期</span></div>
+      </div>
+      <div class="backup-hero-mark text"><strong>链</strong><span>只读分享</span></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>对话分享</h2><button class="btn small" id="refreshConvShares">刷新</button></div>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>标题</th><th>分享人</th><th>范围</th><th>消息</th><th>浏览</th><th>有效期</th><th>状态</th><th class="right">操作</th></tr></thead><tbody id="convShareRows"></tbody></table></div>
+    </section>
+  </div>
+
+</main>
+</div>
+
+<div class="guide-modal" id="guideModal" hidden>
+  <div class="guide-backdrop" data-guide-close></div>
+  <article class="guide-dialog" role="dialog" aria-modal="true" aria-labelledby="guideModalTitle">
+    <header class="guide-dialog-head">
+      <div>
+        <span class="guide-kicker">页面使用说明</span>
+        <h2 id="guideModalTitle">页面说明</h2>
+      </div>
+      <button class="iconbtn guide-close" id="guideModalClose" type="button" title="关闭说明">×</button>
+    </header>
+    <div class="guide-dialog-body" id="guideModalBody"></div>
+    <footer class="guide-dialog-foot">
+      <span>说明只讲本页功能与操作，不会改动任何配置</span>
+      <button class="btn small primary" id="guideModalOk" type="button">知道了</button>
+    </footer>
+  </article>
+</div>
+
+<div class="login-wrap" id="loginWrap" hidden>
+  <div class="login-card">
+    <h2 id="loginTitle">登录控制台</h2>
+    <p class="desc" id="loginDesc">使用工作台管理员账号</p>
+    <form id="loginForm">
+      <label>用户名<input id="u" value="admin" autocomplete="username"></label>
+      <label>密码<input id="p" type="password" autocomplete="current-password"></label>
+      <label id="confirmRow" hidden>确认密码<input id="p2" type="password" autocomplete="new-password"></label>
+      <div class="alert" id="alert"></div>
+      <button class="btn primary wide" id="loginBtn" type="submit">进入</button>
+    </form>
+  </div>
+</div>
+
+<script src="console.js?v=0.8.1.9"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

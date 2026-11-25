@@ -1,0 +1,253 @@
+"""本地部署平台：llama.cpp 由工作台管理，其余平台按地址探测是否已启动。
+
+这里只做“平台注册 + 状态探测 + 配置保存”，不替用户安装第三方平台。
+"""
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+
+import httpx
+
+from . import hardware, llama
+
+PLATFORMS: dict[str, dict[str, Any]] = {
+    "llama.cpp": {
+        "name": "llama.cpp",
+        "kind": "managed",
+        "default_base": "",
+        "probe": "",
+        "installable": True,
+        "multimodal": "",
+        "model_types": ["文字 / 对话", "代码 / 编程"],
+        "homepage": "https://github.com/ggml-org/llama.cpp",
+        "note": "工作台内置，可一键安装、启动和切换 GGUF 模型；视觉模型需要 mmproj，当前未接入",
+    },
+    "ollama": {
+        "name": "Ollama",
+        "kind": "external",
+        "default_base": "http://127.0.0.1:11434",
+        "probe": "/api/tags",
+        "installable": True,
+        "multimodal": "多模态（部分）",
+        "model_types": ["文字 / 对话", "代码 / 编程", "多模态 / 视觉（部分）", "向量 / 检索（部分）"],
+        "homepage": "https://ollama.com/download",
+        "note": "支持一键安装/启动；本机已安装会自动跳过下载。适合用 ollama pull 管理模型",
+    },
+    "vllm": {
+        "name": "vLLM",
+        "kind": "external",
+        "default_base": "http://127.0.0.1:8000",
+        "probe": "/v1/models",
+        "installable": True,
+        "multimodal": "多模态",
+        "model_types": ["文字 / 对话", "代码 / 编程", "多模态 / 视觉", "向量 / 检索（部分）"],
+        "homepage": "https://docs.vllm.ai/",
+        "note": "GPU 高吞吐推理；Linux + NVIDIA 可一键 pip 安装，Windows 请用 WSL2",
+    },
+    "lmstudio": {
+        "name": "LM Studio",
+        "kind": "external",
+        "default_base": "http://127.0.0.1:1234",
+        "probe": "/v1/models",
+        "installable": True,
+        "multimodal": "多模态（部分）",
+        "model_types": ["文字 / 对话", "代码 / 编程", "多模态 / 视觉（部分）"],
+        "homepage": "https://lmstudio.ai/",
+        "note": "Windows/macOS 可一键安装；装好后要在 Developer 页开启 Local Server",
+    },
+    "custom": {
+        "name": "自定义 OpenAI 兼容",
+        "kind": "external",
+        "default_base": "http://127.0.0.1:8001",
+        "probe": "/v1/models",
+        "installable": False,
+        "multimodal": "多模态看服务",
+        "model_types": ["取决于所接服务", "通常文字 / 代码", "多模态看接口"],
+        "homepage": "",
+        "note": "任意兼容 /v1/models 与 /v1/chat/completions 的服务；工作台不会安装它，需先在外部启动",
+    },
+}
+
+DEFAULT_SELECTED = ["llama.cpp"]
+
+
+def normalize_selected(value: Any) -> list[str]:
+    """只接受已知平台；空选择回到默认 llama.cpp。"""
+    if not isinstance(value, list):
+        return list(DEFAULT_SELECTED)
+    keys = [str(v) for v in value if str(v) in PLATFORMS]
+    return keys or list(DEFAULT_SELECTED)
+
+
+def endpoints(cfg: dict) -> dict[str, str]:
+    raw = cfg.get("platform_endpoints")
+    raw = raw if isinstance(raw, dict) else {}
+    out: dict[str, str] = {}
+    for key, meta in PLATFORMS.items():
+        if key == "llama.cpp":
+            continue
+        value = str(raw.get(key) or "").strip()
+        out[key] = value or str(meta["default_base"])
+    return out
+
+
+def clean_endpoints(value: Any, cfg: dict) -> dict[str, str]:
+    """保存外部平台地址；没写协议时自动补 http://。"""
+    current = endpoints(cfg)
+    if not isinstance(value, dict):
+        return current
+    out = dict(current)
+    for key in PLATFORMS:
+        if key == "llama.cpp" or key not in value:
+            continue
+        url = str(value.get(key) or "").strip()[:300]
+        if not url:
+            out[key] = str(PLATFORMS[key]["default_base"])
+        elif not url.startswith(("http://", "https://")):
+            url = "http://" + url
+        out[key] = url.rstrip("/")
+    return out
+
+
+async def _probe_external(base: str, path: str) -> tuple[bool, list[str], str]:
+    if not base:
+        return False, [], "没有填写服务地址"
+    url = base.rstrip("/") + path
+    try:
+        async with httpx.AsyncClient(timeout=2.2) as client:
+            resp = await client.get(url)
+        if resp.status_code != 200:
+            return False, [], f"HTTP {resp.status_code}"
+        payload = resp.json()
+        rows = payload.get("models") if isinstance(payload, dict) else None
+        if rows is None and isinstance(payload, dict):
+            rows = payload.get("data")
+        names: list[str] = []
+        for row in rows or []:
+            if isinstance(row, dict):
+                names.append(str(row.get("name") or row.get("id") or ""))
+            elif isinstance(row, str):
+                names.append(row)
+        names = [n for n in names if n]
+        return True, names[:8], f"已连接 · {len(names)} 个模型"
+    except Exception as exc:
+        return False, [], f"未连接：{type(exc).__name__}"
+
+
+def suitability(key: str, prof: dict) -> dict:
+    """按本机 CPU/内存/显存/磁盘给平台一个是否适合安装的标签。"""
+    ram = float(prof.get("ram_total_gb") or 0)
+    disks = prof.get("disks") or []
+    disk = float(disks[0].get("free_gb") or 0) if disks else 0
+    gpus = prof.get("gpus") or []
+    vram = max((float(g.get("vram_mb") or 0) / 1024 for g in gpus), default=0)
+    gpu_name = str(gpus[0].get("name") or "") if gpus else ""
+
+    if key == "llama.cpp":
+        if ram < 4:
+            return {"level": "bad", "label": "不适合", "text": f"内存只有 {ram:.0f}GB，CPU 推理也很吃力"}
+        if ram < 8:
+            return {"level": "warn", "label": "勉强", "text": f"内存 {ram:.0f}GB，只建议跑 1.5B/2B 小模型"}
+        if disk and disk < 5:
+            return {"level": "warn", "label": "勉强", "text": f"内存 {ram:.0f}GB 够用，但模型盘只剩 {disk:.0f}GB"}
+        if vram >= 6:
+            gpu = f"，{gpu_name} 约 {vram:.0f}GB 显存可尝试 GPU 加速"
+        elif vram:
+            gpu = f"，{gpu_name} 显存仅 {vram:.0f}GB，建议 CPU 推理"
+        else:
+            gpu = "，无独显时走 CPU"
+        return {"level": "good", "label": "适合", "text": f"内存 {ram:.0f}GB{gpu}"}
+
+    if key == "ollama":
+        if ram < 4 or (disk and disk < 5):
+            return {"level": "bad", "label": "不适合", "text": f"内存 {ram:.0f}GB、模型盘 {disk:.0f}GB，容量偏小"}
+        if ram < 8:
+            return {"level": "warn", "label": "勉强", "text": f"内存 {ram:.0f}GB，建议只拉小参数模型"}
+        return {"level": "good", "label": "适合", "text": f"内存 {ram:.0f}GB，常驻服务空间充足"}
+
+    if key == "vllm":
+        if not gpus:
+            return {"level": "bad", "label": "不适合", "text": "vLLM 需要 NVIDIA GPU，本机未检测到 NVIDIA 显卡"}
+        if vram < 6:
+            return {"level": "bad", "label": "不适合",
+                    "text": f"检测到 {gpu_name} 约 {vram:.0f}GB 显存，低于 6GB 最低要求"}
+        if vram < 8:
+            return {"level": "warn", "label": "勉强", "text": f"显存约 {vram:.0f}GB，只能跑很小的模型"}
+        if ram < 16:
+            return {"level": "warn", "label": "勉强", "text": f"显存 {vram:.0f}GB 可用，但系统内存只有 {ram:.0f}GB"}
+        return {"level": "good", "label": "适合", "text": f"{gpu_name} 约 {vram:.0f}GB 显存，可跑 7B 级模型"}
+
+    if key == "lmstudio":
+        os_name = str(prof.get("os") or "").lower()
+        if not any(x in os_name for x in ("windows", "mac", "darwin")):
+            return {"level": "unknown", "label": "需确认", "text": "LM Studio 主要面向 Windows/macOS，当前系统请先确认支持"}
+        if ram < 4:
+            return {"level": "bad", "label": "不适合", "text": f"内存只有 {ram:.0f}GB，桌面端运行空间不足"}
+        if ram < 8:
+            return {"level": "warn", "label": "勉强", "text": f"内存 {ram:.0f}GB，建议只加载小模型"}
+        return {"level": "good", "label": "适合", "text": f"桌面端可用，内存 {ram:.0f}GB"}
+
+    return {"level": "unknown", "label": "需确认",
+            "text": "取决于你接入的服务本身，工作台不做硬件判断"}
+
+
+async def status(cfg: dict, selected: list[str] | None = None,
+                 llama_status: dict | None = None, probe_all: bool = False) -> list[dict]:
+    """探测平台；probe_all=True 时连未勾选的平台也扫描，用于“更新”发现新平台。"""
+    selected = normalize_selected(selected if selected is not None else cfg.get("deploy_platforms"))
+    srv = llama_status or await llama.server.status()
+    prof = hardware.profile()
+    eps = endpoints(cfg)
+    tasks = {}
+    for key, meta in PLATFORMS.items():
+        if key != "llama.cpp" and (probe_all or key in selected):
+            tasks[key] = _probe_external(eps[key], str(meta["probe"]))
+    results = await asyncio.gather(*tasks.values()) if tasks else []
+    probed = dict(zip(tasks.keys(), results))
+
+    items: list[dict] = []
+    for key, meta in PLATFORMS.items():
+        item = {
+            "key": key,
+            "name": meta["name"],
+            "kind": meta["kind"],
+            "note": meta["note"],
+            "homepage": meta["homepage"],
+            "installable": bool(meta["installable"]),
+            "multimodal": str(meta.get("multimodal") or ""),
+            "selected": key in selected,
+            "editable": key != "llama.cpp",
+            "base_url": eps.get(key, ""),
+            "model_types": list(meta.get("model_types") or []),
+            "suitability": suitability(key, prof),
+            "healthy": False,
+            "running": False,
+            "models": [],
+            "detail": "",
+        }
+        if key == "llama.cpp":
+            installed = bool(hardware.llama_info()["installed"])
+            item["installed"] = installed
+            item["healthy"] = bool(srv.get("healthy"))
+            item["running"] = bool(srv.get("running"))
+            item["models"] = list(srv.get("served") or [])
+            if srv.get("error"):
+                item["detail"] = str(srv["error"])
+            elif srv.get("healthy"):
+                item["detail"] = f"运行中 · 端口 {srv.get('port', 8080)}"
+            elif installed:
+                item["detail"] = "已安装，尚未启动"
+            else:
+                item["detail"] = "未安装，可一键安装"
+        else:
+            healthy, models, detail = probed.get(key, (False, [], "未选中，不检测"))
+            item["healthy"] = healthy
+            item["running"] = healthy
+            item["models"] = models
+            if healthy and key not in selected:
+                detail = f"{detail}（未勾选）"
+            item["detail"] = detail
+            item["installed"] = None
+        items.append(item)
+    return items

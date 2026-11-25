@@ -1,0 +1,27 @@
+[Unit]
+Description=Local AI Workbench
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=__APP_DIR__
+Environment=PYTHONUTF8=1
+Environment=WORKBENCH_DATA=__APP_DIR__/data
+ExecStart=__APP_DIR__/.venv/bin/python __APP_DIR__/run.py --host 0.0.0.0 --port 9100
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGINT
+
+# 基础加固：只允许写数据目录和临时目录
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=__APP_DIR__/data __APP_DIR__/models __APP_DIR__/llama
+
+[Install]
+WantedBy=multi-user.target
