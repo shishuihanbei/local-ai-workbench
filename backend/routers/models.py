@@ -13,7 +13,8 @@ from ..config import load_config, model_file_path, save_config
 from ..db import (MODEL_CATALOG_EXTRAS, MODEL_SEED, audit, execute, executemany,
                   fetch_all, fetch_one, model_repo, model_url)
 from ..security import admin_user, current_user
-from ..services import access, engine_install, engines, hardware, hf_models, llama
+from ..services import (access, engine_install, engines, hardware, hf_models, llama,
+                        platform_models)
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -125,6 +126,11 @@ async def catalog(user: dict = Depends(current_user)):
             "advice": {"level": "good", "label": "算力池",
                        "text": "由控制台「算力」页统一调度；单次请求仍在一台机器上运行"},
         })
+    if local_enabled:
+        for platform_model in await platform_models.reachable(cfg):
+            if any(m["key"] == platform_model["key"] for m in items):
+                continue
+            items.append(platform_model)
     return {
         "items": await access.filter_catalog(items, user), "server": status,
         "models_dir": cfg["models_dir"], "local_enabled": local_enabled,
@@ -239,12 +245,19 @@ async def select(body: LoadBody, user: dict = Depends(current_user)):
     """用户选择模型时按需切换到该模型；只允许本人可用且已下载完整的模型。"""
     if not await access.can_use(user, body.key):
         raise HTTPException(403, "该模型未对当前用户开放")
+    cfg = load_config()
+    if not bool(cfg.get("local_enabled", True)):
+        raise HTTPException(400, "本地部署已关闭")
+    platform_model = next((m for m in await platform_models.reachable(cfg)
+                           if m["key"] == body.key), None)
+    if platform_model:
+        return {"ok": True, "msg": f"已切换到 {platform_model['source_platform']} 模型",
+                "status": {"model": body.key, "healthy": True, "running": True}}
     row = await fetch_one("SELECT * FROM models WHERE key=?", (body.key,))
     if not row:
         raise HTTPException(404, "模型不存在")
     if not int(row.get("installable", 1)):
         raise HTTPException(400, "该模型需要独立引擎，不能在当前工作台切换")
-    cfg = load_config()
     path = model_file_path(cfg, row["filename"])
     expected = int(row["total_bytes"] or 0)
     if not path.exists():

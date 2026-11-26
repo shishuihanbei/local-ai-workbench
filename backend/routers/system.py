@@ -18,8 +18,8 @@ from starlette.concurrency import run_in_threadpool
 from ..config import DATA_DIR, LOG_DIR, load_config, model_file_path, save_config
 from ..db import audit, fetch_all, fetch_one
 from ..security import admin_user, any_user_or_none, current_user, user_from_any_token
-from ..services import (autostart, backup, hardware, installer, llama, netinfo, platform_deploy, platforms,
-                        retention, shortcuts, storage, websearch)
+from ..services import (autostart, backup, hardware, installer, llama, netinfo, platform_deploy,
+                        platform_models, platforms, retention, shortcuts, storage, websearch)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -597,6 +597,7 @@ async def save_local_platforms(body: LocalPlatformsBody, user: dict = Depends(ad
     cfg["deploy_platforms"] = selected
     if body.endpoints is not None:
         cfg["platform_endpoints"] = platforms.clean_endpoints(body.endpoints, cfg)
+    platform_models.invalidate()
     proxy = _clean_github_proxy(body.github_proxy)
     if proxy is not None:
         cfg["github_proxy"] = proxy
@@ -620,6 +621,7 @@ async def deploy_platform(key: str, force: bool = Query(False), endpoint: str = 
     if platform_deploy.is_running(key):
         return {"ok": False, "msg": "这个平台正在部署，请稍等", "state": platform_deploy.get_state(key)}
     endpoint = (endpoint or "").strip()[:300]
+    platform_models.invalidate()
     asyncio.create_task(platform_deploy.deploy(key, force=force, endpoint=endpoint))
     await audit(user, "system.platform.deploy", key, detail=f"force={bool(force)}")
     return {"ok": True, "msg": "已开始部署", "key": key,
@@ -711,6 +713,7 @@ async def set_local_deploy(body: LocalDeployBody, user: dict = Depends(admin_use
         body.platforms if body.platforms is not None else cfg.get("deploy_platforms"))
     if body.endpoints is not None:
         cfg["platform_endpoints"] = platforms.clean_endpoints(body.endpoints, cfg)
+    platform_models.invalidate()
     proxy = _clean_github_proxy(body.github_proxy)
     if proxy is not None:
         cfg["github_proxy"] = proxy

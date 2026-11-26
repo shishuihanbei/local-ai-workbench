@@ -99,6 +99,59 @@ def test_every_independent_model_maps_to_engine_catalog(client, admin_token):
     assert not missing, missing
 
 
+def test_platform_models_appear_in_catalog(client, admin_token, monkeypatch):
+    from backend.services import platform_models
+    async def fake_reachable(cfg=None):
+        return [{
+            "key": "mock-platform-model", "label": "mock-platform-model",
+            "family": "Mock Platform", "category": "text", "category_label": "文字 / 对话",
+            "engine": "custom", "installed": False, "engine_ready": True,
+            "engine_recommend": "Mock Platform", "engine_recommend_key": "custom",
+            "engine_package": "", "engine_gpu": False, "engine_text": "",
+            "downloaded": True, "partial": False, "bytes": 0, "pct": 100,
+            "available": True, "loaded": True, "owned_by": "platform",
+            "source_platform": "Mock Platform", "platform_key": "custom",
+            "base_url": "http://127.0.0.1:18001/v1",
+            "advice": {"level": "good", "label": "Mock Platform", "text": "已检测到"},
+        }]
+    monkeypatch.setattr(platform_models, "reachable", fake_reachable)
+    r = client.get("/api/models", headers=auth(admin_token))
+    assert r.status_code == 200, r.text
+    item = next((m for m in r.json()["items"] if m["key"] == "mock-platform-model"), None)
+    assert item and item["owned_by"] == "platform"
+    assert item["source_platform"] == "Mock Platform"
+
+
+def test_platform_model_routes_to_its_service(monkeypatch):
+    from backend.services import platform_models, routing
+    async def fake_reachable(cfg=None):
+        return [{
+            "key": "mock-platform-model", "source_platform": "Mock Platform",
+            "platform_key": "custom", "base_url": "http://127.0.0.1:18001/v1",
+        }]
+    monkeypatch.setattr(platform_models, "reachable", fake_reachable)
+    body = type("Body", (), {"model": "mock-platform-model"})()
+    decision = __import__("asyncio").run(routing.resolve(body))
+    assert decision["strategy"] == "platform"
+    assert decision["base"] == "http://127.0.0.1:18001/v1"
+    assert decision["model"] == "mock-platform-model"
+
+
+def test_platform_model_select_does_not_start_llama(client, admin_token, monkeypatch):
+    from backend.services import platform_models
+    async def fake_reachable(cfg=None):
+        return [{
+            "key": "mock-platform-model", "source_platform": "Mock Platform",
+            "platform_key": "custom", "base_url": "http://127.0.0.1:18001/v1",
+            "downloaded": True, "loaded": True, "owned_by": "platform",
+        }]
+    monkeypatch.setattr(platform_models, "reachable", fake_reachable)
+    r = client.post("/api/models/select", headers=auth(admin_token),
+                    json={"key": "mock-platform-model"})
+    assert r.status_code == 200, r.text
+    assert r.json()["status"]["healthy"] is True
+
+
 def test_independent_model_download_needs_engine(client, admin_token, monkeypatch):
     from backend.routers import models as models_router
     monkeypatch.setattr(models_router.engines, "ready_for", lambda engine, state=None: False)

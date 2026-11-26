@@ -745,7 +745,8 @@
 
   /* ------------------------------------------------------------------ 模型 */
   function modelLabel(m) {
-    return String(m.label || m.key || "").trim() || m.key;
+    const base = String(m.label || m.key || "").trim() || m.key;
+    return m.source_platform ? `${base} · ${m.source_platform}` : base;
   }
 
   function modelRunnable(m) {
@@ -798,6 +799,10 @@
   async function ensureModelLoaded(key) {
     const model = S.models.find((m) => m.key === key);
     if (!model || model.loaded === true || S.modelSwitching) return;
+    if (model.owned_by === "platform" || model.platform_key) {
+      setModel(key);
+      return;
+    }
     S.modelSwitching = true;
     const select = $("#modelSelect");
     select.disabled = true;

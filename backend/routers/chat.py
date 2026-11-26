@@ -494,9 +494,12 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
                     raise RuntimeError("未配置上游模型服务地址")
                 timeout = httpx.Timeout(connect=10, read=None, write=10, pool=10)
                 async with httpx.AsyncClient(timeout=timeout) as client:
+                    headers = {"Content-Type": "application/json"}
+                    if key:
+                        headers["Authorization"] = f"Bearer {key}"
                     async with client.stream(
                             "POST", f"{base}/chat/completions", json=payload,
-                            headers={"Authorization": f"Bearer {key}"}) as r:
+                            headers=headers) as r:
                         if r.status_code != 200:
                             detail = (await r.aread()).decode("utf-8", "replace")[:300]
                             raise RuntimeError(f"上游返回 {r.status_code}: {detail}")

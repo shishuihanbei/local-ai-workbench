@@ -8,6 +8,7 @@ import json
 
 from ..config import load_config
 from ..db import fetch_all, fetch_one
+from . import platform_models
 from .secrets_store import decrypt
 
 
@@ -54,6 +55,23 @@ async def resolve(body, cfg: dict | None = None) -> dict:
         "price_in": 0.0,
         "price_out": 0.0,
     }
+
+    if local_enabled and body.model:
+        for platform_model in await platform_models.reachable(cfg):
+            if platform_model["key"] == body.model:
+                return {
+                    "provider": platform_model["source_platform"],
+                    "provider_id": None,
+                    "base": platform_model["base_url"],
+                    "key": "",
+                    "model": platform_model["key"],
+                    "strategy": "platform",
+                    "reason": f"请求模型 {body.model} 命中本地平台 {platform_model['source_platform']}",
+                    "route_id": None,
+                    "fallback": [],
+                    "price_in": 0.0,
+                    "price_out": 0.0,
+                }
 
     providers = await _providers()
     for p in providers:
