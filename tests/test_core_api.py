@@ -54,7 +54,39 @@ def test_models_catalog_has_categories(client, admin_token):
     vision = [m for m in data["items"] if m["key"] == "qwen25-vl-7b"][0]
     assert vision["engine_repo"] == "Qwen/Qwen2.5-VL-7B-Instruct"
     assert vision["engine_recommend"]
+    assert vision["engine_recommend_key"] == "transformers"
     assert "engines" in data
+    assert any(e["key"] == "transformers" for e in data["engine_catalog"])
+
+
+def test_engine_catalog_has_install_guide(client, admin_token):
+    r = client.get("/api/engines", headers=auth(admin_token))
+    assert r.status_code == 200, r.text
+    items = {e["key"]: e for e in r.json()["items"]}
+    tr = items["transformers"]
+    assert tr["site"].startswith("https://")
+    assert tr["download"].startswith("https://")
+    assert "pip install" in tr["install"]
+    assert tr["one_click"] is True
+
+
+def test_engine_install_rejects_unknown_and_manual(client, admin_token):
+    r = client.post("/api/engines/no-such-engine/install", headers=auth(admin_token))
+    assert r.status_code == 404
+    r = client.post("/api/engines/comfyui/install", headers=auth(admin_token))
+    assert r.status_code == 400
+    assert "手动安装" in r.json()["detail"]
+
+
+def test_engine_install_starts(client, admin_token, monkeypatch):
+    from backend.routers import engines as engines_router
+    monkeypatch.setattr(engines_router.engine_install, "start",
+                        lambda key: {"ok": True, "msg": "已开始安装", "state": {"key": key}})
+    r = client.post("/api/engines/transformers/install", headers=auth(admin_token))
+    assert r.status_code == 200, r.text
+    assert r.json()["msg"] == "已开始安装"
+    p = client.get("/api/engines/transformers/install-progress", headers=auth(admin_token))
+    assert p.status_code == 200
 
 
 def test_independent_model_download_needs_engine(client, admin_token, monkeypatch):

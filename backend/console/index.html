@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>管理控制台 · 本地 AI 工作台</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="console.css?v=0.8.1.7">
+<link rel="stylesheet" href="console.css?v=0.8.2.0">
 </head>
 <body>
 
@@ -1801,7 +1801,7 @@
     <section class="panel">
       <div class="panel-head">
         <h2>独立引擎清单</h2>
-        <span class="hint">按本机已装引擎推荐；引擎未安装时，模型下载按钮不可用</span>
+        <span class="hint">每个引擎都有官网、下载地址和安装方法；能 pip 装的直接点“一键安装”，装好后模型下载按钮自动可用</span>
       </div>
       <div class="engine-summary" id="engineSummary"></div>
     </section>
@@ -1812,7 +1812,7 @@
         <li><b>按用途筛选</b><span>顶部标签切换文字、代码、视觉、绘画、视频等类别；先缩小范围再挑模型。</span></li>
         <li><b>点“更新”补齐清单</b><span>只补内置清单里缺失的模型，不覆盖已有模型或你改过的信息。</span></li>
         <li><b>文字/代码模型可下载加载</b><span>看“本机建议”和体积，下载后用 llama.cpp 加载；没下载不会出现在前端切换。</span></li>
-        <li><b>其他类型看独立引擎</b><span>多模态、绘画、视频、语音等需要独立引擎；先看推荐引擎是否已安装，装好后再下载模型。</span></li>
+        <li><b>其他类型看独立引擎</b><span>多模态、绘画、视频、语音等需要独立引擎；清单里给出官网、下载地址和安装命令，能 pip 装的点“一键安装”，装好后再下载模型。</span></li>
       </ol>
     </section>
   </div>
@@ -2949,7 +2949,7 @@
   </div>
 </div>
 
-<script src="console.js?v=0.8.1.9"></script>
+<script src="console.js?v=0.8.2.0"></script>
 </body>
 </html>
 

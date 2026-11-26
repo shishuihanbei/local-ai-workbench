@@ -13,7 +13,7 @@ from ..config import load_config, model_file_path, save_config
 from ..db import (MODEL_CATALOG_EXTRAS, MODEL_SEED, audit, execute, executemany,
                   fetch_all, fetch_one, model_repo, model_url)
 from ..security import admin_user, current_user
-from ..services import access, engines, hardware, hf_models, llama
+from ..services import access, engine_install, engines, hardware, hf_models, llama
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -94,6 +94,7 @@ async def catalog(user: dict = Depends(current_user)):
             "engine_repo": repo,
             "engine_ready": bool(engine_info and engine_info["ready"]),
             "engine_recommend": engine_info["recommend"] if engine_info else "",
+            "engine_recommend_key": engine_info.get("recommend_key", "") if engine_info else "",
             "engine_package": engine_info.get("package", "") if engine_info else "",
             "engine_gpu": bool(engine_info and engine_info["gpu"]),
             "engine_text": engine_info["text"] if engine_info else "",
@@ -136,6 +137,10 @@ async def catalog(user: dict = Depends(current_user)):
             "installed": engine_state["installed"],
             "gpu": engine_state["gpu"], "gpu_names": engine_state["gpu_names"],
         },
+        "engine_catalog": [
+            {**item, "progress": engine_install.status(item["key"])}
+            for item in engines.catalog(engine_state)
+        ],
     }
 
 

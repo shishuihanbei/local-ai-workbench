@@ -57,6 +57,150 @@ _ALIASES = {
     "kokoroonnx": "kokoro",
 }
 
+# 每个独立引擎的官网、下载页、安装方法和一键安装包。
+# pip=[] 表示没有可靠的 pip 包，只能按官网/项目页手动安装。
+ENGINE_CATALOG: dict[str, dict[str, Any]] = {
+    "transformers": {
+        "label": "Transformers",
+        "site": "https://huggingface.co/docs/transformers/installation",
+        "download": "https://pypi.org/project/transformers/",
+        "pip": ["transformers", "torch", "accelerate"],
+        "install": "pip install -U transformers torch accelerate",
+        "note": "Hugging Face 官方推理库，Windows / Linux / macOS 都能用；torch 体积较大，首次安装要等几分钟。",
+    },
+    "vllm": {
+        "label": "vLLM",
+        "site": "https://docs.vllm.ai/en/latest/getting_started/installation.html",
+        "download": "https://pypi.org/project/vllm/",
+        "pip": ["vllm"],
+        "install": "pip install -U vllm",
+        "note": "高吞吐 GPU 推理引擎，官方主要支持 Linux + NVIDIA；Windows 需 WSL2 或单独 Linux 机器。",
+    },
+    "diffusers": {
+        "label": "Diffusers",
+        "site": "https://huggingface.co/docs/diffusers/installation",
+        "download": "https://pypi.org/project/diffusers/",
+        "pip": ["diffusers", "transformers", "accelerate", "torch"],
+        "install": "pip install -U diffusers transformers accelerate torch",
+        "note": "绘画、视频模型常用推理库；需要 PyTorch，显存越高越好。",
+    },
+    "paddleocr": {
+        "label": "PaddleOCR",
+        "site": "https://www.paddleocr.ai/",
+        "download": "https://pypi.org/project/paddleocr/",
+        "pip": ["paddleocr", "paddlepaddle"],
+        "install": "pip install -U paddleocr paddlepaddle",
+        "note": "中文 OCR、表格和版面分析；CPU 也能跑。",
+    },
+    "funasr": {
+        "label": "FunASR",
+        "site": "https://github.com/modelscope/FunASR",
+        "download": "https://pypi.org/project/funasr/",
+        "pip": ["funasr", "modelscope"],
+        "install": "pip install -U funasr modelscope",
+        "note": "阿里语音识别/合成工具包，适合 SenseVoice、CosyVoice。",
+    },
+    "sentencetransformers": {
+        "label": "SentenceTransformers",
+        "site": "https://sbert.net/docs/installation.html",
+        "download": "https://pypi.org/project/sentence-transformers/",
+        "pip": ["sentence-transformers", "torch"],
+        "install": "pip install -U sentence-transformers torch",
+        "note": "向量与重排序模型常用库；需要 PyTorch。",
+    },
+    "onnx": {
+        "label": "ONNX Runtime",
+        "site": "https://onnxruntime.ai/",
+        "download": "https://pypi.org/project/onnxruntime/",
+        "pip": ["onnxruntime"],
+        "install": "pip install -U onnxruntime",
+        "note": "ONNX 模型推理运行时，CPU 包体积小、安装快。",
+    },
+    "whisper": {
+        "label": "faster-whisper",
+        "site": "https://github.com/SYSTRAN/faster-whisper",
+        "download": "https://pypi.org/project/faster-whisper/",
+        "pip": ["faster-whisper"],
+        "install": "pip install -U faster-whisper",
+        "note": "Whisper 的快速推理实现，语音转写常用。",
+    },
+    "f5tts": {
+        "label": "F5-TTS",
+        "site": "https://github.com/SWivid/F5-TTS",
+        "download": "https://pypi.org/project/f5-tts/",
+        "pip": ["f5-tts", "torch"],
+        "install": "pip install -U f5-tts torch",
+        "note": "声音克隆/TTS 项目；安装包较大，建议有 NVIDIA 显卡。",
+    },
+    "fishspeech": {
+        "label": "Fish Speech",
+        "site": "https://github.com/fishaudio/fish-speech",
+        "download": "https://github.com/fishaudio/fish-speech/archive/refs/heads/main.zip",
+        "pip": [],
+        "install": "git clone https://github.com/fishaudio/fish-speech.git，再按项目 README 安装",
+        "note": "语音合成项目，依赖较多，建议按官方 README 手动部署。",
+    },
+    "mineru": {
+        "label": "MinerU",
+        "site": "https://github.com/opendatalab/MinerU",
+        "download": "https://pypi.org/project/mineru/",
+        "pip": ["mineru"],
+        "install": "pip install -U mineru",
+        "note": "PDF 解析、版面还原、公式表格提取。",
+    },
+    "surya": {
+        "label": "Surya",
+        "site": "https://github.com/datalab-to/surya",
+        "download": "https://pypi.org/project/surya-ocr/",
+        "pip": ["surya-ocr", "torch"],
+        "install": "pip install -U surya-ocr torch",
+        "note": "多语言 OCR、文本检测和阅读顺序；需要 PyTorch。",
+    },
+    "kokoro": {
+        "label": "Kokoro",
+        "site": "https://github.com/hexgrad/kokoro",
+        "download": "https://pypi.org/project/kokoro-onnx/",
+        "pip": ["kokoro-onnx", "onnxruntime"],
+        "install": "pip install -U kokoro-onnx onnxruntime",
+        "note": "轻量 TTS，ONNX 推理，CPU 也能跑。",
+    },
+    "comfyui": {
+        "label": "ComfyUI",
+        "site": "https://www.comfy.org/",
+        "download": "https://github.com/comfyanonymous/ComfyUI/archive/refs/heads/master.zip",
+        "pip": [],
+        "install": "下载压缩包解压到平台目录，再按 README 安装依赖并启动",
+        "note": "节点式绘画/视频工作流，依赖 PyTorch 和自定义节点，建议单独部署。",
+    },
+    "ollama": {
+        "label": "Ollama",
+        "site": "https://ollama.com/",
+        "download": "https://ollama.com/download",
+        "pip": [],
+        "install": "从官网下载安装包，安装后运行 ollama serve",
+        "note": "本地模型运行器；本工作台「部署」页已提供一键安装。",
+    },
+}
+
+
+def catalog(st: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    state = st or status()
+    installed = state.get("installed", {})
+    is_windows = str(state.get("platform") or "").lower() == "windows"
+    out = []
+    for key, info in ENGINE_CATALOG.items():
+        blocked = ""
+        if key == "vllm" and is_windows:
+            blocked = "Windows 不能直接一键安装 vLLM，请用 WSL2 或 Linux 机器；也可以先装 Transformers。"
+        one_click = bool(info.get("pip")) and not blocked
+        out.append({
+            "key": key, "label": info["label"], "site": info["site"],
+            "download": info["download"], "install": info["install"],
+            "note": info["note"], "installed": bool(installed.get(key)),
+            "one_click": one_click, "blocked": blocked,
+        })
+    return out
+
 
 def _spec(name: str) -> bool:
     try:
@@ -101,6 +245,7 @@ def status(prof: dict[str, Any] | None = None) -> dict[str, Any]:
         "gpu_names": names[:4],
         "gpu_vram_gb": vram_gb,
         "python": prof.get("python", ""),
+        "platform": prof.get("platform", ""),
     }
 
 
@@ -140,7 +285,7 @@ def recommend(engine: str, st: dict[str, Any] | None = None) -> dict[str, Any]:
 
     if available:
         name = "Ollama" if available == "ollama" else _LABELS.get(available, available)
-        return {"name": name, "ready": True, "installed": True,
+        return {"key": available, "name": name, "ready": True, "installed": True,
                 "text": f"本机已安装 {name}，可以直接下载模型。"}
 
     # 没装：按硬件和模型支持情况推荐一个最合适的
@@ -199,7 +344,10 @@ def recommend(engine: str, st: dict[str, Any] | None = None) -> dict[str, Any]:
         name = _LABELS.get(known[0], known[0].title()) if known else "独立引擎"
         pkg = ""
         text = "本机未检测到可用的独立引擎，请先安装对应引擎，装好后下载按钮才可用。"
-    return {"name": name, "package": pkg, "ready": False, "installed": False, "text": text}
+    rec_key = "ollama" if name == "Ollama" else next(
+        (k for k, label in _LABELS.items() if label == name), "")
+    return {"key": rec_key, "name": name, "package": pkg, "ready": False,
+            "installed": False, "text": text}
 
 
 def describe(engine: str, st: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -209,7 +357,9 @@ def describe(engine: str, st: dict[str, Any] | None = None) -> dict[str, Any]:
         "engine": engine,
         "ready": bool(rec["ready"]),
         "recommend": rec["name"],
+        "recommend_key": rec.get("key", ""),
         "package": rec.get("package", ""),
         "text": rec["text"],
         "gpu": bool(state.get("gpu")),
+        "gpu_usable": bool(state.get("gpu_usable")),
     }

@@ -324,6 +324,30 @@ async function pollModelDownload(key) {
   }
 }
 
+async function pollEngineInstall(key) {
+  for (let i = 0; i < 900; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    let p;
+    try { p = await api(`/api/engines/${encodeURIComponent(key)}/install-progress`); }
+    catch (e) { continue; }
+    const box = document.querySelector(`[data-engine-progress="${key}"]`);
+    if (box) {
+      box.hidden = false;
+      const head = box.querySelector("span");
+      const bar = box.querySelector(".engine-bar i");
+      const log = box.querySelector(".engine-log");
+      if (head) head.textContent = `${p.step || "安装中"} ${p.pct || 0}%`;
+      if (bar) bar.style.width = `${Math.max(0, Math.min(100, Number(p.pct || 0)))}%`;
+      if (log) log.textContent = p.msg || "";
+    }
+    if (!p || p.running) continue;
+    await loadAll();
+    if (p.error) uiToast(`安装失败：${p.error}`);
+    else if (p.ok) uiToast(p.msg || "安装完成");
+    return;
+  }
+}
+
 /* ---------------------------------------------------------------- 模型 */
 function statusBadge(m) {
   if (m.installable === false) {
@@ -617,6 +641,8 @@ function renderEngineSummary(items) {
     box.innerHTML = `<div class="engine-empty">当前没有需要独立引擎的模型。</div>`;
     return;
   }
+  const catalog = {};
+  for (const e of ((S.models && S.models.engine_catalog) || [])) catalog[e.key] = e;
   const groups = new Map();
   for (const m of need) {
     const engine = m.engine || "未标注";
@@ -627,13 +653,38 @@ function renderEngineSummary(items) {
   box.innerHTML = rows.map(([engine, list]) => {
     const rec = list.find((m) => m.engine_recommend) || {};
     const ready = list.some((m) => m.engine_ready);
+    const info = catalog[rec.engine_recommend_key] || null;
     const hint = rec.engine_text || `需要 ${engine} 独立引擎`;
+    let guide = "";
+    if (info) {
+      const p = info.progress || {};
+      const running = !!p.running;
+      let action = `<span class="badge ok">已安装</span>`;
+      if (!info.installed && info.one_click) {
+        action = `<button class="btn small" data-engine-install="${esc(info.key)}" ${running ? "disabled" : ""}>${running ? "安装中…" : "一键安装"}</button>`;
+      }
+      else if (!info.installed) {
+        action = `<button class="btn small" disabled title="${esc(info.blocked || info.install)}">一键安装</button>`;
+      }
+      guide = `
+        <div class="engine-links"><a href="${esc(info.site)}" target="_blank" rel="noreferrer">官网</a><a href="${esc(info.download)}" target="_blank" rel="noreferrer">下载地址</a></div>
+        <div class="engine-cmd"><code>${esc(info.install)}</code><button class="btn tiny" data-copy-engine="${esc(info.key)}">复制</button></div>
+        <div class="engine-note">${esc(info.note)}</div>
+        ${info.blocked ? `<div class="engine-note warn">${esc(info.blocked)}</div>` : ""}
+        <div class="engine-actions">${action}</div>
+        <div class="engine-progress" data-engine-progress="${esc(info.key)}" ${running ? "" : "hidden"}>
+          <span>${esc(p.step || "安装中")} ${p.pct || 0}%</span>
+          <div class="engine-bar"><i style="width:${Math.max(0, Math.min(100, Number(p.pct || 0)))}%"></i></div>
+          <div class="engine-log">${esc(p.msg || "")}</div>
+        </div>`;
+    }
     return `
     <div class="engine-item">
       <div class="engine-head"><b>${esc(engine)}</b><span>${list.length} 个模型</span></div>
       <div class="engine-rec ${ready ? "ok" : "warn"}">推荐：${esc(rec.engine_recommend || engine)} · ${ready ? "已安装" : "未安装，下载按钮不可用"}</div>
       <div class="engine-models">${list.map((m) => esc(m.label || m.key)).join(" · ")}</div>
       <div class="advice-text">${esc(hint)}</div>
+      ${guide}
     </div>`;
   }).join("");
 }
@@ -1243,6 +1294,25 @@ document.addEventListener("click", async (ev) => {
       } finally {
         S.localBusy = false;
         await loadAll();
+      }
+    }
+    else if (t.dataset.engineInstall) {
+      t.disabled = true;
+      t.textContent = "安装中…";
+      const engineKey = t.dataset.engineInstall;
+      const r = await api(`/api/engines/${engineKey}/install`, { method: "POST" });
+      if (r && r.msg) uiToast(r.msg);
+      await loadAll();
+      pollEngineInstall(engineKey);
+    }
+    else if (t.dataset.copyEngine) {
+      const info = ((S.models && S.models.engine_catalog) || []).find((e) => e.key === t.dataset.copyEngine);
+      if (!info) throw new Error("没有找到安装命令");
+      try {
+        await navigator.clipboard.writeText(info.install);
+        uiToast("安装命令已复制");
+      } catch (e) {
+        uiToast("复制失败，请手动选中命令复制");
       }
     }
     else if (t.dataset.dl) {

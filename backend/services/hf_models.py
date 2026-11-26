@@ -118,7 +118,9 @@ def start(key: str, repo: str) -> dict[str, Any]:
     endpoint = str(cfg.get("hf_endpoint") or "https://hf-mirror.com").strip()
     token = str(cfg.get("hf_token") or "").strip()
     total = _total_bytes(repo, endpoint)
-    _set(key, **_blank(key), running=True, total_bytes=total,
+    init = _blank(key)
+    init.pop("key", None)
+    _set(key, **init, running=True, total_bytes=total,
          started_at=time.time(), msg="准备下载…")
     threading.Thread(target=_run, args=(key, repo, dest, endpoint, token),
                      daemon=True, name=f"hf-download-{key}").start()

@@ -20,8 +20,8 @@ from fastapi.staticfiles import StaticFiles
 from .config import BASE_DIR, FRONTEND_DIR, LOG_DIR, load_config
 from . import logbus
 from .db import init_db
-from .routers import (admin, apikeys, auth, auth_admin, branding, chat, cluster, collab, database, files,
-                      front as front_admin, kb,
+from .routers import (admin, apikeys, auth, auth_admin, branding, chat, cluster, collab, database, engines,
+                      files, front as front_admin, kb,
                       library, memory,
                       models, my_memory, openai_api, ops, prompts as prompt_admin, system, upload_admin, users,
                       workbench)
@@ -220,6 +220,7 @@ for r in (auth.router, auth_admin.router, branding.router, users.router, chat.ro
           database.router, openai_api.router, memory.router, my_memory.router,
           prompt_admin.router,
           front_admin.router, front_admin.admin_router,
+          engines.router,
           collab.router, collab.admin_router, workbench.router, upload_admin.router):
     app.include_router(r)
 
