@@ -80,10 +80,12 @@ Linux / macOS：
 
 ### 桌面图标（一个就够）
 
-正式安装（`data` 在程序目录下）首次启动时，会给装系统的那台机器放**一个**桌面图标，双击就进前台；后台不另放图标，从前台左侧栏底部的「管理控制台」进。
+正式安装（`data` 在程序目录下）首次启动时，会给装系统的那台机器放**一个**桌面图标：**双击进后台**（管理控制台）；**右键菜单**里有「打开前台 / 打开后台」两项。
 
-- Windows 生成 `AI 工作台.lnk`，指向根目录的 `open.ps1`，带自绘的 `data/branding/workbench.ico`。`open.ps1` 先探 `/api/health`：服务没起就静默拉起再打开浏览器，所以关了机、关了服务，双击一样能用。
-- Linux 生成 `AI 工作台.desktop`（`Exec` 指向 `open.sh`），同时复制到 `~/.local/share/applications`；macOS 生成 `AI 工作台.webloc`。
+- Windows 生成 `AI 工作台.wbapp`，并在 `HKCU\Software\Classes` 注册 `AIWorkbench.App` 类型：图标用 `data/branding/workbench.ico`，默认动词是「打开后台」，另外注册了「打开前台」。双击/右键都走根目录的 `open.ps1`。注册表被策略禁用时退回一个 `AI 工作台.url`。
+- `open.ps1` 先探 `/api/health`：服务没起就静默拉起再打开浏览器，所以关了机、关了服务，双击一样能用；服务在跑就直接开页面。
+- Linux 生成 `AI 工作台.desktop`（`Exec` 指向 `open.sh`），带 `Actions=Front;Console;`，右键同样可选前后台，并复制到 `~/.local/share/applications`；macOS 生成 `AI 工作台.webloc`（默认进后台）。
+- **打开哪个地址可以选**：控制台「部署 · 桌面图标」里切换「本机 127.0.0.1 / 局域网 IP / 自定义（穿透或反代后的 https）」。选择存在 `config.json` 的 `shortcut_mode` / `shortcut_lan_ip` / `shortcut_custom_url`，启动器每次双击时读取，改完不用重建图标。
 - 容器、NAS 或没有图形桌面的纯服务器不建图标，直接在浏览器收藏前台和后台地址；Docker 重启策略用 `restart: unless-stopped`。
 - 「管理控制台 · 部署」页有「创建桌面图标 / 删除桌面图标」，随时可补一个或撤掉。开机自启在同一页，按钮开的是系统级自启（Windows 启动项、Linux systemd/cron、macOS LaunchAgent），和桌面图标互不影响。
 

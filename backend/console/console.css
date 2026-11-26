@@ -1933,3 +1933,17 @@ body.guide-open { overflow: hidden; }
   .shortcut-links { flex-direction: column; }
   .shortcut-link { width: 100%; }
 }
+
+/* 桌面图标：地址选择 */
+.shortcut-mode {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin: 10px 0 6px;
+}
+.shortcut-mode label { font-size: 13px; color: var(--muted); }
+.shortcut-mode select, .shortcut-mode input {
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px;
+  font-size: 13px; background: #fff; outline: none; min-width: 170px;
+}
+.shortcut-mode select:focus, .shortcut-mode input:focus {
+  border-color: #b9c6f7; box-shadow: 0 0 0 3px rgba(79, 110, 247, .1);
+}

@@ -1344,11 +1344,23 @@
       </div>
       <div class="autostart-body">
         <div class="autostart-copy">
-          <p class="autostart-lead" id="shortcutsLead">桌面只放一个应用图标：双击直接进前台；后台从侧栏「管理控制台」进。图标带工作台自己的 Logo，不是网页书签。</p>
+          <p class="autostart-lead" id="shortcutsLead">桌面只放一个应用图标：双击直接进后台；右键菜单可选「打开前台 / 打开后台」。图标带工作台自己的 Logo，不是网页书签。</p>
           <div class="shortcut-links">
             <a class="shortcut-link" id="shortcutFrontLink" target="_blank" rel="noopener">前台 <b id="shortcutFrontUrl">—</b></a>
             <a class="shortcut-link" id="shortcutConsoleLink" target="_blank" rel="noopener">后台 <b id="shortcutConsoleUrl">—</b></a>
           </div>
+          <div class="shortcut-mode">
+            <label for="shortcutMode">双击后打开</label>
+            <select id="shortcutMode">
+              <option value="local">本机 127.0.0.1</option>
+              <option value="lan">局域网 IP</option>
+              <option value="custom">自定义 / 外网地址</option>
+            </select>
+            <select id="shortcutLanIp" hidden></select>
+            <input id="shortcutCustomUrl" placeholder="https://穿透或反代后的地址" hidden>
+            <button class="btn small" id="shortcutSaveMode" type="button">保存地址</button>
+          </div>
+          <p class="hint autostart-detail" id="shortcutModeHint">选「局域网 IP」时，同一内网的手机和别的电脑也能用这个地址进；选「自定义」就填穿透、反代后的 https 地址。改完下次双击生效，不用重建图标。</p>
           <p class="hint autostart-detail" id="shortcutLan" hidden></p>
           <p class="hint autostart-detail" id="shortcutsDetail"></p>
         </div>

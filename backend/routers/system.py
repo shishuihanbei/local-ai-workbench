@@ -433,26 +433,40 @@ async def delete_autostart(user: dict = Depends(admin_user)):
 
 @router.get("/shortcuts")
 async def get_shortcuts(user: dict = Depends(admin_user)):
-    """桌面快捷方式状态：是否已经放到桌面、指向哪个地址。"""
+    """桌面图标状态：是否已放好、双击进哪个地址、可选的前后台地址。"""
     return shortcuts.status()
 
 
 @router.post("/shortcuts")
 async def post_shortcuts(user: dict = Depends(admin_user)):
-    """在当前系统的桌面上创建前台 + 后台两个快捷方式。"""
+    """在桌面放一个应用图标：双击进后台，右键可选打开前台 / 打开后台。"""
     res = await run_in_threadpool(shortcuts.create)
     if not res.get("ok"):
-        raise HTTPException(400, res.get("message") or "创建桌面快捷方式失败")
+        raise HTTPException(400, res.get("message") or "创建桌面图标失败")
     await audit(user, "system.shortcuts.create", res.get("desktop", ""), res.get("urls", {}).get("console", ""))
+    return res
+
+
+@router.put("/shortcuts/settings")
+async def put_shortcuts_settings(payload: dict, user: dict = Depends(admin_user)):
+    """保存图标打开哪个地址：本机 / 局域网 IP / 自定义外网地址。下次双击生效。"""
+    mode = str(payload.get("mode") or "local")
+    lan_ip = str(payload.get("lan_ip") or "")
+    custom_url = str(payload.get("custom_url") or "")
+    try:
+        res = await run_in_threadpool(lambda: shortcuts.save_settings(mode, lan_ip, custom_url))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    await audit(user, "system.shortcuts.settings", mode, res.get("urls", {}).get("console", ""))
     return res
 
 
 @router.delete("/shortcuts")
 async def delete_shortcuts(user: dict = Depends(admin_user)):
-    """删除桌面上的工作台快捷方式（不影响服务运行）。"""
+    """删除桌面上的工作台图标（不影响服务运行）。"""
     res = await run_in_threadpool(shortcuts.remove)
     if not res.get("ok"):
-        raise HTTPException(400, res.get("message") or "删除桌面快捷方式失败")
+        raise HTTPException(400, res.get("message") or "删除桌面图标失败")
     await audit(user, "system.shortcuts.remove", res.get("desktop", ""), "")
     return res
 

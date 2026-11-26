@@ -717,6 +717,7 @@ function renderShortcuts(st) {
   const removeBtn = $("shortcutsRemove");
   if (createBtn) createBtn.hidden = !supported;
   if (removeBtn) removeBtn.hidden = !exists;
+  renderShortcutMode(st, supported);
   const detail = $("shortcutsDetail");
   if (detail) {
     let text = st.message || "";
@@ -731,8 +732,89 @@ async function loadShortcuts() {
   } catch (e) { /* 接口异常不影响部署页其他内容 */ }
 }
 
-async function createShortcuts() {
-  const btn = $("shortcutsCreate");
+function renderShortcutMode(st, supported) {
+  const modeSel = $("shortcutMode");
+  const lanSel = $("shortcutLanIp");
+  const customInput = $("shortcutCustomUrl");
+  const saveBtn = $("shortcutSaveMode");
+  const mode = st.mode || "local";
+  if (modeSel) modeSel.value = mode;
+  if (saveBtn) saveBtn.hidden = !supported;
+  if (lanSel) {
+    const ips = st.lan_ips || [];
+    const chosen = st.lan_ip || "";
+    lanSel.innerHTML = "";
+    const list = ips.length ? ips : (chosen ? [{ ip: chosen, iface: "" }] : []);
+    for (const item of list) {
+      const opt = document.createElement("option");
+      opt.value = item.ip;
+      opt.textContent = item.iface ? `${item.ip}（${item.iface}）` : item.ip;
+      lanSel.appendChild(opt);
+    }
+    if (chosen) lanSel.value = chosen;
+    lanSel.hidden = mode !== "lan" || !list.length;
+  }
+  if (customInput) {
+    customInput.value = st.custom_url || "";
+    customInput.hidden = mode !== "custom";
+  }
+}
+
+function shortcutModePayload() {
+  const modeSel = $("shortcutMode");
+  const lanSel = $("shortcutLanIp");
+  const customInput = $("shortcutCustomUrl");
+  return {
+    mode: modeSel ? modeSel.value : "local",
+    lan_ip: lanSel ? lanSel.value : "",
+    custom_url: customInput ? customInput.value.trim() : "",
+  };
+}
+
+async function saveShortcutMode() {
+  const btn = $("shortcutSaveMode");
+  const label = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "保存中…"; }
+  try {
+    const st = await api("/api/system/shortcuts/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(shortcutModePayload()),
+    });
+    renderShortcuts(st);
+    uiToast("地址已保存，下次双击桌面图标生效", "good");
+  } catch (e) {
+    uiToast(e.message || "保存失败", "bad");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
+function bindShortcutModeEvents() {
+  const modeSel = $("shortcutMode");
+  if (modeSel) {
+    modeSel.addEventListener("change", () => {
+      const mode = modeSel.value;
+      const lanSel = $("shortcutLanIp");
+      const customInput = $("shortcutCustomUrl");
+      if (lanSel) lanSel.hidden = mode !== "lan" || !lanSel.options.length;
+      if (customInput) {
+        customInput.hidden = mode !== "custom";
+        if (mode === "custom") customInput.focus();
+      }
+      const hintEl = $("shortcutModeHint");
+      if (hintEl) {
+        hintEl.textContent = mode === "lan"
+          ? "双击后用局域网地址打开，同一内网的手机和别的电脑也能进；换网络后记得回来改。"
+          : mode === "custom"
+            ? "填穿透或反代后的完整地址（http:// 或 https://），例如 Cloudflare 隧道域名。"
+            : "双击后只用本机 127.0.0.1 打开，不依赖网络。";
+      }
+    });
+  }
+}
+
+async function createShortcuts() {  const btn = $("shortcutsCreate");
   const label = btn ? btn.textContent : "";
   if (btn) { btn.disabled = true; btn.textContent = "正在创建…"; }
   try {
@@ -927,6 +1009,7 @@ document.addEventListener("click", async (ev) => {
     else if (t.id === "autostartOff") { await toggleAutostart(false); return; }
     else if (t.id === "shortcutsCreate") { await createShortcuts(); return; }
     else if (t.id === "shortcutsRemove") { await removeShortcuts(); return; }
+    else if (t.id === "shortcutSaveMode") { await saveShortcutMode(); return; }
     else if (t.id === "refreshPlatforms") {
       const btn = t;
       const old = btn.textContent;
@@ -4859,6 +4942,8 @@ document.addEventListener("keydown", (ev) => {
     }
   });
 });
+
+bindShortcutModeEvents();
 
 if ($("navSearch")) {
   $("navSearch").addEventListener("input", filterNav);

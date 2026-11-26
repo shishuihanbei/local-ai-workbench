@@ -1,30 +1,38 @@
-"""桌面快捷方式：一个应用图标，双击就进工作台。
+"""桌面入口：一个像软件一样的图标，双击进后台，右键可选前台。
 
 设计取舍：
-- 只放 **一个** 图标，指向前台主界面；后台控制台从前台侧栏的「管理控制台」
-  入口进（管理员可见），不再单独摆第二个图标。
-- Windows 用真正的 ``.lnk`` + 自绘应用图标，看起来像软件而不是网页书签；
-  双击时如果服务没在跑，会先静默拉起再打开浏览器（``open.ps1``）。
-- Linux 用 ``.desktop`` + 同一个图标，Exec 指向 ``open.sh``（同样先确保服务在跑）。
-- macOS 用 ``.webloc``（launchd 已负责登录后常驻，双击直接开页面）。
+- 桌面上只放 **一个** 图标，双击默认进「管理控制台」（后台）；右键菜单里
+  另有「打开前台」「打开后台」两项（Windows 用自建文件类型 + 注册表动词实现）。
+- 图标也是「启动器」：双击时如果服务没在跑，会先静默拉起再打开浏览器
+  （Windows 走 ``open.ps1``，Linux/macOS 走 ``open.sh``）。
+- 打开的地址可选：本机 127.0.0.1、局域网 IP、或自定义/外网地址，存在
+  ``config.json`` 的 ``shortcut_mode`` / ``shortcut_lan_ip`` / ``shortcut_custom_url``，
+  启动器每次读取，改完不用重建图标。
+- Windows 用 ``.wbapp``（注册到 HKCU 的自定义类型，带图标和右键动词）；
+  Linux 用 ``.desktop``（Actions 提供「打开前台 / 打开后台」）；macOS 用 ``.webloc``。
 - 容器 / 无桌面服务器：不写文件，只返回可收藏的地址。
 
 图标在 ``data/branding/workbench.ico``（顺带一份 png），按品牌主色生成，
-没有 Pillow 时自动跳过图标，不影响快捷方式本身。
+没有 Pillow 时自动跳过图标，不影响入口本身。
 """
 from __future__ import annotations
 
+import ipaddress
 import os
 import plistlib
 import shutil
+import socket
 import subprocess
 import sys
 from pathlib import Path
 
-from ..config import BASE_DIR, CREATE_NO_WINDOW, DATA_DIR, load_config
+from ..config import BASE_DIR, DATA_DIR, load_config
 
 MARKER = DATA_DIR / ".desktop_shortcuts"
-LEGACY_SUFFIXES = (".url", ".desktop", ".webloc")
+LEGACY_SUFFIXES = (".url", ".lnk", ".desktop", ".webloc")
+APP_EXT = ".wbapp"
+PROGID = "AIWorkbench.App"
+MODES = ("local", "lan", "custom")
 
 
 # ------------------------------------------------------------------ 基础信息
@@ -63,12 +71,67 @@ def _app_name() -> str:
     return name or "AI 工作台"
 
 
-def _urls() -> dict[str, str]:
+# ------------------------------------------------------------------ 地址选择
+def _mode() -> str:
+    mode = str(load_config().get("shortcut_mode") or "local").strip().lower()
+    return mode if mode in MODES else "local"
+
+
+def _lan_candidates() -> list[dict]:
+    """本机所有可用于局域网的 IPv4，附带网卡名。"""
+    found: dict[str, str] = {}
+    try:
+        import psutil  # type: ignore
+
+        for name, addrs in psutil.net_if_addrs().items():
+            for a in addrs:
+                ip = str(getattr(a, "address", "") or "")
+                if a.family == socket.AF_INET and ip and not ip.startswith(("127.", "169.254.")):
+                    found.setdefault(ip, name)
+    except Exception:  # noqa: BLE001 psutil 不是硬依赖
+        pass
+    if not found:
+        try:
+            from .netinfo import lan_ip
+
+            ip = lan_ip()
+            if ip:
+                found[ip] = ""
+        except Exception:  # noqa: BLE001
+            pass
+    return [{"ip": ip, "iface": name} for ip, name in sorted(found.items())]
+
+
+def _lan_ip() -> str:
+    cfg = load_config()
+    chosen = str(cfg.get("shortcut_lan_ip") or "").strip()
+    if chosen:
+        return chosen
+    try:
+        from .netinfo import lan_ip
+
+        return lan_ip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _base_url() -> str:
     port = _port()
-    front = str(load_config().get("frontend_url") or "").strip()
-    if not front:
-        front = f"http://127.0.0.1:{port}/"
-    return {"front": front, "console": f"http://127.0.0.1:{port}/console/"}
+    mode = _mode()
+    if mode == "lan":
+        ip = _lan_ip()
+        if ip and not ip.startswith("127."):
+            return f"http://{ip}:{port}"
+    if mode == "custom":
+        raw = str(load_config().get("shortcut_custom_url") or "").strip().rstrip("/")
+        if raw.startswith(("http://", "https://")):
+            return raw
+    return f"http://127.0.0.1:{port}"
+
+
+def _urls() -> dict[str, str]:
+    base = _base_url()
+    return {"front": f"{base}/", "console": f"{base}/console/"}
 
 
 def _lan_url() -> str:
@@ -94,7 +157,7 @@ def _desktop_dir() -> Path:
 def _file_name() -> str:
     app = _app_name()
     if _platform() == "windows":
-        return f"{app}.lnk"
+        return f"{app}{APP_EXT}"
     if _platform() == "macos":
         return f"{app}.webloc"
     return f"{app}.desktop"
@@ -105,15 +168,17 @@ def _target_path() -> Path:
 
 
 def _legacy_names() -> list[str]:
-    """旧版本留下的第二个图标（后台），创建/删除时顺手清掉。"""
+    """旧版本留下的图标（两个图标版本、.lnk 版本）创建/删除时顺手清掉。"""
     app = _app_name()
-    return [f"{app}-后台{suffix}" for suffix in LEGACY_SUFFIXES] + [f"{app}-后台管理{suffix}" for suffix in LEGACY_SUFFIXES]
+    names = [f"{app}{suffix}" for suffix in LEGACY_SUFFIXES]
+    names += [f"{app}-后台{suffix}" for suffix in LEGACY_SUFFIXES]
+    names += [f"{app}-后台管理{suffix}" for suffix in LEGACY_SUFFIXES]
+    return names
 
 
 # ------------------------------------------------------------------ 图标
 def _icon_paths() -> tuple[Path, Path]:
-    base = DATA_DIR / "branding"
-    return base / "workbench.ico", base / "workbench.png"
+    return DATA_DIR / "branding" / "workbench.ico", DATA_DIR / "branding" / "workbench.png"
 
 
 def _ensure_icon() -> str:
@@ -154,7 +219,7 @@ def _ensure_icon() -> str:
                         font = ImageFont.truetype(str(p), 104)
                         break
                     except Exception:  # noqa: BLE001
-                       font = None
+                        font = None
             if font:
                 break
         text = "AI"
@@ -174,7 +239,99 @@ def _ensure_icon() -> str:
         return ""
 
 
-# ------------------------------------------------------------------ 写入
+# ------------------------------------------------------------------ 写入：Windows
+def _ps_exe() -> str:
+    root = os.environ.get("SystemRoot") or "C:/Windows"
+    return str(Path(root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe")
+
+
+def _launcher_ps1() -> Path:
+    return BASE_DIR / "open.ps1"
+
+
+def _windows_command(mode: str) -> str:
+    opener = _launcher_ps1()
+    return (f'"{_ps_exe()}" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden '
+            f'-File "{opener}" -Mode {mode}')
+
+
+def _write_windows_app(path: Path, url: str) -> bool:
+    """写一个自定义类型文件 + HKCU 注册表，做出「双击进后台、右键选前后台」的图标。"""
+    opener = _launcher_ps1()
+    if not opener.exists():
+        return False
+    icon = _ensure_icon()
+    try:
+        path.write_text(
+            "AI Workbench desktop launcher\n"
+            "File type: AIWorkbench.App (HKCU\\Software\\Classes)\n"
+            "Double-click opens the admin console; right-click for front / console.\n",
+            "utf-8",
+        )
+        import winreg
+
+        classes = r"Software\Classes"
+        prog = f"{classes}\\{PROGID}"
+        ext = f"{classes}\\{APP_EXT}"
+
+        def set_value(key_path: str, name: str, value: str) -> None:
+            key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_WRITE)
+            try:
+                winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
+            finally:
+                key.Close()
+
+        set_value(ext, "", PROGID)
+        set_value(prog, "", "AI 工作台")
+        set_value(prog, "FriendlyTypeName", "AI 工作台入口")
+        set_value(prog + r"\DefaultIcon", "", f'"{icon}",0' if icon else f'"{_ps_exe()}",0')
+        set_value(prog + r"\shell", "", "console")
+        set_value(prog + r"\shell\console", "", "打开后台")
+        set_value(prog + r"\shell\console", "Icon", f'"{icon}",0' if icon else f'"{_ps_exe()}",0')
+        set_value(prog + r"\shell\console\command", "", _windows_command("console"))
+        set_value(prog + r"\shell\front", "", "打开前台")
+        set_value(prog + r"\shell\front", "Icon", f'"{icon}",0' if icon else f'"{_ps_exe()}",0')
+        set_value(prog + r"\shell\front\command", "", _windows_command("front"))
+        return path.exists()
+    except Exception:  # noqa: BLE001 注册表被策略禁用时退回 .url
+        return False
+
+
+def _remove_key_tree(root, path: str) -> None:
+    import winreg
+
+    try:
+        key = winreg.OpenKey(root, path, 0, winreg.KEY_READ | winreg.KEY_WRITE)
+    except OSError:
+        return
+    subs: list[str] = []
+    try:
+        while True:
+            try:
+                subs.append(winreg.EnumKey(key, len(subs)))
+            except OSError:
+                break
+    finally:
+        key.Close()
+    for sub in subs:
+        _remove_key_tree(root, f"{path}\\{sub}")
+    try:
+        winreg.DeleteKey(root, path)
+    except OSError:
+        pass
+
+
+def _remove_windows_app() -> None:
+    try:
+        import winreg
+
+        _remove_key_tree(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{PROGID}")
+        _remove_key_tree(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{APP_EXT}")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+# ------------------------------------------------------------------ 写入：Linux / macOS
 def _write_url(path: Path, url: str) -> None:
     path.write_text(f"[InternetShortcut]\r\nURL={url}\r\n", "utf-8", newline="")
 
@@ -187,16 +344,30 @@ def _write_webloc(path: Path, url: str) -> None:
 def _write_desktop_entry(path: Path, url: str, root: Path) -> None:
     opener = root / "open.sh"
     icon, _ = _icon_paths()
-    exec_line = f'Exec="{opener}"' if opener.exists() else f'Exec=xdg-open "{url}"'
+    if opener.exists():
+        try:
+            opener.chmod(0o755)
+        except Exception:  # noqa: BLE001
+            pass
+        default_exec = f'Exec="{opener}" console'
+        front_exec = f'Exec="{opener}" front'
+        console_exec = f'Exec="{opener}" console'
+        actions = ("Actions=Front;Console;\n"
+                   "[Desktop Action Front]\nName=打开前台\n" + front_exec + "\n"
+                   "[Desktop Action Console]\nName=打开后台\n" + console_exec + "\n")
+    else:
+        default_exec = f'Exec=xdg-open "{url}"'
+        actions = ""
     path.write_text(
         "[Desktop Entry]\n"
         "Type=Application\n"
         f"Name={_app_name()}\n"
-        "Comment=打开本地 AI 工作台\n"
-        f"{exec_line}\n"
+        "Comment=打开本地 AI 工作台（默认进管理控制台）\n"
+        f"{default_exec}\n"
         f"Icon={icon if icon.exists() else 'web-browser'}\n"
         "Terminal=false\n"
-        "Categories=Network;Utility;\n",
+        "Categories=Network;Utility;\n"
+        + actions,
         "utf-8",
     )
     try:
@@ -216,44 +387,17 @@ def _maybe_trust_linux(path: Path) -> None:
         pass
 
 
-def _write_windows_lnk(path: Path, url: str, root: Path) -> bool:
-    """用 WScript.Shell 建 .lnk；失败则由调用方退回 .url。"""
-    opener = root / "open.ps1"
-    if not opener.exists():
-        return False
-    icon = _ensure_icon()
-    parts = [
-        "$ErrorActionPreference='Stop';",
-        "$ws = New-Object -ComObject WScript.Shell;",
-        f'$s = $ws.CreateShortcut("{path}");',
-        '$s.TargetPath = "$env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";',
-        f'$s.Arguments = \'-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{opener}"\';',
-        f'$s.WorkingDirectory = "{root}";',
-        f'$s.Description = "{_app_name()}";',
-    ]
-    if icon:
-        parts.append(f'$s.IconLocation = "{icon},0";')
-    parts.append("$s.Save()")
-    ps = "".join(parts)
-    try:
-        p = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
-                           capture_output=True, text=True, timeout=25,
-                           creationflags=CREATE_NO_WINDOW)
-        return p.returncode == 0 and path.exists()
-    except Exception:  # noqa: BLE001
-        return False
-
-
 # ------------------------------------------------------------------ 对外
 def _items(urls: dict[str, str]) -> list[dict]:
     if _platform() in ("docker",) or not _supported():
         return [{"key": "app", "name": "工作台", "url": urls["front"], "path": "", "exists": False}]
     target = _target_path()
     if not target.exists() and _platform() == "windows":
+        # 注册表被策略禁用时的 .url 兜底
         alt = _desktop_dir() / f"{_app_name()}.url"
         if alt.exists():
             target = alt
-    return [{"key": "app", "name": "工作台", "url": urls["front"], "path": str(target),
+    return [{"key": "app", "name": "工作台", "url": urls["console"], "path": str(target),
              "exists": target.exists()}]
 
 
@@ -266,15 +410,25 @@ def _supported() -> bool:
     return True
 
 
+def _verbs() -> list[dict]:
+    return [{"key": "front", "label": "打开前台"}, {"key": "console", "label": "打开后台"}]
+
+
 def status() -> dict:
     plat = _platform()
     urls = _urls()
+    lan_ips = _lan_candidates()
     st = {
         "platform": plat,
         "supported": _supported(),
         "desktop": str(_desktop_dir()),
         "urls": urls,
+        "mode": _mode(),
+        "lan_ip": _lan_ip(),
+        "lan_ips": lan_ips,
+        "custom_url": str(load_config().get("shortcut_custom_url") or ""),
         "lan_url": _lan_url(),
+        "verbs": _verbs(),
         "items": _items(urls),
         "message": "",
     }
@@ -286,10 +440,35 @@ def status() -> dict:
         st["message"] = "这台机器没有图形桌面（纯服务器），直接在浏览器里收藏前台和后台地址即可。"
         return st
     if st["items"][0]["exists"]:
-        st["message"] = "桌面上已有工作台图标，双击直接进前台；后台从侧栏「管理控制台」进。"
+        st["message"] = "桌面上已有工作台图标：双击进后台；右键可选「打开前台 / 打开后台」。"
     else:
-        st["message"] = "还没有桌面图标，点一下按钮放一个；双击进前台，后台在侧栏「管理控制台」。"
+        st["message"] = "还没有桌面图标，点一下按钮放一个：双击进后台，右键可切前台。"
     return st
+
+
+def save_settings(mode: str, lan_ip: str = "", custom_url: str = "") -> dict:
+    """保存「打开哪个地址」的偏好；不用重建图标，启动器每次读取。"""
+    if mode not in MODES:
+        raise ValueError("地址类型只能是 local / lan / custom")
+    lan_ip = str(lan_ip or "").strip()
+    if lan_ip:
+        try:
+            ipaddress.ip_address(lan_ip)
+        except ValueError as exc:
+            raise ValueError(f"局域网地址不合法：{lan_ip}") from exc
+    custom_url = str(custom_url or "").strip().rstrip("/")
+    if custom_url and not custom_url.startswith(("http://", "https://")):
+        raise ValueError("自定义地址要以 http:// 或 https:// 开头")
+    if mode == "custom" and not custom_url:
+        raise ValueError("选了自定义地址，需要填一个 http(s) 地址")
+    from ..config import save_config
+
+    cfg = load_config()
+    cfg["shortcut_mode"] = mode
+    cfg["shortcut_lan_ip"] = lan_ip
+    cfg["shortcut_custom_url"] = custom_url
+    save_config(cfg)
+    return status()
 
 
 def create() -> dict:
@@ -313,20 +492,14 @@ def create() -> dict:
     plat = st["platform"]
     try:
         if plat == "windows":
-            if _write_windows_lnk(target, urls["front"], root):
-                old_url = _desktop_dir() / f"{_app_name()}.url"
-                if old_url.exists():
-                    try:
-                        old_url.unlink()
-                    except Exception:  # noqa: BLE001
-                        pass
-            else:
+            _remove_windows_app()
+            if not _write_windows_app(target, urls["console"]):
                 target = _desktop_dir() / f"{_app_name()}.url"
-                _write_url(target, urls["front"])
+                _write_url(target, urls["console"])
         elif plat == "macos":
-            _write_webloc(target, urls["front"])
+            _write_webloc(target, urls["console"])
         else:
-            _write_desktop_entry(target, urls["front"], root)
+            _write_desktop_entry(target, urls["console"], root)
             _maybe_trust_linux(target)
             menu = Path.home() / ".local" / "share" / "applications"
             try:
@@ -339,7 +512,7 @@ def create() -> dict:
         return {**st, "ok": False, "message": f"写入桌面图标失败：{exc}"}
     fresh = status()
     fresh["ok"] = bool(fresh["items"][0]["exists"])
-    fresh["message"] = ("已创建桌面图标，双击进前台，后台从侧栏「管理控制台」进。"
+    fresh["message"] = ("已创建桌面图标：双击进后台，右键可选「打开前台 / 打开后台」。"
                         if fresh["ok"] else "已写入，但没在桌面找到文件，请检查桌面目录权限。")
     fresh["items"][0]["path"] = str(target)
     return fresh
@@ -349,18 +522,18 @@ def remove() -> dict:
     st = status()
     if not st["supported"]:
         return {**st, "ok": False}
-    removed = []
+    if _platform() == "windows":
+        _remove_windows_app()
     for name in _legacy_names() + [_file_name()]:
         p = _desktop_dir() / name
         try:
             if p.exists():
                 p.unlink()
-                removed.append(name)
         except Exception as exc:  # noqa: BLE001
             return {**st, "ok": False, "message": f"删除 {name} 失败：{exc}"}
     fresh = status()
     fresh["ok"] = not fresh["items"][0]["exists"]
-    fresh["message"] = ("已删除桌面图标。" if fresh["ok"] else "图标仍存在，请检查桌面目录权限。")
+    fresh["message"] = "已删除桌面图标。" if fresh["ok"] else "图标仍存在，请检查桌面目录权限。"
     return fresh
 
 
@@ -370,9 +543,14 @@ def ensure_once() -> dict | None:
         cfg = load_config()
         if not cfg.get("desktop_shortcuts", True):
             return None
-        if MARKER.exists():
-            return None
         if DATA_DIR != BASE_DIR / "data":
+            return None
+        if MARKER.exists():
+            # 旧版本用 .lnk / .url，换成新的单图标类型；只迁移一次
+            if _platform() == "windows" and not _target_path().exists():
+                res = create()
+                MARKER.write_text(res.get("message") or "ok", "utf-8")
+                return res
             return None
         res = create()
         MARKER.parent.mkdir(parents=True, exist_ok=True)
