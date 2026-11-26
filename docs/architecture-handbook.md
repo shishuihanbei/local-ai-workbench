@@ -5,7 +5,7 @@
 > 2. 按既有流程改代码、跑测试、发版本；
 > 3. 按第 10–11 章做重构，而不破坏现网。
 >
-> 文档基准：`main` 分支最新提交（2026-11-26），测试 **195 passed**（另有 5 条浏览器交互冒烟，`WORKBENCH_E2E=1` 时单独跑，约 17 秒），API 版本 `0.8.3.0`。凡是数字（端点数、表数、行数）都是实测值，改动后请同步更新本文。
+> 文档基准：`main` 分支最新提交（2026-11-26），测试 **225 passed**（另有 5 条浏览器交互冒烟，`WORKBENCH_E2E=1` 时单独跑，约 17 秒），API 版本 `0.8.5.0`。凡是数字（端点数、表数、行数）都是实测值，改动后请同步更新本文。
 
 ---
 
@@ -348,6 +348,8 @@ POST /api/auth/login
 要点：会话 72 小时（`session_hours`）、令牌 24 小时（`token_hours`）；踢人 = `revoke_session` / `revoke_user_sessions`；Cookie 缺失但 Bearer 存在时不强制 CSRF。
 
 "记住账号"只写 `localStorage`（用户端 `wb_last_username` / `wb_remember_username`，控制台 `wb_console_username` / `wb_console_remember`），不存密码；`showAuth()` / `showLogin()` 先 `reset()` 再回填，所以密码永远是空的。控制台只有在 `setupMode`（库里还没有管理员）才预填 `admin`，并在描述里写明"这是即将创建的第一个管理员"。
+
+控制台与用户端同源（`/` 与 `/console/`），所以**复用同一个 cookie 会话**：`boot.js` 先 `GET /api/auth/me` 判身份，cookie 有效且角色是 admin 就直接进控制台，只在 401 或非管理员时才弹登录页（后者在提示里写明当前账号不是管理员）。只有 localStorage 令牌的旧浏览器仍走 Bearer 分支；`core.js` 的 `api()` 在无令牌时自动带 `X-CSRF-Token`（取 `wb_csrf`），因此登出、保存这类写操作在纯 cookie 会话下也合法。用户端"管理控制台"按钮与账号行并排放在侧栏底部，非管理员不显示。
 
 ### 5.2 聊天流式生成（`chat.py` 的骨架）
 
