@@ -180,6 +180,11 @@ def looks_like_zip(path: Path) -> bool:
     return file_head(path, 4) in ZIP_MAGIC
 
 
+def looks_like_archive(path: Path) -> bool:
+    """zip 或 tgz 都算正经安装包（Linux 的 Ollama 是 .tgz，不能只认 zip magic）。"""
+    return file_head(path, 4) in ZIP_MAGIC or file_head(path, 2) == b"\x1f\x8b"
+
+
 def _is_network_error(exc: BaseException) -> bool:
     import httpx
     return isinstance(exc, (httpx.TimeoutException, httpx.TransportError, httpx.RemoteProtocolError))

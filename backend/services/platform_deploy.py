@@ -569,7 +569,7 @@ async def _install_ollama(key: str, force: bool = False) -> tuple[bool, str]:
             if force:
                 cache.unlink(missing_ok=True)
                 cache.with_name(cache.name + ".part").unlink(missing_ok=True)
-            if cache.exists() and cache.stat().st_size > 0 and not installer.looks_like_zip(cache):
+            if cache.exists() and cache.stat().st_size > 0 and not installer.looks_like_archive(cache):
                 # 上次下回来的不是 zip（网页/错误页），直接丢掉重下
                 cache.unlink(missing_ok=True)
             if cache.exists() and cache.stat().st_size > 0:

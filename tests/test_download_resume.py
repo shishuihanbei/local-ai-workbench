@@ -96,6 +96,19 @@ def test_head_hint_describes_html_page(tmp_path):
     assert not installer.looks_like_zip(bad)
 
 
+def test_looks_like_archive_accepts_zip_and_tgz(tmp_path):
+    z = tmp_path / "a.zip"
+    z.write_bytes(_make_zip(1))
+    assert installer.looks_like_archive(z)
+    g = tmp_path / "b.tgz"
+    g.write_bytes(b"\x1f\x8b\x08\x00" + b"0" * 32)
+    assert installer.looks_like_archive(g)
+    assert not installer.looks_like_zip(g)
+    h = tmp_path / "c.tgz"
+    h.write_text("<html>bad</html>", encoding="utf-8")
+    assert not installer.looks_like_archive(h)
+
+
 def test_check_archive_rejects_html(tmp_path):
     bad = tmp_path / "bad.zip"
     bad.write_text("<html>error</html>", encoding="utf-8")
