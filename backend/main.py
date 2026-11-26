@@ -188,7 +188,7 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("Referrer-Policy", "same-origin")
     response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
     response.headers.setdefault("X-API-Version", "0.8.1")
-    if request.url.path.startswith("/console"):
+    if request.url.path.startswith("/console") or request.url.path == "/api/docs":
         response.headers["Cache-Control"] = "no-store, max-age=0"
     if request.url.path == "/api/docs":
         # Swagger UI 页面自带一小段初始化脚本；只在这一页放行内联脚本。

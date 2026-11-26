@@ -96,6 +96,7 @@ def test_api_docs_use_local_assets(client):
     assert "/api/docs-assets/swagger-ui.css" in body
     assert "cdn.jsdelivr.net" not in body
     assert "script-src 'self' 'unsafe-inline'" in r.headers["content-security-policy"]
+    assert "no-store" in r.headers["cache-control"]
 
     js = client.get("/api/docs-assets/swagger-ui-bundle.js")
     assert js.status_code == 200
