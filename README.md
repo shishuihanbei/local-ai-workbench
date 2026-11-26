@@ -10,6 +10,11 @@
 └── 健康检查      http://127.0.0.1:9100/api/health
 ```
 
+## 文档
+
+- [架构与开发手册](docs/architecture-handbook.md)：现状测绘、开发流程、技术债与重构路线（接手开发先读这篇）
+- [架构速览](docs/architecture.md)
+
 ## 目录
 
 ```

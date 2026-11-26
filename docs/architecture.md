@@ -1,5 +1,8 @@
 # 架构说明
 
+> 本文是速览版。完整的现状测绘、开发流程、技术债清单与重构路线见 [architecture-handbook.md](architecture-handbook.md)。
+
+
 ## 总体
 
 ```text
