@@ -17,7 +17,7 @@ from ..config import DATA_DIR, LOG_DIR, load_config, model_file_path, save_confi
 from ..db import audit, fetch_all, fetch_one
 from ..security import admin_user, any_user_or_none, current_user, user_from_any_token
 from ..services import (autostart, backup, hardware, installer, llama, netinfo, platform_deploy, platforms,
-                            retention, websearch)
+                        retention, shortcuts, websearch)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -429,6 +429,34 @@ async def delete_autostart(user: dict = Depends(admin_user)):
         raise HTTPException(400, res.get("message") or "关闭失败")
     await audit(user, "system.autostart.off", res.get("mechanism", ""), res.get("path", ""))
     return res
+
+
+@router.get("/shortcuts")
+async def get_shortcuts(user: dict = Depends(admin_user)):
+    """桌面快捷方式状态：是否已经放到桌面、指向哪个地址。"""
+    return shortcuts.status()
+
+
+@router.post("/shortcuts")
+async def post_shortcuts(user: dict = Depends(admin_user)):
+    """在当前系统的桌面上创建前台 + 后台两个快捷方式。"""
+    res = await run_in_threadpool(shortcuts.create)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("message") or "创建桌面快捷方式失败")
+    await audit(user, "system.shortcuts.create", res.get("desktop", ""), res.get("urls", {}).get("console", ""))
+    return res
+
+
+@router.delete("/shortcuts")
+async def delete_shortcuts(user: dict = Depends(admin_user)):
+    """删除桌面上的工作台快捷方式（不影响服务运行）。"""
+    res = await run_in_threadpool(shortcuts.remove)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("message") or "删除桌面快捷方式失败")
+    await audit(user, "system.shortcuts.remove", res.get("desktop", ""), "")
+    return res
+
+
 # ------------------------------------------------------------------ 部署检测 / 一键安装
 @router.get("/hardware")
 async def hardware_profile(user: dict = Depends(admin_user)):

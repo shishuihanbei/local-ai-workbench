@@ -53,6 +53,8 @@ PORT=9200 ./start.sh
 
 最省事：打开管理控制台 →「部署」页 → 点 **开启开机自启**。以 root 运行时写系统级 unit，普通用户运行时写用户级 unit 并尝试 `enable-linger`；没有 systemd 时自动退回 `crontab @reboot`。
 
+桌面图标：有图形桌面（GNOME/KDE 等）时，第一次正常启动会在 `~/Desktop` 生成两个 `.desktop` 启动器并同步到应用菜单，双击即可打开。纯服务器没有图形桌面时不写桌面文件，控制台「部署」页会直接给出前台和后台地址，以及局域网访问地址。
+
 手动方式：仓库带 `deploy/local-ai-workbench.service` 模板和安装脚本。
 
 ```bash

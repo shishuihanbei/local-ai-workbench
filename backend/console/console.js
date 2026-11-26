@@ -686,6 +686,81 @@ async function toggleAutostart(on) {
   }
 }
 
+/* ---------------------------------------------------------------- 桌面快捷方式 */
+function renderShortcuts(st) {
+  const badge = $("shortcutsBadge");
+  if (!badge || !st) return;
+  const supported = !!st.supported;
+  const exists = (st.items || []).filter((x) => x.exists).length;
+  badge.className = "badge " + (!supported ? "warn" : exists ? "good" : "ok");
+  badge.textContent = !supported ? (st.platform === "docker" ? "容器内无桌面" : "当前系统不支持")
+    : exists === 2 ? "已创建" : exists ? "缺一个" : "未创建";
+  const urls = st.urls || {};
+  const frontUrl = $("shortcutFrontUrl");
+  const consoleUrl = $("shortcutConsoleUrl");
+  if (frontUrl) frontUrl.textContent = urls.front || "—";
+  if (consoleUrl) consoleUrl.textContent = urls.console || "—";
+  const frontLink = $("shortcutFrontLink");
+  const consoleLink = $("shortcutConsoleLink");
+  if (frontLink && urls.front) frontLink.href = urls.front;
+  if (consoleLink && urls.console) consoleLink.href = urls.console;
+  const lanEl = $("shortcutLan");
+  if (lanEl) {
+    if (st.lan_url) {
+      lanEl.hidden = false;
+      lanEl.textContent = `手机或别的电脑用这个地址：${st.lan_url}`;
+    } else {
+      lanEl.hidden = true;
+    }
+  }
+  const createBtn = $("shortcutsCreate");
+  const removeBtn = $("shortcutsRemove");
+  if (createBtn) createBtn.hidden = !supported;
+  if (removeBtn) removeBtn.hidden = !exists;
+  const detail = $("shortcutsDetail");
+  if (detail) {
+    let text = st.message || "";
+    if (supported && exists && st.desktop) text += ` 桌面目录：${st.desktop}`;
+    detail.textContent = text;
+  }
+}
+
+async function loadShortcuts() {
+  try {
+    renderShortcuts(await api("/api/system/shortcuts"));
+  } catch (e) { /* 接口异常不影响部署页其他内容 */ }
+}
+
+async function createShortcuts() {
+  const btn = $("shortcutsCreate");
+  const label = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "正在创建…"; }
+  try {
+    const st = await api("/api/system/shortcuts", { method: "POST" });
+    renderShortcuts(st);
+    uiToast(st.message || "已创建桌面快捷方式", "good");
+  } catch (e) {
+    uiToast(e.message || "创建失败", "bad");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
+async function removeShortcuts() {
+  const btn = $("shortcutsRemove");
+  const label = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "正在删除…"; }
+  try {
+    const st = await api("/api/system/shortcuts", { method: "DELETE" });
+    renderShortcuts(st);
+    uiToast(st.message || "已删除桌面快捷方式", "good");
+  } catch (e) {
+    uiToast(e.message || "删除失败", "bad");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
 async function loadModelsTab() {
   const models = await api("/api/models");
   renderModels(models);
@@ -695,6 +770,7 @@ async function loadModelsTab() {
 async function loadAll() {
   await loadDeployment();
   await loadAutostart();
+  await loadShortcuts();
   renderModels(S.deployModels);
   clearInterval(S.timer);
   S.timer = setInterval(refreshLight, 3000);
@@ -849,6 +925,8 @@ document.addEventListener("click", async (ev) => {
     }
     else if (t.id === "autostartOn") { await toggleAutostart(true); return; }
     else if (t.id === "autostartOff") { await toggleAutostart(false); return; }
+    else if (t.id === "shortcutsCreate") { await createShortcuts(); return; }
+    else if (t.id === "shortcutsRemove") { await removeShortcuts(); return; }
     else if (t.id === "refreshPlatforms") {
       const btn = t;
       const old = btn.textContent;

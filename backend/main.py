@@ -95,6 +95,13 @@ async def lifespan(app: FastAPI):
         await scheduler.start()
     except Exception:
         log.exception("定时任务调度器启动失败")
+    try:
+        from .services import shortcuts
+        res = shortcuts.ensure_once()
+        if res and res.get("ok"):
+            log.info("已在桌面创建前台/后台快捷方式")
+    except Exception:
+        log.exception("桌面快捷方式创建失败，可在控制台部署页手动创建")
     yield
     try:
         from .services import retention

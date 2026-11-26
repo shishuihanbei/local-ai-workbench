@@ -66,6 +66,8 @@ PORT=9200 ./start.sh
 
 最简单：打开管理控制台 →「部署」页 → 点 **开启开机自启**，会自动写好并加载 ~/Library/LaunchAgents/com.local-ai-workbench.plist；再点一次即可卸载删除。
 
+桌面图标：第一次正常启动会在桌面生成两个 `.webloc`（前台、后台控制台），双击由默认浏览器打开。删掉后可在「部署」页点 **创建桌面快捷方式** 重新生成。
+
 也可以手动安装。仓库自带模板 `deploy/com.local-ai-workbench.plist`。先生成并安装：
 
 ```bash

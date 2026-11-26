@@ -1919,3 +1919,17 @@ body.guide-open { overflow: hidden; }
   .autostart-actions { width: 100%; }
   .autostart-actions .btn { width: 100%; }
 }
+
+/* ---------------------------------------------------------------- 桌面快捷方式 */
+.shortcut-links { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 4px; }
+.shortcut-link {
+  display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%;
+  padding: 6px 10px; border-radius: 8px; border: 1px solid #dbe3f3; background: #fff;
+  color: #34435c; font-size: 12px; text-decoration: none;
+}
+.shortcut-link:hover { border-color: #b9c8ea; color: #1f2a3d; }
+.shortcut-link b { font-weight: 600; color: #1e64d6; word-break: break-all; }
+@media (max-width: 720px) {
+  .shortcut-links { flex-direction: column; }
+  .shortcut-link { width: 100%; }
+}

@@ -70,6 +70,7 @@ DEFAULTS: dict[str, Any] = {
     "token_hours": 24,                     # Bearer 令牌有效期
     "cors_origins": "",                   # 前后端分离：允许的前端来源，逗号分隔；空=仅同源
     "serve_frontend": False,               # True 时后端兼做静态站点（单进程模式）
+    "desktop_shortcuts": True,             # 首次启动在桌面放前台/后台快捷方式
     "allow_register": False,
     "org_name": "本地 AI 工作台",
     "org_short_name": "AI 工作台",
