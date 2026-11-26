@@ -79,7 +79,7 @@ workbench/
 │   ├── routers/           25 个模块，见附录 A
 │   ├── services/          46 个模块，见附录 B
 │   └── console/           管理控制台（index.html + core/models/session/tabs/boot + panels/*.js + console.css，静态挂载）
-├── frontend/              用户端（index.html + app.js + app.css + app.ui.css + 共享页）
+├── frontend/              用户端（index.html + 12 个域脚本 + app.css + app.ui.css + 共享页）
 ├── tests/                 27 个 pytest 文件，195 条用例
 ├── docs/                  本文档与后续设计说明
 ├── data/                  运行期数据（见 2.5）
@@ -246,14 +246,25 @@ data/
 
 | 文件 | 行数 | 职责 |
 |---|---|---|
-| index.html | 826 | 页面骨架、侧栏、聊天区、设置弹层 |
-| app.js | 5190 | 全部交互：认证、会话、流式渲染、附件、知识库、工作台、协作 |
-| app.css | 1438 | 基础样式与主题变量 |
-| app.ui.css | 600 | 新版视觉层（弹窗、卡片、忙碌提示等） |
+| index.html | 766 | 页面骨架、侧栏、聊天区、设置弹层 |
+| core.js | 300 | 状态 `S`、`$ / $$ / esc / api / toast` 等基础工具、主题偏好 |
+| auth.js | 412 | 登录 / 注册 / 初始化、启动引导 `boot` |
+| models.js | 281 | 模型下拉、模型切换与加载保护 |
+| skills.js | 260 | 技能、前台功能开关与图标 |
+| attachments.js | 93 | 附件上传、OCR 状态与预览 |
+| conversations.js | 211 | 会话列表、新建 / 重命名 / 删除 |
+| messages.js | 274 | 消息渲染、Markdown、推理折叠、文件卡片 |
+| generation.js | 248 | 流式生成、停止 / 重生成、排队与错误 |
+| settings.js | 999 | 设置：账号、知识库、资料库、选择器、API、对话、数据、输入布局 |
+| events.js | 370 | 全局事件分发 `bindEvents` |
+| collab.js | 265 | 伙伴、小队、公告、工单、对话分享 |
+| workbench.js | 1197 | 工作台模板、定时任务、抽屉；末尾 `bindEvents()` / `boot()` |
+| app.css | 1406 | 基础样式与主题变量 |
+| app.ui.css | 578 | 新版视觉层 |
 | share.html / share.js | 38 / 19 | 会话分享只读页 |
-| workbench-share.html / .js | 58 / 92 | 工作台模板分享页 |
+| workbench-share.html / .js | 53 / 92 | 工作台模板分享页 |
 
-代码组织是**函数分区**而非模块：每个 `/* --- 分组 --- */` 注释下的函数属于同一域（基础、主题、登录、模型、技能、附件、会话、消息渲染、生成、设置、协作、工作台、事件）。新增功能应放进对应分组，不要另起体系。
+代码组织按域分文件（0.8.3.0+）：原 `app.js` 的 IIFE 包裹已去掉，12 个脚本共享同一全局词法作用域，按 `core → auth → … → workbench` 顺序加载；新增功能放进对应域文件，不要另起体系。
 
 ### 4.2 管理控制台 `backend/console/`
 
@@ -533,7 +544,7 @@ stop.ps1 → git pull → start.ps1 -NoBrowser → /api/health → 打开控制�
 | 编号 | 问题 | 证据 | 影响 | 建议 |
 |---|---|---|---|---|
 | T1 | 控制台单文件巨石 | 原 `console.js` 9031 行 / 403 个顶层函数，`index.html` 2780 行 | 改一个按钮要通读大文件；合并冲突高发 | **已解决（0.8.3.0+）**：按页签拆成 13 个文件（core / models / session / tabs / boot + `panels/*.js` 8 个），最大 `panels/data.js` 1692 行；只切行区间不改代码，31 个页签逐一打开无报错（见 4.2） |
-| T2 | 用户端同样巨石 | `app.js` 4889 行，`index.html` 755 行 | 同上 | 按域拆 ES Module，先拆"设置""协作"两个低耦合域 |
+| T2 | 用户端同样巨石 | 原 `app.js` 5190 行，`index.html` 766 行 | 同上 | **已解决（0.8.3.0+）**：拆成 12 个域文件，最大 `workbench.js` 1197 行；IIFE 包裹去掉后共享全局词法环境，`bindEvents()` / `boot()` 留在最后一个文件（见 4.1） |
 | T3 | 单写者数据层 | 共享连接 + `asyncio.Lock`，SQLite WAL | 无法多实例；长事务会阻塞所有请求 | 抽 repository，迁移 PG 后去掉全局锁 |
 | T4 | 业务规则下沉到路由 | `chat.py` 770 行内直接拼 SQL、判配额 | 换库/换表结构要改 HTTP 层 | 引入 `application/` 用例层 |
 | T5 | 权限语义分散 | `role` + `admin_roles.permissions` + `allowed_models` + 4 个 kb/library 开关 | 新增权限容易漏配，行为难预测 | 收敛成单一 `Permission` 枚举 + 一张 `user_permissions` |
@@ -649,7 +660,7 @@ app/
 
 ### 阶段 2：前端拆分（5–7 天，可与阶段 3 并行）
 - T1 控制台按 tab 拆文件，先拆 4 个纯展示页（概览、审计、公告、工单），验证 registry 机制；
-- T2 用户端拆 `settings` 与 `collab` 两域；
+- T2 用户端拆分：**已完成**，12 个域文件、最大 1197 行；
 - 验收：**已完成（0.8.3.0+）**：拆成 13 个文件、最大 1692 行；31 个页签逐一打开、说明与刷新按钮实测无 JS 报错；仍待补 T9 的 Playwright 交互冒烟。
 - 回滚：保留旧文件一个版本周期，用特性开关切回。
 
@@ -684,14 +695,14 @@ app/
 4. `backend/db.py`（`SCHEMA` 开头 + `apply_migrations` 尾部，知道表怎么来的）
 5. `backend/routers/chat.py`（最复杂链路；只看 `event_stream` 与 `_build_context`）
 6. `backend/services/routing.py` + `llama.py`（模型怎么被选中和执行）
-7. `frontend/app.js` 顶部 200 行（状态对象与 API 封装）+ `backend/console/index.html` 的 tab 列表
+7. `frontend/core.js`（状态对象 `S` 与 API 封装）+ `backend/console/index.html` 的 tab 列表
 
 ### 11.2 高频任务速查
 
 | 我想… | 去哪 |
 |---|---|
 | 加一个配置项 | `config.py` DEFAULTS + 控制台对应页 + `docs` 附录 D |
-| 加一个模型分类 | `services/models` 数据（52 条内置清单） + `frontend/app.js` 分类渲染 |
+| 加一个模型分类 | `services/models` 数据（52 条内置清单） + `frontend/models.js` 分类渲染 |
 | 让某模型对某用户可见 | `users.allowed_models`，控制台「用户」页 |
 | 调并发上限 | `config.chat_max_active` / `chat_rpm`，或环境变量 |
 | 查某次调用为什么慢 | `requests` 表的 `queue_ms / ttft_ms / total_ms` + `spans` |

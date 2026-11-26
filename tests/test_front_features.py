@@ -102,7 +102,7 @@ def test_front_frontend_mount_points_cover_all_features():
     root = Path(__file__).resolve().parents[1]
     html = (root / "frontend" / "index.html").read_text(encoding="utf-8")
     css = (root / "frontend" / "app.css").read_text(encoding="utf-8")
-    app = (root / "frontend" / "app.js").read_text(encoding="utf-8")
+    app = "".join(p.read_text(encoding="utf-8") for p in sorted((root / "frontend").glob("*.js")))
     expected = {"skills", "web", "docgen", "attach", "agent", "library", "kb", "memory",
                 "workbench", "schedule", "files", "collab", "desk", "api_access", "data_export"}
     mounted = set(re.findall(r'data-front="([^"]+)"', html))

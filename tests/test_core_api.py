@@ -412,7 +412,7 @@ def test_frontend_model_dropdown_contract():
     """模型下拉只能展示已下载模型，且不再出现加载状态后缀。"""
     from pathlib import Path
 
-    source = (Path(__file__).parents[1] / "frontend" / "app.js").read_text(encoding="utf-8")
+    source = "".join(p.read_text(encoding="utf-8") for p in sorted((Path(__file__).parents[1] / "frontend").glob("*.js")))
     assert "m.downloaded !== false" in source
     assert "modelState(" not in source
     assert "未加载" not in source
@@ -436,7 +436,7 @@ def test_frontend_web_toggle_contract():
 
     root = Path(__file__).parents[1]
     html = (root / "frontend" / "index.html").read_text(encoding="utf-8")
-    js = (root / "frontend" / "app.js").read_text(encoding="utf-8")
+    js = "".join(p.read_text(encoding="utf-8") for p in sorted((root / "frontend").glob("*.js")))
     assert 'id="webBtn"' in html
     assert "联网" in html
     assert "web: !!web" in js
@@ -449,7 +449,7 @@ def test_frontend_chat_deep_link_contract():
     from pathlib import Path
 
     root = Path(__file__).parents[1]
-    js = (root / "frontend" / "app.js").read_text(encoding="utf-8")
+    js = "".join(p.read_text(encoding="utf-8") for p in sorted((root / "frontend").glob("*.js")))
     html = (root / "frontend" / "index.html").read_text(encoding="utf-8")
     main = (root / "backend" / "main.py").read_text(encoding="utf-8")
     assert "chatIdFromUrl" in js
@@ -457,7 +457,7 @@ def test_frontend_chat_deep_link_contract():
     assert 'history.pushState' in js
     assert 'addEventListener("popstate"' in js
     assert 'href="/app.css' in html
-    assert 'src="/app.js' in html
+    assert 'src="/core.js' in html
     assert '@app.get("/chat/{conversation_id}")' in main
 
 

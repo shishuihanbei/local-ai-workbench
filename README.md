@@ -42,8 +42,8 @@ workbench/
 │   └── console/             管理控制台
 ├── frontend/
 │   ├── index.html           用户端：登录/注册/对话/设置
-│   ├── app.css
-│   ├── app.js
+│   ├── core/auth/models/skills/…/*.js  12 个域脚本（见手册 4.1）
+│   ├── app.css / app.ui.css
 │   └── favicon.svg
 ├── data/
 │   ├── workbench.db         账号、会话、消息、调用记录、API Key、第三方身份
