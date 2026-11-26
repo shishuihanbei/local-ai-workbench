@@ -79,3 +79,22 @@ def test_autostart_unsupported_in_docker(client, admin_token, tmp_path, monkeypa
     assert st["supported"] is False
     on = client.post("/api/system/autostart", headers=auth(admin_token))
     assert on.status_code == 400
+
+def test_linux_unit_has_frontend_and_tolerant_paths():
+    """systemd 单元必须带前台开关，且模型目录不存在也能起来（- 前缀）。"""
+    from backend.services import autostart
+    unit = autostart._linux_unit(__import__("pathlib").Path("/opt/wb"), 9100, True)
+    assert "WORKBENCH_SERVE_FRONTEND=1" in unit
+    assert "--port 9100" in unit
+    assert "ReadWritePaths=-" in unit
+    assert "WantedBy=multi-user.target" in unit
+
+
+def test_macos_plist_fields(tmp_path, monkeypatch):
+    from backend.services import autostart
+    monkeypatch.setattr(autostart, "DATA_DIR", tmp_path)
+    plist = autostart._mac_plist(__import__("pathlib").Path("/opt/wb"), 9100)
+    assert plist["RunAtLoad"] is True and plist["KeepAlive"] is True
+    assert plist["EnvironmentVariables"]["WORKBENCH_SERVE_FRONTEND"] == "1"
+    assert plist["ProgramArguments"][-2:] == ["--port", "9100"]
+    assert plist["StandardOutPath"].endswith("launchd.out")
