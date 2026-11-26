@@ -11,7 +11,7 @@ def auth(token: str) -> dict[str, str]:
     return {"Authorization": "Bearer " + token}
 
 
-def _fake(tmp_path, monkeypatch, platform: str = "win32", docker: bool = False, **cfg_extra):
+def _fake(tmp_path, monkeypatch, platform: str = "win32", docker: bool = False, drop_mode: bool = False, **cfg_extra):
     from backend.services import shortcuts
 
     desktop = tmp_path / "Desktop"
@@ -28,6 +28,9 @@ def _fake(tmp_path, monkeypatch, platform: str = "win32", docker: bool = False, 
     cfg = {"org_short_name": "AI 工作台", "port": 9123, "frontend_url": "",
            "desktop_shortcuts": True, "brand_primary": "#4f6ef7",
            "shortcut_mode": "local", "shortcut_lan_ip": "", "shortcut_custom_url": ""}
+    if drop_mode:
+        cfg.pop("shortcut_mode")
+        cfg.pop("shortcut_lan_ip")
     cfg.update(cfg_extra)
     monkeypatch.setattr(shortcuts, "load_config", lambda: dict(cfg))
     monkeypatch.setattr(shortcuts, "_lan_candidates",
@@ -100,6 +103,19 @@ def test_macos_webloc_opens_console(client, admin_token, tmp_path, monkeypatch):
     with open(desktop / "AI 工作台.webloc", "rb") as fh:
         data = plistlib.load(fh)
     assert data["URL"] == "http://127.0.0.1:9123/console/"
+
+
+def test_default_mode_is_lan(client, admin_token, tmp_path, monkeypatch):
+    """全新安装默认走局域网；没指定网卡时自动探测本机 LAN IP。"""
+    from backend.config import DEFAULTS
+
+    assert DEFAULTS["shortcut_mode"] == "lan"
+    shortcuts, _ = _fake(tmp_path, monkeypatch, drop_mode=True,
+                         shortcut_mode="lan", shortcut_lan_ip="")
+    monkeypatch.setattr(shortcuts, "_lan_ip", lambda: "192.168.5.38")
+    st = client.get("/api/system/shortcuts", headers=auth(admin_token)).json()
+    assert st["mode"] == "lan"
+    assert st["urls"]["console"] == "http://192.168.5.38:9123/console/"
 
 
 def test_lan_mode_uses_chosen_ip(client, admin_token, tmp_path, monkeypatch):
