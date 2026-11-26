@@ -87,6 +87,24 @@ def test_restore_accepts_own_backup(client, admin_token):
     assert client.get("/api/health").status_code == 200
 
 
+def test_api_docs_use_local_assets(client):
+    """接口文档必须自带 Swagger UI 资源，断网也能打开，不能依赖 CDN。"""
+    r = client.get("/api/docs")
+    assert r.status_code == 200
+    body = r.text
+    assert "/api/docs-assets/swagger-ui-bundle.js" in body
+    assert "/api/docs-assets/swagger-ui.css" in body
+    assert "cdn.jsdelivr.net" not in body
+    assert "script-src 'self' 'unsafe-inline'" in r.headers["content-security-policy"]
+
+    js = client.get("/api/docs-assets/swagger-ui-bundle.js")
+    assert js.status_code == 200
+    assert len(js.content) > 500_000
+    css = client.get("/api/docs-assets/swagger-ui.css")
+    assert css.status_code == 200
+    assert len(css.content) > 50_000
+
+
 def test_storage_paths_default_to_program_root(client, admin_token, tmp_path):
     from backend import config as cfgmod
 

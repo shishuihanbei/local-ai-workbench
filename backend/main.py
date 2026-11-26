@@ -9,9 +9,11 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -139,8 +141,24 @@ async def lifespan(app: FastAPI):
         pass
 
 
-app = FastAPI(title="本地 AI 工作台 API", version="0.8.1", docs_url="/api/docs",
-              openapi_url="/api/openapi.json", lifespan=lifespan)
+app = FastAPI(title="本地 AI 工作台 API", version="0.8.1", docs_url=None,
+              redoc_url=None, openapi_url="/api/openapi.json", lifespan=lifespan)
+
+DOCS_DIR = Path(__file__).resolve().parent / "static" / "swagger"
+if DOCS_DIR.is_dir():
+    app.mount("/api/docs-assets", StaticFiles(directory=DOCS_DIR), name="api-docs-assets")
+
+
+@app.get("/api/docs", include_in_schema=False)
+async def api_docs():
+    """离线可用的接口文档：Swagger UI 资源随程序一起分发，不依赖 CDN。"""
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} - Swagger UI",
+        swagger_js_url="/api/docs-assets/swagger-ui-bundle.js",
+        swagger_css_url="/api/docs-assets/swagger-ui.css",
+        swagger_favicon_url="/api/docs-assets/favicon.png",
+    )
 
 
 def _origins() -> list[str]:
@@ -172,7 +190,13 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("X-API-Version", "0.8.1")
     if request.url.path.startswith("/console"):
         response.headers["Cache-Control"] = "no-store, max-age=0"
-    if not request.url.path.startswith("/api/tts/audio"):
+    if request.url.path == "/api/docs":
+        # Swagger UI 页面自带一小段初始化脚本；只在这一页放行内联脚本。
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
+            "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+            "connect-src 'self'; font-src 'self' data:; frame-ancestors 'none'")
+    elif not request.url.path.startswith("/api/tts/audio"):
         response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
