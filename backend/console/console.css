@@ -290,6 +290,7 @@ input, select, textarea { color: var(--text); }
 .platform-actions .btn { flex: none; }
 .platform-progress { margin-top: 8px; }
 .platform-progress .bar { height: 6px; }
+.platform-progress .btn { margin-top: 6px; }
 .progress-text.good { color: #07835f; }
 .progress-text.bad { color: #c24141; }
 .network-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }

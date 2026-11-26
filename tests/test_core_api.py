@@ -594,6 +594,15 @@ def test_platform_progress_rejects_unknown(client, admin_token):
     assert r.status_code == 404
 
 
+def test_platform_cancel_endpoint(client, admin_token):
+    r = client.post("/api/system/local-platforms/nope/cancel", headers=auth(admin_token))
+    assert r.status_code == 404
+    r = client.post("/api/system/local-platforms/ollama/cancel", headers=auth(admin_token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is False and "没有在部署" in body["msg"]
+
+
 def test_migration_archive_accepts_legacy_get(client, admin_token):    # 旧版控制台缓存用 GET，新版用 POST；两种都要能生成迁移包。
     r = client.get("/api/system/migration", headers=auth(admin_token))
     assert r.status_code == 200, r.text

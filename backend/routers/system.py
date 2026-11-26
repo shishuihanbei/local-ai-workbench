@@ -648,6 +648,16 @@ async def save_local_platforms(body: LocalPlatformsBody, user: dict = Depends(ad
             "server": srv}
 
 
+@router.post("/local-platforms/{key}/cancel")
+async def cancel_platform(key: str, user: dict = Depends(admin_user)):
+    """取消正在进行的部署：下载停下保留 .part，安装子进程直接结束。"""
+    if key not in platforms.PLATFORMS:
+        raise HTTPException(404, "未知平台")
+    result = platform_deploy.request_cancel(key)
+    await audit(user, "system.platform.cancel", key, detail=result.get("msg", ""))
+    return result
+
+
 @router.post("/local-platforms/{key}/deploy")
 async def deploy_platform(key: str, force: bool = Query(False), endpoint: str = Query(""),
                           user: dict = Depends(admin_user)):

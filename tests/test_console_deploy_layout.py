@@ -61,3 +61,13 @@ def test_platform_card_explains_how_to_use_after_deploy():
     assert "已接入用户端" in js
     css = _read("backend/console/console.css")
     assert ".platform-usage" in css and ".usage-code" in css
+
+
+def test_deploying_card_offers_cancel():
+    js = _read("backend/console/models.js")
+    assert 'data-pcancel=' in js
+    assert "取消部署" in js
+    assert "cancelled" in js
+    sess = _read("backend/console/session.js")
+    assert "/cancel" in sess
+    assert "取消中…" in sess

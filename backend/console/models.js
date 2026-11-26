@@ -313,6 +313,7 @@ function renderPlatforms(data) {
       <div class="platform-progress" data-platform-progress="${esc(p.key)}" hidden>
         <div class="bar"><i data-platform-bar="${esc(p.key)}"></i></div>
         <div class="progress-text" data-platform-text="${esc(p.key)}"></div>
+        <button class="btn small ghost" data-pcancel="${esc(p.key)}" hidden>取消部署</button>
       </div>
     </div>`;
   }).join("");
@@ -356,6 +357,14 @@ function renderPlatformProgress(key, st) {
     text.textContent = `${st.step || ""} ${st.msg || ""}${skipped}`.trim();
     text.className = "progress-text " + (st.ok === false ? "bad" : st.ok === true ? "good" : "");
   }
+  const cancel = document.querySelector(`[data-pcancel="${key}"]`);
+  if (cancel) {
+    cancel.hidden = !st.running;
+    if (st.running) {
+      cancel.disabled = !!st.cancel;
+      cancel.textContent = st.cancel ? "取消中…" : "取消部署";
+    }
+  }
 }
 
 async function pollPlatform(key) {
@@ -376,8 +385,9 @@ async function pollPlatform(key) {
     S.platformPolling[key] = false;
   }
   if (last) {
-    uiToast(`${last.ok ? "部署完成" : "部署失败"}：${last.msg || ""}`);
-    if (last.ok && !S.platformDirty) {
+    if (last.cancelled) uiToast(`已取消部署：${last.msg || ""}`);
+    else uiToast(`${last.ok ? "部署完成" : "部署失败"}：${last.msg || ""}`);
+    if ((last.ok || last.cancelled) && !S.platformDirty) {
       try {
         const d = await api("/api/system/local-deploy?scan=1");
         S.deployData = { ...(S.deployData || {}), ...d };

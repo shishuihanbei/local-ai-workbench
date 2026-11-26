@@ -332,6 +332,21 @@ document.addEventListener("click", async (ev) => {
       }
       return;
     }
+    else if (t.dataset.pcancel) {
+      const key = t.dataset.pcancel;
+      t.disabled = true;
+      t.textContent = "取消中…";
+      try {
+        const r = await api(`/api/system/local-platforms/${encodeURIComponent(key)}/cancel`, { method: "POST" });
+        uiToast(r.msg || (r.ok ? "已请求取消" : "没有正在进行的部署"));
+        if (!S.platformPolling[key]) pollPlatform(key);
+      } catch (e) {
+        uiToast(e.message);
+        t.disabled = false;
+        t.textContent = "取消部署";
+      }
+      return;
+    }
     else if (t.dataset.pdeploy) {
       const key = t.dataset.pdeploy;
       const p = (S.platforms || []).find((x) => x.key === key) || {};

@@ -45,7 +45,12 @@ VLLM_PORT = 8000
 
 def _blank() -> dict[str, Any]:
     return {"running": False, "ok": None, "skipped": False, "pct": 0, "step": "",
-            "msg": "尚未部署", "error": "", "started_at": 0, "finished_at": 0}
+            "msg": "尚未部署", "error": "", "started_at": 0, "finished_at": 0,
+            "cancel": False, "cancelled": False}
+
+
+class DeployCancelled(Exception):
+    """用户点了“取消部署”。"""
 
 
 def _state(key: str) -> dict[str, Any]:
@@ -58,6 +63,8 @@ def _set(key: str, **kw) -> None:
 
 def get_state(key: str) -> dict[str, Any]:
     st = dict(_state(key))
+    st.pop("task", None)
+    st.pop("proc", None)
     if key == "llama.cpp":
         inst = installer.STATE
         if inst.get("running") or (st.get("running") and inst.get("finished_at", 0) >= st.get("started_at", 0)):
@@ -71,6 +78,28 @@ def get_state(key: str) -> dict[str, Any]:
 
 def is_running(key: str) -> bool:
     return bool(_state(key).get("running"))
+
+
+def request_cancel(key: str) -> dict[str, Any]:
+    """让正在跑的部署尽快停下：下载在下一个分片停、子进程直接结束。
+
+    已下载的 .part 和已解压的程序都不动，属于“暂停”而不是回滚。
+    """
+    st = _state(key)
+    if not st.get("running"):
+        return {"ok": False, "msg": "这个平台当前没有在部署", "state": get_state(key)}
+    st["cancel"] = True
+    _set(key, step="取消中", msg="正在停止部署，已下载的部分会保留")
+    if key == "llama.cpp":
+        installer.request_cancel()
+    proc = st.get("proc")
+    if proc is not None:
+        try:
+            if proc.poll() is None:
+                proc.kill()
+        except Exception:
+            pass
+    return {"ok": True, "msg": "已请求取消，正在停止", "state": get_state(key)}
 
 
 def _which(*names: str) -> str:
@@ -500,21 +529,45 @@ def _tail(text: str, limit: int = 300) -> str:
     return lines[-1][:limit] if lines else ""
 
 
-def _run(key: str, cmd: list[str], timeout: int = 1800, env: dict | None = None) -> None:
-    """在线程里跑安装命令，避免卡住事件循环。"""
-    _set(key, msg=_tail(" ".join(cmd), 200))
+def _run(key: str, cmd: list[str], timeout: int = 1800, env: dict | None = None,
+         idle_label: str = "正在执行安装命令") -> None:
+    """在线程里跑安装命令，避免卡住事件循环；可被“取消部署”打断。"""
+    _set(key, msg=idle_label)
+    proc = None
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                                errors="replace", timeout=timeout, env=env,
-                                creationflags=CREATE_NO_WINDOW)
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"安装超时（{timeout // 60} 分钟）") from exc
-    if result.returncode != 0:
-        tail = _tail((result.stderr or "") + "\n" + (result.stdout or ""))
-        raise RuntimeError(f"安装命令失败（退出码 {result.returncode}）：{tail or '没有输出'}")
-    tail = _tail(result.stdout or "")
-    if tail:
-        _set(key, msg=tail)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, encoding="utf-8", errors="replace",
+                                env=env, creationflags=CREATE_NO_WINDOW)
+        _set(key, proc=proc)
+        deadline = time.time() + timeout
+        while proc.poll() is None:
+            if _state(key).get("cancel"):
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                raise DeployCancelled("部署已取消")
+            if time.time() > deadline:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                raise RuntimeError(f"安装超时（{timeout // 60} 分钟）")
+            time.sleep(0.4)
+        try:
+            out = (proc.stdout.read() if proc.stdout else "") or ""
+        except Exception:
+            out = ""
+        if _state(key).get("cancel"):
+            raise DeployCancelled("部署已取消")
+        if proc.returncode != 0:
+            tail = _tail(out)
+            raise RuntimeError(f"安装命令失败（退出码 {proc.returncode}）：{tail or '没有输出'}")
+        tail = _tail(out)
+        if tail:
+            _set(key, msg=tail)
+    finally:
+        _set(key, proc=None)
 
 
 async def _install_winget(key: str, package_id: str) -> bool:
@@ -534,7 +587,8 @@ async def _download_file(key: str, url: str, dest: Path) -> None:
     def progress(done: int, total: int, note: str) -> None:
         pct = 8 + round(min(done / total, 0.99) * 45, 1) if total else 15
         _set(key, pct=pct, msg=f"{note}下载 {done/2**20:.0f}/{total/2**20:.0f} MB" if total else note)
-    await installer._download(url, dest, on_progress=progress)
+    await installer._download(url, dest, on_progress=progress,
+                              should_cancel=lambda: bool(_state(key).get("cancel")))
 
 
 async def _install_ollama(key: str, force: bool = False) -> tuple[bool, str]:
@@ -580,6 +634,8 @@ async def _install_ollama(key: str, force: bool = False) -> tuple[bool, str]:
         _set(key, pct=70, step="解压", msg=f"解压到 {target}")
         await asyncio.to_thread(_extract_archive, archive, target)
     except Exception as exc:
+        if isinstance(exc, (DeployCancelled, installer.DownloadCancelled)):
+            raise
         # 便携版失败时，先退系统里已有的 Ollama，再退 data/installers 里的 OllamaSetup.exe
         sys_exe = _system_ollama()
         if sys_exe:
@@ -905,6 +961,8 @@ async def _deploy_llama(key: str, force: bool = False) -> tuple[bool, str, bool]
     else:
         _set(key, pct=1, step="安装", msg="开始下载 llama.cpp")
         result = await installer.install_llama()
+        if result.get("cancelled"):
+            raise DeployCancelled(result.get("msg") or "部署已取消")
         if not result.get("ok"):
             return False, result.get("msg") or "llama.cpp 安装失败", False
     srv = await llama.server.status()
@@ -1249,7 +1307,7 @@ async def deploy(key: str, force: bool = False, endpoint: str = "") -> dict:
         endpoint = endpoint[:-3]
     now = time.time()
     STATE[key] = {**_blank(), "running": True, "pct": 3, "step": "检测",
-                  "msg": "正在检查本机是否已安装", "started_at": now}
+                  "msg": "正在检查本机是否已安装", "started_at": now, "task": asyncio.current_task()}
     try:
         if key == "llama.cpp":
             ok, msg, skipped = await _deploy_llama(key, force)
@@ -1267,6 +1325,11 @@ async def deploy(key: str, force: bool = False, endpoint: str = "") -> dict:
              pct=100 if ok else (get_state(key).get("pct") or 3), step="完成" if ok else "失败",
              msg=msg, error="" if ok else msg, finished_at=time.time())
         return {"ok": ok, "msg": msg, "skipped": skipped, "state": get_state(key)}
+    except (DeployCancelled, installer.DownloadCancelled) as exc:
+        _set(key, running=False, ok=False, cancelled=True, skipped=False,
+             step="已取消", msg=f"{exc}（已下载的部分保留，再点一键部署会接着用）",
+             error="", finished_at=time.time(), cancel=False, proc=None)
+        return {"ok": False, "cancelled": True, "msg": str(exc), "state": get_state(key)}
     except Exception as exc:
         _set(key, running=False, ok=False, step="失败", msg=f"部署失败：{exc}",
              error=str(exc), finished_at=time.time())

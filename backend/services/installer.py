@@ -190,7 +190,12 @@ def _is_network_error(exc: BaseException) -> bool:
     return isinstance(exc, (httpx.TimeoutException, httpx.TransportError, httpx.RemoteProtocolError))
 
 
-async def _download(url: str, dest: Path, on_progress: Callable[[int, int, str], None] | None = None) -> str:
+class DownloadCancelled(Exception):
+    """用户点了“取消”：保留已下部分，不再重试。"""
+
+
+async def _download(url: str, dest: Path, on_progress: Callable[[int, int, str], None] | None = None,
+                    should_cancel: Callable[[], bool] | None = None) -> str:
     """下载安装包：先写 .part，断了就续传，成功才改名为正式文件。
 
     - 大包（Ollama 1.7 GB）在网络抖动时不会再从头开始，也不用担心下回来半截；
@@ -203,9 +208,15 @@ async def _download(url: str, dest: Path, on_progress: Callable[[int, int, str],
     part = dest.with_name(dest.name + ".part")
     part.parent.mkdir(parents=True, exist_ok=True)
     attempts = 4
+
+    def stopped() -> bool:
+        return bool(STATE.get("cancel")) or bool(should_cancel and should_cancel())
+
     for idx, candidate in enumerate(url_candidates(url)):
         label = "直连" if idx == 0 else "加速镜像"
         for attempt in range(1, attempts + 1):
+            if stopped():
+                raise DownloadCancelled("部署已取消，已下载的部分已保留，再点一键部署会接着下")
             have = part.stat().st_size if part.exists() else 0
             headers = {"User-Agent": "workbench-installer"}
             if have:
@@ -229,6 +240,8 @@ async def _download(url: str, dest: Path, on_progress: Callable[[int, int, str],
                         done = have
                         with open(part, mode) as f:
                             async for chunk in r.aiter_bytes(1024 * 512):
+                                if stopped():
+                                    raise DownloadCancelled("部署已取消，已下载的部分已保留，再点一键部署会接着下")
                                 f.write(chunk)
                                 done += len(chunk)
                                 if on_progress:
@@ -244,6 +257,8 @@ async def _download(url: str, dest: Path, on_progress: Callable[[int, int, str],
                 _set(sha256=digest, bytes=got)
                 return digest
             except Exception as exc:
+                if isinstance(exc, DownloadCancelled):
+                    raise
                 size = part.stat().st_size if part.exists() else 0
                 errors.append(f"{label}第 {attempt} 次失败：{type(exc).__name__}")
                 if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None \
@@ -345,6 +360,15 @@ def _install_archive(archive: Path) -> dict:
     return {"ok": True, "path": str(exe), "tag": "本地安装包", "sha256": "", "asset": archive.name}
 
 
+def request_cancel() -> bool:
+    """取消正在进行的 llama.cpp 安装：下载会在下一个分片停下，已下部分保留。"""
+    if not STATE.get("running"):
+        return False
+    STATE["cancel"] = True
+    _set(step="取消中", msg="正在停止安装，已下载的部分会保留")
+    return True
+
+
 async def install_llama() -> dict:
     if STATE.get("running"):
         return {"ok": False, "msg": "安装已在进行中"}
@@ -352,7 +376,7 @@ async def install_llama() -> dict:
     if system not in ("windows", "linux"):
         return {"ok": False, "msg": f"当前系统 {system} 暂不支持一键安装，请手动安装 llama.cpp"}
     _set(running=True, ok=None, pct=1, step="检测", msg="获取最新版本信息",
-         error="", started_at=time.time(), finished_at=0, sha256="", bytes=0)
+         error="", started_at=time.time(), finished_at=0, sha256="", bytes=0, cancel=False)
     local_error = ""
     archive = local_archive()
     if archive:
@@ -380,6 +404,10 @@ async def install_llama() -> dict:
         return {"ok": True, "path": str(exe), "tag": rel.get("tag_name", ""),
                 "sha256": digest, "asset": asset["name"]}
     except Exception as e:
+        if isinstance(e, DownloadCancelled):
+            _set(running=False, ok=False, step="已取消", msg=str(e), error=str(e),
+                 finished_at=time.time(), cancel=False)
+            return {"ok": False, "cancelled": True, "msg": str(e)}
         detail = f"{local_error}；联网安装也失败：{e}" if local_error else str(e)
         _set(running=False, ok=False, step="失败", msg=f"安装失败：{detail}", error=detail,
              finished_at=time.time())
