@@ -129,6 +129,11 @@ def _base_url() -> str:
     return f"http://127.0.0.1:{port}"
 
 
+def base_url() -> str:
+    """图标/顶栏「前端页面」共同使用的根地址：本机、局域网或自定义。"""
+    return _base_url()
+
+
 def _urls() -> dict[str, str]:
     base = _base_url()
     return {"front": f"{base}/", "console": f"{base}/console/"}

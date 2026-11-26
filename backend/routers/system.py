@@ -6,6 +6,7 @@ import shutil
 import socket
 import sys
 import time
+from urllib.parse import urlsplit
 
 import psutil
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
@@ -163,7 +164,14 @@ async def get_settings(request: Request, user: dict = Depends(admin_user)):
     configured = str(cfg.get("frontend_url") or "").strip()
     auto = bool(cfg.get("serve_frontend", False) and origin)
     if auto:
-        data["frontend_url"] = f"{origin}/"
+        # 本机打开控制台时，前端按钮默认走局域网（跟随桌面图标地址偏好）；
+        # 已经通过局域网/域名访问的，就沿用当前访问地址。
+        host = (urlsplit(origin).hostname or "").lower()
+        if host in ("127.0.0.1", "localhost", "::1", ""):
+            base = shortcuts.base_url().rstrip("/") or origin
+        else:
+            base = origin
+        data["frontend_url"] = f"{base}/"
     data["frontend_url_auto"] = auto
     data["frontend_url_configured"] = configured
     data["request_origin"] = origin

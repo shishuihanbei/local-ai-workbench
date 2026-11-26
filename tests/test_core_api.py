@@ -92,17 +92,31 @@ def test_frontend_settings_follow_access_host(client, admin_token):
 
     cfg = cfgmod.load_config()
     old = cfg.get("serve_frontend")
+    old_port = cfg.get("port")
     cfg["serve_frontend"] = True
+    cfg["port"] = 9100
+    cfg["shortcut_mode"] = "lan"
+    cfg["shortcut_lan_ip"] = "192.168.5.38"
     cfgmod.save_config(cfg)
     try:
         r = client.get("/api/system/settings", headers={
             **auth(admin_token),
-            "Host": "192.168.1.38:9100",
+            "Host": "192.168.5.38:9100",
         })
         assert r.status_code == 200, r.text
         body = r.json()
-        assert body["frontend_url"] == "http://192.168.1.38:9100/"
+        assert body["frontend_url"] == "http://192.168.5.38:9100/"
         assert body["frontend_url_auto"] is True
+
+        r = client.get("/api/system/settings", headers={
+            **auth(admin_token),
+            "Host": "127.0.0.1:9100",
+        })
+        assert r.status_code == 200, r.text
+        body = r.json()
+        # 本机打开控制台时，前端按钮默认走局域网（跟随桌面图标地址偏好）
+        assert body["frontend_url"] == "http://192.168.5.38:9100/"
+        assert body["request_origin"] == "http://127.0.0.1:9100"
 
         r = client.get("/api/system/settings", headers={
             **auth(admin_token),
@@ -115,6 +129,8 @@ def test_frontend_settings_follow_access_host(client, admin_token):
     finally:
         cfg = cfgmod.load_config()
         cfg["serve_frontend"] = bool(old)
+        if old_port is not None:
+            cfg["port"] = old_port
         cfgmod.save_config(cfg)
 
 
@@ -233,7 +249,7 @@ def test_lan_api_address_is_not_loopback(monkeypatch):
     from backend.services import netinfo
 
     monkeypatch.setattr(netinfo, "load_config", lambda: {"port": 9100})
-    monkeypatch.setattr(netinfo, "lan_ip", lambda: "192.168.1.38")
+    monkeypatch.setattr(netinfo, "lan_ip", lambda: "192.168.5.38")
     scope = {
         "type": "http", "method": "GET", "scheme": "http", "path": "/api/api-keys/context",
         "query_string": b"", "headers": [(b"host", b"127.0.0.1:9100")],
@@ -242,7 +258,7 @@ def test_lan_api_address_is_not_loopback(monkeypatch):
     data = netinfo.detect(Request(scope))
     assert data["scope"] == "local"
     assert data["local_base"] == "http://127.0.0.1:9100/v1"
-    assert data["lan_base"] == "http://192.168.1.38:9100/v1"
+    assert data["lan_base"] == "http://192.168.5.38:9100/v1"
 
 
 

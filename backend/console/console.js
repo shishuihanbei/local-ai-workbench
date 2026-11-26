@@ -3644,7 +3644,10 @@ function updateFrontendUI() {
   }
 }
 
-function openFrontendPage() {
+async function openFrontendPage() {
+  if (!S.frontendUrl) {
+    try { await loadFrontendSettings(); } catch (e) { /* 打开失败再提示 */ }
+  }
   if (!S.frontendUrl) {
     if (S.tab !== "network") switchTab("network");
     if ($("frontendHint")) $("frontendHint").textContent = "当前访问地址不可用，请检查控制台访问地址。";
