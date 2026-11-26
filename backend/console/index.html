@@ -1411,7 +1411,8 @@
         表示平台支持文本加图片等多模态输入；“多模态（部分）”只对特定模型生效；“多模态看服务”由自定义服务自身决定。
       </div>
       <div class="hint" id="networkHint" style="margin:0 0 10px">网络：GitHub 直连失败时会自动改用加速镜像。</div>
-      <div class="hint" style="margin:0 0 10px">GitHub 完全打不开时：把 llama.cpp 官方压缩包（含 llama-server.exe）或 OllamaSetup.exe 放进 data\installers，再点“一键部署”，会自动使用本地安装包。</div>
+      <div class="hint" style="margin:0 0 10px">平台部署下来的程序统一放在 <code>platforms\</code> 下（llama.cpp、ollama 各一个子目录，模型也放在各自目录里），整个文件夹可以整体搬走。GitHub/Ollama 官网都打不开时：把 llama.cpp 官方压缩包（含 llama-server.exe）或 <code>ollama-windows-amd64.zip</code> 放进 <code>data\installers</code>，再点“一键部署”，会自动使用本地包。</div>
+      <div class="hint" style="margin:0 0 12px">模型怎么被工作台用到：下拉里的模型来自<b>勾选并连通</b>的平台。Ollama 用 <code>ollama pull</code> 拉完模型，回本页点“更新”，再保存选择，用户端「模型」下拉就会出现它，<b>不需要先装 llama.cpp</b>。llama.cpp 只是其中一种引擎，不装它也能只用 Ollama / vLLM / LM Studio。</div>
       <div class="platform-grid" id="platformCards"></div>
       <div class="platform-foot">
         <div class="model-note" id="platformNote">正在读取平台状态…</div>
@@ -1493,14 +1494,15 @@
             <summary><b>方案 A · Ollama（Windows 最省事，推荐新手）</b><span>约 5 分钟</span></summary>
             <div class="custom-source-body">
               <ol class="tutorial-steps">
-                <li>打开 Ollama 官网下载 <code>OllamaSetup.exe</code>，双击安装。装完托盘会出现 Ollama 图标，服务默认监听 <code>11434</code> 端口。</li>
-                <li>打开 PowerShell，拉一个模型。内存 8GB 建议先试小模型；16GB 以上再试 7B。</li>
+                <li>回到部署页，在 Ollama 卡片点“一键部署”。工作台会把便携版解压到 <code>platforms\ollama</code>，模型也放 <code>platforms\ollama\models</code>，不写系统目录。</li>
+                <li>打开 PowerShell 拉一个模型。内存 8GB 建议先试小模型；16GB 以上再试 7B。拉完回「模型」页刷新即可在下拉里选到。</li>
                 <li>浏览器打开 <code>http://127.0.0.1:11434/v1/models</code>，能看到一串 JSON 就说明 OpenAI 兼容接口已经就绪。</li>
-                <li>回部署页，“自定义 OpenAI 兼容”填 <code>http://127.0.0.1:11434</code>，点“测试连接”。</li>
+                <li>想自己装：Ollama 官网下载 <code>OllamaSetup.exe</code> 双击安装即可，工作台会自动识别并接管它的模型列表。</li>
               </ol>
-              <pre class="guide-code">ollama pull qwen2.5:7b
+              <pre class="guide-code"># 工作台拉起的 Ollama 已经把模型目录指向 platforms\ollama\models
+ollama pull qwen2.5:7b
 # 内存较小就用：ollama pull qwen2.5:1.5b</pre>
-              <p class="hint">如果提示 <code>ollama serve</code> 已在运行，不用管；说明后台服务已经启动了。</p>
+              <p class="hint">用自己终端拉的模型要落在同一目录，先设 <code>$env:OLLAMA_MODELS="D:\AI\workbench\platforms\ollama\models"</code> 再 pull；已经拉在 <code>~\.ollama\models</code> 的，可在 Ollama 卡片点“迁移旧模型”搬过去。</p>
             </div>
           </details>
 
@@ -2940,9 +2942,10 @@
     <h2 id="loginTitle">登录控制台</h2>
     <p class="desc" id="loginDesc">使用工作台管理员账号</p>
     <form id="loginForm">
-      <label>用户名<input id="u" value="admin" autocomplete="username"></label>
+      <label>用户名<input id="u" autocomplete="username" placeholder="管理员用户名（首次进入时填 admin）"></label>
       <label>密码<input id="p" type="password" autocomplete="current-password"></label>
       <label id="confirmRow" hidden>确认密码<input id="p2" type="password" autocomplete="new-password"></label>
+      <label class="remember-line" id="rememberRow"><input type="checkbox" id="rememberUser" checked>记住用户名</label>
       <div class="alert" id="alert"></div>
       <button class="btn primary wide" id="loginBtn" type="submit">进入</button>
     </form>

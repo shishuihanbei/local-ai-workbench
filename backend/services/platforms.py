@@ -32,7 +32,7 @@ PLATFORMS: dict[str, dict[str, Any]] = {
         "multimodal": "多模态（部分）",
         "model_types": ["文字 / 对话", "代码 / 编程", "多模态 / 视觉（部分）", "向量 / 检索（部分）"],
         "homepage": "https://ollama.com/download",
-        "note": "支持一键安装/启动；本机已安装会自动跳过下载。适合用 ollama pull 管理模型",
+        "note": "便携版装在 platforms/ollama（程序+模型同目录，可整体搬走）；pull 下来的模型会出现在「模型」页下拉，不需要 llama.cpp",
     },
     "vllm": {
         "name": "vLLM",

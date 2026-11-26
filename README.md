@@ -62,7 +62,7 @@ workbench/
 └── README.md
 ```
 
-模型放在程序根目录的 `models`，下载的部署平台统一放在 `platforms`（llama.cpp 在 `platforms/llama.cpp`）；安装后自动创建，可在控制台「部署 · 存储位置」改成别的目录，不写死绝对路径。
+模型放在程序根目录的 `models`，下载的部署平台统一放在 `platforms`：`platforms/llama.cpp`、`platforms/ollama`（Ollama 的模型也在 `platforms/ollama/models`），下载的安装包缓存在 `platforms/.downloads`；安装后自动创建，可在控制台「部署 · 存储位置」改成别的目录，不写死绝对路径。整个 `platforms` 文件夹可以整体搬走。
 
 ## 快速开始
 
@@ -238,7 +238,7 @@ docker run -d --name local-ai-workbench -p 9100:9100 \
 - **登录方式**：QQ、微信、手机号、邮箱的独立开关与配置；手机号内置阿里云/腾讯云/云片/自定义 HTTP，邮箱内置 QQ/163/Gmail/阿里云/腾讯云/SendGrid/Mailgun/Outlook/Amazon SES/Postmark/Resend/自定义 SMTP；带接入教程和发送测试。
 - **API**：判断本机/内网/外网，生成和撤销用户 API Key，展示 curl / Python 示例。
 - **网络**：保存本地前端地址并一键跳转；内网穿透默认免费临时地址，目标可选管理控制台、模型 API 或本地前端；启动/停止、下载组件、查看日志；固定域名放在进阶区。启动失败时页面直接显示原因，Cloudflare 返回 `429` 会提示临时隧道被限流，预检失败会提示 7844/UDP/TCP 被拦，避免只显示“未开启”。
-- **部署**：检测硬件、llama.cpp 安装状态；每张平台卡有独立的“一键部署”按钮，勾选只负责启用平台。已安装的平台自动跳过下载，直接启动或连接；未安装则自动安装。llama.cpp 装完会用已下载的 GGUF 自动启动，没有模型时引导去「模型」页。GitHub 打不开时自动在直连和 gh-proxy / ghfast / ghproxy 加速之间回退，并优先使用诊断出的最快线路；右上角“网络诊断”并行检查 GitHub、PyPI、Ollama 和 LM Studio 官网；GitHub 完全不可用时，可把 llama.cpp 压缩包或 OllamaSetup.exe 放进 `data/installers/` 作为离线包。底部“部署已选平台”可批量执行，“保存选择”只保存勾选、地址和 GitHub 加速设置。关闭本地部署后，用户端不再出现本地模型，API 也会拒绝本地模型调用，已配置第三方供应商时自动改用云端。已勾选且健康的外部平台会自动读取 `/v1/models`，把可用模型直接加到用户端模型下拉；切换这类模型不会启动 llama.cpp，聊天请求直接路由到对应平台服务。
+- **部署**：检测硬件、llama.cpp 安装状态；每张平台卡有独立的“一键部署”按钮，勾选只负责启用平台。已安装的平台自动跳过下载，直接启动或连接；未安装则自动安装。**Ollama 装的是便携版**：下载官方 `ollama-windows-amd64.zip`（Linux `ollama-linux-amd64.tgz`，macOS `Ollama-darwin.zip`）解压到 `platforms/ollama`，启动时用 `OLLAMA_MODELS=platforms/ollama/models` 把模型也收在同一目录，不写系统目录、不注册服务，新的机器上不会再出现“装到 `%LOCALAPPDATA%\Programs\Ollama` 找不着”的情况。卡片上直接列出**程序目录 / 模型目录**并支持一键复制；已经用官方安装包装在系统目录的，卡片会多一个“装到工作台目录”（`?force=1` 重装便携版）和一个“迁移旧模型”（把 `~/.ollama/models` 的 blobs/manifests 搬进 `platforms/ollama/models`，同盘是秒级改名）。llama.cpp 装完会用已下载的 GGUF 自动启动，没有模型时引导去「模型」页。GitHub 打不开时自动在直连和 gh-proxy / ghfast / ghproxy 加速之间回退，并优先使用诊断出的最快线路；右上角“网络诊断”并行检查 GitHub、PyPI、Ollama 和 LM Studio 官网；完全离线时，可把 llama.cpp 压缩包或 `ollama-windows-amd64.zip` 放进 `data/installers/` 作为离线包。底部“部署已选平台”可批量执行，“保存选择”只保存勾选、地址和 GitHub 加速设置。关闭本地部署后，用户端不再出现本地模型，API 也会拒绝本地模型调用，已配置第三方供应商时自动改用云端。已勾选且健康的外部平台会自动读取 `/v1/models`，把可用模型直接加到用户端模型下拉；切换这类模型不会启动 llama.cpp，聊天请求直接路由到对应平台服务。
 
 - **模型**：模型清单按用途分为文字/对话、代码/编程、多模态/视觉、OCR/文档、绘画/图像、视频生成、语音/音频、向量/检索、重排序九类，内置 52 个常见模型条目；带分类筛选、下载、加载；下载过程在状态列显示实时进度，按钮同时变为「下载中…」并禁用（不再出现“点了没反应”），进程重启等原因中断后显示「已中断 X%」并可点「继续下载」接着 `.part` 续传；页头“更新”会把内置清单里缺失的模型补回来，并发现模型目录里尚未登记的新 GGUF；已有模型和用户修改不会被覆盖。文字和代码 GGUF 可直接下载；多模态、OCR、绘画、视频、语音、向量等条目显示“推荐引擎”，并实时检测本机是否安装 Transformers、vLLM、Diffusers、PaddleOCR、FunASR 等独立引擎。引擎未安装时下载按钮置灰；装好后可一键把 Hugging Face 整仓库拉到 `<模型目录>/<模型 key>`，下载完成后才会标记为已下载。页底「独立引擎清单」逐个给出官网、下载地址、安装命令，能 pip 安装的直接提供“一键安装”并在卡片内显示进度；vLLM 在 Windows 上标记为需 WSL2/Linux，ComfyUI、Fish Speech、Ollama 标记为手动部署。默认走 `hf-mirror.com`，可用 `hf_endpoint` / `WORKBENCH_HF_ENDPOINT` 改回官方站，gated 模型可用 `hf_token` / `HF_TOKEN`。注意：独立引擎下载完成只代表模型文件已就位；Transformers/Diffusers/ComfyUI 等仓库模型不会被工作台自动启动成聊天服务，需要先由对应运行时或外部 OpenAI 兼容服务加载并暴露 `/v1/models`，健康平台上的模型才会自动进入前端切换列表。本机 llama.cpp 一次只加载一个权重，切换必须重启进程；所以别人正在生成回答时切换会先弹窗，可选择“等它说完”（结束后自动切换，期间对方不被打断）、“强制切换”（立即中断）或取消。`/api/models/in-use` 返回当前被谁、被几个会话占用。
 - **并发与数据库**：聊天生成受全局并发上限约束（默认同时 4 路），超出先排队等待、排队超时返回 429 提示；并按账号做每分钟发送条数限流（默认 30 条/分钟），避免单人刷屏挤占名额。数据库访问层常驻一条共享 SQLite 连接、由异步锁串行化，不再每个请求新建连接和后台线程。并发与限流可用配置 `chat_max_active`、`chat_rpm`，或环境变量 `WORKBENCH_CHAT_MAX_ACTIVE`、`WORKBENCH_CHAT_RPM` 调整。
@@ -273,7 +273,21 @@ docker run -d --name local-ai-workbench -p 9100:9100 \
 | llama.cpp server | `http://127.0.0.1:8080` | `http://127.0.0.1:8080/v1` | 启动时加载的模型名 |
 | 第三方 API | 服务商文档的根地址 | 文档里的 Base URL，通常以 `/v1` 结尾 | `deepseek-chat` |
 
-本机最省事的安装方式是 Ollama：安装 `OllamaSetup.exe` 后执行 `ollama pull qwen2.5:7b`，浏览器打开 `http://127.0.0.1:11434/v1/models` 能看到 JSON 即可。LM Studio 则是下载模型后在 Developer 页点 `Start Server`，默认端口 `1234`。vLLM 适合 Linux + NVIDIA 或 WSL2，执行 `vllm serve Qwen/Qwen2.5-7B-Instruct --host 0.0.0.0 --port 8000`。
+本机最省事的安装方式是 Ollama：在部署页点 Ollama 卡的“一键部署”，程序会解压到 `platforms/ollama`，再执行 `ollama pull qwen2.5:7b`（工作台拉起的服务已经把 `OLLAMA_MODELS` 指向 `platforms/ollama/models`），浏览器打开 `http://127.0.0.1:11434/v1/models` 能看到 JSON 即可。LM Studio 则是下载模型后在 Developer 页点 `Start Server`，默认端口 `1234`。vLLM 适合 Linux + NVIDIA 或 WSL2，执行 `vllm serve Qwen/Qwen2.5-7B-Instruct --host 0.0.0.0 --port 8000`。
+
+### 模型到底怎么进到工作台下拉里
+
+这是新手最容易卡住的一环，逻辑其实只有一句：**下拉里的模型 = 勾选并连通的平台 `/v1/models` 里返回的 id**。
+
+- **不需要先装 llama.cpp**。llama.cpp 只是四种本地引擎之一；只装 Ollama（或只用 LM Studio、vLLM、自定义 OpenAI 兼容）也能正常聊天，模型照样出现在下拉里。
+- **Ollama 的模型在哪**：便携版在 `platforms/ollama/models`（`blobs/` 放权重，`manifests/` 放名字标签）。用自己终端 `ollama pull` 时如果要用同一目录，先设环境变量 `OLLAMA_MODELS=<程序目录>\platforms\ollama\models`；已经在 `~/.ollama/models` 的，在部署卡片点“迁移旧模型”搬过来。
+- **怎么让它出现**：`ollama pull` 完成后，部署页点“更新”→ 勾选 Ollama → “保存选择”。之后用户端「模型」下拉就会列出这些模型，聊天请求直接发给 `http://127.0.0.1:11434/v1`（工作台会自动补 `/v1`），不走 llama.cpp。
+- **看不到模型时排查**：① Ollama 卡片是不是“已连接”；② 地址是不是根地址（`http://127.0.0.1:11434`，不要带 `/v1`）；③ 没有勾选并保存；④ 浏览器直接打开 `http://127.0.0.1:11434/v1/models` 看有没有返回模型。
+- **切换模型**：选 Ollama 的模型不会启动/重启 llama.cpp，也不会弹出“等它说完”，因为推理在 Ollama 进程里跑，工作台只做路由。
+
+### 登录页记住账号
+
+用户端和控制台登录页都有“记住账号/记住用户名”勾选框，默认勾上，只把用户名存在浏览器 `localStorage`（`wb_last_username`、`wb_console_username`），不存密码；取消勾选会清掉本机记录。控制台只有在**首次初始化**（数据库里还没有管理员）时才预填 `admin` 并明确提示“这就是即将创建的第一个管理员，可以改名”，初始化之后再打开登录页输入框是空的、只回填上次登录的用户名。
 
 最常见的错误是 Base URL 少写或多写 `/v1`：部署页填根地址，供应商页填带 `/v1` 的 Base URL。远程服务器还要把 `127.0.0.1` 换成对方 IP，并让服务监听 `0.0.0.0`、放行防火墙端口。控制台部署页内已提供完整的六步接入、四种安装方案和错误排查表。
 
@@ -358,6 +372,8 @@ curl "http://127.0.0.1:9100/v1/chat/completions" \
 | `models_dir` | 模型目录，默认程序根目录下的 `models`，可在控制台「部署 · 存储位置」修改 |
 | `platforms_dir` | 下载的部署平台目录，默认程序根目录下的 `platforms` |
 | `llama_dir` | llama.cpp 目录，默认 `<platforms_dir>/llama.cpp` |
+| `WORKBENCH_OLLAMA_DIR`（环境变量） | Ollama 便携版目录，默认 `<platforms_dir>/ollama`；不写进 config.json，始终跟着 `platforms_dir` 走 |
+| `WORKBENCH_OLLAMA_MODELS`（环境变量） | Ollama 模型目录，默认 `<ollama_dir>/models`，启动时作为 `OLLAMA_MODELS` 传给 `ollama serve` |
 | `hf_endpoint` | Hugging Face 下载站，默认 `https://hf-mirror.com`；想用官方站就改成 `https://huggingface.co` |
 | `hf_token` | 可选，下载需要授权的 gated 模型时填 Hugging Face 令牌 |
 | `serve_frontend` | 是否由本进程同时托管用户端（单进程模式），默认 `false`；启动脚本和 docker-compose 会把它打开，前后端分离部署时保持关闭 |
@@ -477,7 +493,8 @@ curl "http://127.0.0.1:9100/v1/chat/completions" \
 | POST | `/api/my/memory/clear` | 清空自己的记忆 |
 | GET/POST | `/api/system/local-deploy` | 读取 / 开启 / 关闭本地部署总开关与平台选择（管理员） |
 | PUT | `/api/system/local-platforms` | 只保存部署平台、外部平台地址和 GitHub 加速设置（管理员） |
-| POST | `/api/system/local-platforms/{key}/deploy` | 单平台一键部署；已安装自动跳过，`?force=1` 可强制重装（管理员） |
+| POST | `/api/system/local-platforms/{key}/deploy` | 单平台一键部署；已安装自动跳过，`?force=1` 可强制重装（Ollama 用 `force=1` 表示“装到工作台目录”）。返回项里带 `install_path`、`models_path`、`managed`、`legacy_models_path`、`can_manage`（管理员） |
+| POST | `/api/system/local-platforms/ollama/adopt-models` | 把系统目录 `~/.ollama/models` 下的 blobs/manifests 搬到 `platforms/ollama/models`（先停工作台拉起的 ollama，搬完自动重启） |
 | GET | `/api/system/local-platforms/{key}/progress` | 单平台部署进度（管理员） |
 | GET | `/api/system/network-check` | 并行检查 GitHub 直连/加速、PyPI 和官网（管理员） |
 | GET | `/api/admin/overview` | 统计概览 |
@@ -553,7 +570,7 @@ curl "http://127.0.0.1:9100/v1/chat/completions" \
 - 用户端所有变更请求携带 `X-CSRF-Token`；`wb_session` 为 HttpOnly。
 - 第三方 OAuth 使用签名 `state`，10 分钟有效且同一次授权不能重放；QQ/微信密钥只从 `data/auth_providers.json` 或环境变量读取，不返回前端。
 - 迁移时 `data/secret.key` 必须随 `workbench.db` 和 `data/auth_providers.json` 一起复制，否则已加密的供应商 Key、登录方式密钥无法解密。
-- 一键部署 llama.cpp 会校验下载长度、压缩包完整性、包内路径，并记录 SHA-256；GitHub 直连失败时自动换加速线路，也支持 `data/installers/` 下的离线压缩包；模型上传限制 8GB（可用 `WORKBENCH_MAX_MODEL_UPLOAD_GB` 调整），上传前和落盘后都检查磁盘余量。
+- 一键部署 llama.cpp / Ollama 都会校验下载长度、压缩包完整性、包内路径（拒绝 `..` 越界），llama.cpp 额外记录 SHA-256；GitHub / Ollama 官网直连失败时自动换加速线路，也支持 `data/installers/` 下的离线压缩包；Ollama 便携包比较大（约 1.7 GB），下载慢时可先手动下好放进 `data/installers/`。模型上传限制 8GB（可用 `WORKBENCH_MAX_MODEL_UPLOAD_GB` 调整），上传前和落盘后都检查磁盘余量。
 
 ## 备份、迁移与恢复
 

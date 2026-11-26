@@ -2,6 +2,25 @@
 /* 管理控制台（后端自带）：硬件探测、平台部署、模型清单与建议 */
 const $ = (id) => document.getElementById(id);
 const TOKEN_KEY = "wb_token";
+const REMEMBER_USER_KEY = "wb_console_username";
+const REMEMBER_FLAG_KEY = "wb_console_remember";
+
+function rememberedConsoleUser() {
+  try {
+    if (localStorage.getItem(REMEMBER_FLAG_KEY) === "0") return "";
+    return localStorage.getItem(REMEMBER_USER_KEY) || "";
+  } catch (e) { return ""; }
+}
+
+function saveConsoleUser(name) {
+  try {
+    const box = $("rememberUser");
+    const on = !box || box.checked;
+    localStorage.setItem(REMEMBER_FLAG_KEY, on ? "1" : "0");
+    if (on) localStorage.setItem(REMEMBER_USER_KEY, name);
+    else localStorage.removeItem(REMEMBER_USER_KEY);
+  } catch (e) { /* 隐私模式忽略 */ }
+}
 const S = { hw: null, models: null, install: null, timer: null, installing: false, localBusy: false, localEnabled: true, modelCategory: "all", cluster: null, clusterEditNode: 0, clusterEditPool: 0, clusterMembers: [] };
 const MODEL_CATEGORY_ORDER = [
   ["text", "文字 / 对话"], ["code", "代码 / 编程"], ["vision", "多模态 / 视觉"],
@@ -126,11 +145,19 @@ function showLogin(setup = false) {
   if (pageGuideBtn) pageGuideBtn.hidden = true;
   closePageGuide(false);
   $("loginTitle").textContent = setup ? "初始化管理员" : "登录控制台";
-  $("loginDesc").textContent = setup ? "首次启动，请设置管理员账号与密码" : "使用工作台管理员账号";
+  $("loginDesc").textContent = setup
+    ? "这台机器还没有管理员账号：下面预填的 admin 就是即将创建的第一个管理员，可以改成别的用户名"
+    : "使用工作台管理员账号";
   $("confirmRow").hidden = !setup;
+  const rememberRow = $("rememberRow");
+  if (rememberRow) rememberRow.hidden = setup;
   $("loginBtn").textContent = setup ? "初始化并进入" : "进入";
   $("alert").textContent = "";
-  if (setup) $("u").value = "admin";
+  const rememberBox = $("rememberUser");
+  if (rememberBox) {
+    try { rememberBox.checked = localStorage.getItem(REMEMBER_FLAG_KEY) !== "0"; } catch (e) { rememberBox.checked = true; }
+  }
+  $("u").value = setup ? "admin" : rememberedConsoleUser();
   $("p").value = "";
   $("p2").value = "";
   $("p").focus();

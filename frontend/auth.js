@@ -154,6 +154,8 @@
     tabs.hidden = isSetup;
     $$(".auth-tab").forEach((b) => b.classList.toggle("active", b.dataset.authmode === mode));
     $("#authConfirmWrap").hidden = !(isSetup || isRegister);
+    const rememberWrap = $("#authRememberWrap");
+    if (rememberWrap) rememberWrap.hidden = isSetup;
     $("#authError").hidden = true;
     $("#authPass").value = "";
     $("#authConfirm").value = "";
@@ -212,6 +214,7 @@
     $("#otpError").hidden = true;
     $("#authForm").reset();
     $("#otpForm").reset();
+    restoreRememberedUsername();
     S.authMethod = "password";
     setAuthMode(S.initialized ? "login" : "setup");
   }
@@ -250,6 +253,36 @@
     }
   }
 
+  const REMEMBER_USER_KEY = "wb_last_username";
+  const REMEMBER_FLAG_KEY = "wb_remember_username";
+
+  function rememberedUsername() {
+    try {
+      if (localStorage.getItem(REMEMBER_FLAG_KEY) === "0") return "";
+      return localStorage.getItem(REMEMBER_USER_KEY) || "";
+    } catch (e) { return ""; }
+  }
+
+  function saveRememberedUsername(name) {
+    try {
+      const box = $("#authRemember");
+      const on = !box || box.checked;
+      localStorage.setItem(REMEMBER_FLAG_KEY, on ? "1" : "0");
+      if (on) localStorage.setItem(REMEMBER_USER_KEY, name);
+      else localStorage.removeItem(REMEMBER_USER_KEY);
+    } catch (e) { /* 隐私模式忽略 */ }
+  }
+
+  function restoreRememberedUsername() {
+    const box = $("#authRemember");
+    if (box) {
+      try { box.checked = localStorage.getItem(REMEMBER_FLAG_KEY) !== "0"; } catch (e) { box.checked = true; }
+    }
+    const name = rememberedUsername();
+    const input = $("#authUser");
+    if (name && input && !input.value) input.value = name;
+  }
+
   async function submitAuth(ev) {
     ev.preventDefault();
     const username = $("#authUser").value.trim();
@@ -278,6 +311,7 @@
         noAuth: true,
       });
       S.user = data.user;
+      saveRememberedUsername(username);
       await enterApp();
     } catch (e) {
       authError(e.message);

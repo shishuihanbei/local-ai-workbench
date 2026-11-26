@@ -241,14 +241,26 @@ function renderPlatforms(data) {
     const mm = p.multimodal ? `<span class="badge mm">${esc(p.multimodal)}</span>` : "";
     const types = (p.model_types || []).map((x) => `<span class="chip">${esc(x)}</span>`).join("");
     const installedText = p.installed
-      ? `已安装${p.version ? " · " + p.version : ""}${p.install_path ? " · " + p.install_path : ""}`
+      ? `已安装${p.version ? " · " + p.version : ""}`
       : (p.installable ? "尚未安装，可一键部署" : "需要手动安装");
+    const paths = [];
+    if (p.installed && p.install_path) paths.push(["程序", p.install_path]);
+    if (p.installed && p.models_path) paths.push(["模型", p.models_path]);
+    if (!p.installed && p.target_path) paths.push(["将装到", p.target_path]);
+    if (p.legacy_models_path) paths.push(["旧模型", p.legacy_models_path]);
+    const pathRows = paths.map(([k, v]) => `<div class="platform-path"><span>${esc(k)}</span><code title="${esc(v)}">${esc(v)}</code><button class="link" data-copy-path="${esc(v)}">复制</button></div>`).join("");
     const label = p.action_label || "一键部署";
     const disabled = p.deployable === false || (p.install && p.install.running);
+    const manage = p.can_manage && !(p.install && p.install.running)
+      ? `<button class="btn small ghost" data-pdeploy-manage="${esc(p.key)}">装到工作台目录</button>`
+      : "";
+    const adopt = (p.managed && p.legacy_models_path) && !(p.install && p.install.running)
+      ? `<button class="btn small ghost" data-adopt-models="${esc(p.key)}">迁移旧模型</button>`
+      : "";
     const action = p.key === "custom"
       ? `<button class="btn small" data-pdeploy="${esc(p.key)}">${esc(label)}</button>
          <button class="btn small ghost" data-custom-guide>接入说明</button>`
-      : `<button class="btn small ${p.action === "install" ? "primary" : ""}" data-pdeploy="${esc(p.key)}" ${disabled ? "disabled" : ""}>${esc(label)}</button>`;
+      : `<button class="btn small ${p.action === "install" ? "primary" : ""}" data-pdeploy="${esc(p.key)}" ${disabled ? "disabled" : ""}>${esc(label)}</button>${manage}${adopt}`;
     return `<div class="platform-card ${on ? "on" : ""}">
       <div class="platform-head">
         <label><input type="checkbox" data-platform="${esc(p.key)}" ${on ? "checked" : ""}><b>${esc(p.name)}</b>${mm}</label>
@@ -257,6 +269,7 @@ function renderPlatforms(data) {
       <div class="platform-note">${esc(p.note || "")}</div>
       <div class="platform-detail">${esc(p.detail || "")} ${link}</div>
       <div class="platform-installed">${esc(installedText)}</div>
+      ${pathRows ? `<div class="platform-paths">${pathRows}</div>` : ""}
       <div class="platform-suit"><span class="badge ${esc(fit.level || "unknown")}">${esc(fit.label || "需确认")}</span><span>${esc(fit.text || "")}</span></div>
       <div class="platform-types">${types || `<span class="chip">未标注</span>`}</div>
       ${url}

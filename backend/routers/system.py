@@ -642,6 +642,15 @@ async def deploy_platform(key: str, force: bool = Query(False), endpoint: str = 
             "skipped": True if (platform_deploy.detect(key).get("installed") and not force) else False}
 
 
+@router.post("/local-platforms/ollama/adopt-models")
+async def adopt_ollama_models(user: dict = Depends(admin_user)):
+    """把系统目录（~/.ollama/models）里的模型搬到 platforms/ollama/models。"""
+    result = await platform_deploy.adopt_ollama_models()
+    await audit(user, "system.platform.ollama.adopt", detail=str(result.get("msg", ""))[:300])
+    platform_models.invalidate()
+    return result
+
+
 @router.get("/local-platforms/{key}/progress")
 async def platform_progress(key: str, user: dict = Depends(admin_user)):
     if key not in platforms.PLATFORMS:

@@ -80,7 +80,7 @@ workbench/
 │   ├── services/          46 个模块，见附录 B
 │   └── console/           管理控制台（index.html + core/models/session/tabs/boot + panels/*.js + console.css，静态挂载）
 ├── frontend/              用户端（index.html + 12 个域脚本 + app.css + app.ui.css + 共享页）
-├── tests/                 29 个文件（含 conftest）：28 个测试模块，195 条用例 + 5 条浏览器冒烟（默认跳过）
+├── tests/                 31 个文件（含 conftest）：30 个测试模块，219 条用例 + 5 条浏览器冒烟（默认跳过）
 ├── docs/                  本文档与后续设计说明
 ├── data/                  运行期数据（见 2.5）
 ├── models/                本地 GGUF
@@ -141,10 +141,23 @@ data/
 ├── backups/                     整机备份、迁移包
 ├── database_backups/            数据库中心快照
 ├── migrations/                  整机迁移包
-├── installers/                  离线安装包（llama.cpp / Ollama）
+├── installers/                  离线安装包（llama.cpp zip / ollama-windows-amd64.zip）
 ├── shares/                      网站分享包
 └── logs/                        app.log、llama.log
 ```
+
+程序侧（`BASE_DIR` 下，可整体搬走）：
+
+```
+platforms/
+├── llama.cpp/                   llama.cpp 程序（llama-server）
+├── ollama/                      Ollama 便携版（ollama.exe + lib/），模型在 ollama/models
+└── .downloads/                  平台安装包缓存（ollama-windows-amd64.zip 等）
+```
+
+- `platforms_dir` 可从控制台「部署 · 存储位置」改；`ollama_dir` 不落配置，始终 = `<platforms_dir>/ollama`，只有 `WORKBENCH_OLLAMA_DIR` 能覆盖。
+- Ollama 启动时显式传 `OLLAMA_MODELS=<ollama_dir>/models`，所以 `ollama pull` 的模型不会跑去 `%USERPROFILE%\.ollama`。
+- - 系统目录里已装 Ollama 的机器：`detect()` 返回 `managed=false`，卡片显示系统程序目录与它真实的模型目录，并提供「装到工作台目录」（`deploy?force=1` 走便携版）和「迁移旧模型」（`/api/system/local-platforms/ollama/adopt-models`）。
 
 ---
 
@@ -209,7 +222,7 @@ data/
 
 ### 3.9 运维与部署
 
-- 硬件探测、llama.cpp / 平台一键部署、独立引擎 pip 安装与进度。
+- 硬件探测、llama.cpp / 平台一键部署、独立引擎 pip 安装与进度。平台程序与模型统一落在 `platforms/`：llama.cpp → `platforms/llama.cpp`；Ollama 便携版 → `platforms/ollama`（模型 `platforms/ollama/models`，下载缓存 `platforms/.downloads`）；已系统安装的 Ollama 可一键接管或迁移模型。
 - 开机自启、桌面快捷方式、内网穿透（cloudflared）、网络诊断。
 - 备份/恢复/整机迁移/网站分享包、日志查看、系统设置。
 - 实现：`services/installer.py`、`platform_deploy.py`、`engine_install.py`、`autostart.py`、`shortcuts.py`、`tunnel.py`、`backup.py`、`netinfo.py`，路由 `system.py`（43 个端点，最大的运维入口）。
@@ -333,6 +346,8 @@ POST /api/auth/login
 ```
 
 要点：会话 72 小时（`session_hours`）、令牌 24 小时（`token_hours`）；踢人 = `revoke_session` / `revoke_user_sessions`；Cookie 缺失但 Bearer 存在时不强制 CSRF。
+
+"记住账号"只写 `localStorage`（用户端 `wb_last_username` / `wb_remember_username`，控制台 `wb_console_username` / `wb_console_remember`），不存密码；`showAuth()` / `showLogin()` 先 `reset()` 再回填，所以密码永远是空的。控制台只有在 `setupMode`（库里还没有管理员）才预填 `admin`，并在描述里写明"这是即将创建的第一个管理员"。
 
 ### 5.2 聊天流式生成（`chat.py` 的骨架）
 

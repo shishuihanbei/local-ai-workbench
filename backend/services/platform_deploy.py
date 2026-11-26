@@ -1,7 +1,9 @@
 """本地平台单平台一键部署：检测、跳过已安装、安装并启动。
 
-llama.cpp 由工作台自己管理；Ollama / LM Studio 优先用 winget 静默安装，
-没有 winget 时回退官方安装包；vLLM 只在 Linux 上安装；自定义平台只做连接测试。
+llama.cpp 由工作台自己管理，装在 platforms/llama.cpp；Ollama 也装成便携版，
+程序与模型统一放在 platforms/ollama（模型目录通过 OLLAMA_MODELS 指过去）；
+LM Studio 优先用 winget 静默安装，没有 winget 时回退官方安装包；
+vLLM 只在 Linux 上安装；自定义平台只做连接测试。
 """
 from __future__ import annotations
 
@@ -12,7 +14,11 @@ import platform
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 import time
+import urllib.parse
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -91,6 +97,110 @@ def _local_installer(keyword: str, suffix: str) -> str:
     return str(max(found, key=lambda p: p.stat().st_mtime)) if found else ""
 
 
+def _platforms_root(cfg: dict[str, Any]) -> Path:
+    return Path(str(cfg.get("platforms_dir") or "")).expanduser()
+
+
+def ollama_dir(cfg: dict[str, Any] | None = None) -> Path:
+    """Ollama 便携版的落位目录：跟着 platforms_dir 走，可用 WORKBENCH_OLLAMA_DIR 覆盖。"""
+    env = os.getenv("WORKBENCH_OLLAMA_DIR")
+    if env:
+        return Path(env).expanduser()
+    cfg = cfg or load_config()
+    return _platforms_root(cfg) / "ollama"
+
+
+def ollama_models_dir(cfg: dict[str, Any] | None = None) -> Path:
+    """Ollama 的模型目录：默认与程序一起放在 <platforms_dir>/ollama/models。"""
+    env = os.getenv("WORKBENCH_OLLAMA_MODELS")
+    if env:
+        return Path(env).expanduser()
+    return ollama_dir(cfg) / "models"
+
+
+def system_ollama_models_dir() -> Path:
+    """系统版 Ollama 的默认模型目录（~/.ollama/models），用于迁移提示。"""
+    return Path(os.path.expandvars(os.path.expanduser("~/.ollama/models")))
+
+
+OLLAMA_PORTABLE_CANDIDATES = (
+    "ollama.exe", "bin/ollama.exe", "ollama", "bin/ollama",
+    "Ollama.app/Contents/Resources/ollama",
+)
+
+
+def portable_ollama(cfg: dict[str, Any] | None = None) -> str:
+    """工作台自己管的便携版 Ollama（platforms/ollama 下），没有就返回空串。"""
+    root = ollama_dir(cfg)
+    for rel in OLLAMA_PORTABLE_CANDIDATES:
+        p = root / rel
+        if p.is_file():
+            return str(p)
+    return ""
+
+
+def _system_ollama() -> str:
+    """系统目录里装的 Ollama（LocalAppData / Program Files / /usr/local/bin 等）。"""
+    return _which("ollama") or _exists(
+        r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe",
+        r"%LOCALAPPDATA%\Ollama\ollama.exe",
+        r"%ProgramFiles%\Ollama\ollama.exe",
+        "/usr/local/bin/ollama", "/usr/bin/ollama",
+        "~/.local/bin/ollama", "/Applications/Ollama.app/Contents/Resources/ollama",
+    )
+
+
+def ollama_archive() -> tuple[str, str]:
+    """便携包下载地址与文件名后缀：官方 zip / tgz，解压即用，不写注册表。"""
+    system = platform.system().lower()
+    if system == "windows":
+        return "https://ollama.com/download/ollama-windows-amd64.zip", "ollama-windows-amd64.zip"
+    if system == "darwin":
+        return "https://ollama.com/download/Ollama-darwin.zip", "Ollama-darwin.zip"
+    return "https://ollama.com/download/ollama-linux-amd64.tgz", "ollama-linux-amd64.tgz"
+
+
+def _extract_archive(archive: Path, target: Path) -> None:
+    """校验压缩包后整包解压到 target，保留内部目录结构（lib/、bin/ 都要）。"""
+    tmp = Path(tempfile.mkdtemp(prefix="ollama-install-"))
+    try:
+        if archive.name.endswith(".tgz") or archive.name.endswith(".tar.gz"):
+            with tarfile.open(archive) as tf:
+                for member in tf.getmembers():
+                    parts = Path(member.name).parts
+                    if Path(member.name).is_absolute() or ".." in parts:
+                        raise RuntimeError("安装包包含不安全路径")
+                tf.extractall(tmp, filter="data")
+        else:
+            with zipfile.ZipFile(archive) as zf:
+                bad = zf.testzip()
+                if bad:
+                    raise RuntimeError(f"安装包压缩校验失败：{bad}")
+                for name in zf.namelist():
+                    parts = Path(name).parts
+                    if Path(name).is_absolute() or ".." in parts:
+                        raise RuntimeError("安装包包含不安全路径")
+                zf.extractall(tmp)
+        target.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(tmp, target, dirs_exist_ok=True)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _has_models(folder: Path) -> bool:
+    """目录里是否已经有模型文件（blobs 或 manifests 任意一个有内容就算）。"""
+    try:
+        if not folder.exists():
+            return False
+        for sub in ("blobs", "manifests"):
+            d = folder / sub
+            if d.exists() and any(p.is_file() for p in d.rglob("*")):
+                return True
+        return any(p.is_file() for p in folder.iterdir())
+    except Exception:
+        return False
+
+
 def _version(cmd: list[str]) -> str:
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
@@ -112,14 +222,18 @@ def detect(key: str) -> dict[str, Any]:
         return {"installed": bool(info.get("installed")), "path": info.get("path", ""),
                 "version": info.get("version", ""), "installable": True}
     if key == "ollama":
-        path = _which("ollama") or _exists(
-            r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe",
-            r"%LOCALAPPDATA%\Ollama\ollama.exe",
-            r"%ProgramFiles%\Ollama\ollama.exe",
-            "/usr/local/bin/ollama", "/usr/bin/ollama",
-            "~/.local/bin/ollama", "/Applications/Ollama.app/Contents/Resources/ollama",
-        )
-        return {"installed": bool(path), "path": path, "version": _version([path, "--version"]) if path else "",
+        cfg = load_config()
+        portable = portable_ollama(cfg)
+        sys_exe = _system_ollama()
+        path = portable or sys_exe
+        sys_models = system_ollama_models_dir()
+        have_sys_models = _has_models(sys_models)
+        # 便携版看 platforms/ollama/models；系统版就是用 ~/.ollama/models，别显示成没装到的地方
+        models = ollama_models_dir(cfg) if portable else (sys_models if sys_exe else ollama_models_dir(cfg))
+        return {"installed": bool(path), "path": path, "managed": bool(portable),
+                "models_path": str(models), "system_models_path": str(sys_models),
+                "legacy_models": have_sys_models and bool(portable),
+                "version": _version([path, "--version"]) if path else "",
                 "installable": True}
     if key == "vllm":
         path = _which("vllm")
@@ -142,14 +256,24 @@ def detect(key: str) -> dict[str, Any]:
 
 def enrich(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """把安装状态、按钮文案和进度补到平台卡片上。"""
+    cfg = load_config()
     for item in items:
         key = item["key"]
         info = detect(key)
         item["installed"] = bool(info["installed"]) or bool(item.get("healthy"))
         item["install_path"] = info.get("path", "")
         item["version"] = info.get("version", "")
+        item["managed"] = bool(info.get("managed"))
+        item["models_path"] = info.get("models_path", "")
+        item["legacy_models_path"] = info.get("system_models_path", "") if (
+            info.get("legacy_models") and info.get("managed")) else ""
         item["installable"] = bool(info.get("installable")) or key == "llama.cpp"
         item["install"] = get_state(key)
+        item["can_manage"] = key == "ollama" and bool(item["installed"]) and not item["managed"]
+        if key == "llama.cpp":
+            item["models_path"] = str(cfg.get("models_dir") or "")
+        if key == "ollama":
+            item["target_path"] = str(ollama_dir(cfg))
         if key == "custom":
             item["action"] = "test"
             item["action_label"] = "测试连接"
@@ -219,49 +343,93 @@ async def _download_file(key: str, url: str, dest: Path) -> None:
     await installer._download(url, dest, on_progress=progress)
 
 
-async def _install_ollama(key: str) -> tuple[bool, str]:
-    if IS_WINDOWS:
+async def _install_ollama(key: str, force: bool = False) -> tuple[bool, str]:
+    """把 Ollama 装成便携版：解压到 platforms/ollama，模型放 platforms/ollama/models。
+
+    不写系统目录、不注册服务，整个 platforms 文件夹可以直接搬走。
+    """
+    cfg = load_config()
+    portable = portable_ollama(cfg)
+    if portable and not force:
+        _set(key, step="跳过安装", msg=f"已使用工作台目录里的 Ollama：{portable}")
+        return True, "Ollama 便携版已就位"
+    target = ollama_dir(cfg)
+    url, name = ollama_archive()
+    cache = _platforms_root(cfg) / ".downloads" / name
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    local_arc = ""
+    for suffix in (".zip", ".tgz"):
+        local_arc = local_arc or _local_installer("ollama", suffix)
+    try:
+        if local_arc and not (cache.exists() and cache.stat().st_size > 0):
+            archive = Path(local_arc)
+            _set(key, pct=60, step="本地包", msg=f"使用本地便携包 {archive.name}")
+        else:
+            archive = cache
+            if cache.exists() and cache.stat().st_size > 0 and force:
+                cache.unlink()
+            if cache.exists() and cache.stat().st_size > 0:
+                _set(key, pct=60, step="本地缓存", msg=f"使用已下载的 {name}")
+            else:
+                _set(key, pct=8, step="下载", msg=f"下载便携版 {name}")
+                await _download_file(key, url, cache)
+        _set(key, pct=70, step="解压", msg=f"解压到 {target}")
+        await asyncio.to_thread(_extract_archive, archive, target)
+    except Exception as exc:
+        # 便携版失败时，先退系统里已有的 Ollama，再退 data/installers 里的 OllamaSetup.exe
+        sys_exe = _system_ollama()
+        if sys_exe:
+            _set(key, step="回退", msg=f"便携版安装失败（{exc}），先用系统里的 Ollama：{sys_exe}")
+            return True, "便携版下载失败，已退回系统 Ollama"
         setup = _local_installer("ollama", ".exe")
         if setup:
-            _set(key, step="本地包", msg=f"使用本地安装包 {Path(setup).name}")
+            _set(key, step="回退", msg=f"便携版安装失败（{exc}），改用本地安装包 {Path(setup).name}")
             await asyncio.to_thread(_run, key, [setup, "/VERYSILENT", "/NORESTART", "/SP-"], 900)
-        else:
-            started = False
-            try:
-                started = await _install_winget(key, "Ollama.Ollama")
-            except Exception as exc:
-                _set(key, step="回退", msg=f"winget 不可用：{exc}")
-            if not started:
-                exe = Path(os.environ.get("TEMP", ".")) / "OllamaSetup.exe"
-                _set(key, step="下载", msg="从 Ollama 官网下载安装包")
-                await _download_file(key, "https://ollama.com/download/OllamaSetup.exe", exe)
-                _set(key, step="安装", msg="静默安装 Ollama")
-                await asyncio.to_thread(_run, key,
-                                        [str(exe), "/VERYSILENT", "/NORESTART", "/SP-"], 900)
-    else:
-        _set(key, step="安装", msg="Linux 安装 Ollama（需要当前用户可写 ~/.local）")
-        tmp = Path(os.environ.get("TEMP", "/tmp")) / "ollama-install.sh"
-        await _download_file(key, "https://ollama.com/install.sh", tmp)
-        await asyncio.to_thread(_run, key, ["sh", str(tmp)], 900)
-    info = detect(key)
-    if not info["installed"]:
-        return False, "安装完成但没找到 ollama 命令，可能需要重新打开工作台或手动安装"
-    return True, "Ollama 已安装"
+            if _system_ollama():
+                return True, "已用本地安装包装到系统目录（如需统一目录请重试便携版）"
+        return False, f"便携版下载/解压失败：{exc}"
+    exe = portable_ollama(cfg)
+    if not exe:
+        return False, f"解压完成但没在 {target} 里找到 ollama 程序，请检查安装包结构"
+    if not IS_WINDOWS:
+        try:
+            Path(exe).chmod(0o755)
+        except Exception:
+            pass
+    models = ollama_models_dir(cfg)
+    models.mkdir(parents=True, exist_ok=True)
+    _set(key, pct=88, step="安装", msg=f"程序 {exe} · 模型目录 {models}")
+    return True, "Ollama 便携版已装到 platforms/ollama"
 
 
-async def _start_ollama(key: str, endpoint: str = "") -> tuple[bool, str]:
+def _host_port(base: str, default_port: int = 11434) -> str:
+    try:
+        parts = urllib.parse.urlsplit(base or "")
+        host = parts.hostname or "127.0.0.1"
+        port = parts.port or default_port
+        return f"{host}:{port}"
+    except Exception:
+        return f"127.0.0.1:{default_port}"
+
+
+async def _start_ollama(key: str, endpoint: str = "", force: bool = False) -> tuple[bool, str]:
     cfg = load_config()
     base = endpoint or platforms.endpoints(cfg).get("ollama", "")
     healthy, _, _ = await platforms._probe_external(base, "/api/tags")
-    if healthy:
+    if healthy and not force:
         return True, "Ollama 已在运行，跳过启动"
-    exe = detect("ollama")["path"]
+    if healthy and force:
+        return True, f"Ollama 已在 {base} 运行（不是工作台拉起的进程），如需换目录请先退出托盘里的 Ollama"
+    exe = portable_ollama(cfg) or detect("ollama")["path"]
     if not exe:
-        return False, "没有找到 ollama 命令"
+        return False, "没有找到 ollama 程序"
+    models = ollama_models_dir(cfg)
+    models.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log = open(LOG_DIR / "ollama.log", "a", encoding="utf-8")
     env = os.environ.copy()
-    env.setdefault("OLLAMA_HOST", "127.0.0.1:11434")
+    env["OLLAMA_HOST"] = _host_port(base)
+    env["OLLAMA_MODELS"] = str(models)   # 让模型落在 platforms/ollama/models，而不是 ~/.ollama
     flags = CREATE_NO_WINDOW if IS_WINDOWS else 0
     PROC = subprocess.Popen([exe, "serve"], stdout=log, stderr=subprocess.STDOUT,
                             creationflags=flags, env=env)
@@ -270,21 +438,28 @@ async def _start_ollama(key: str, endpoint: str = "") -> tuple[bool, str]:
         await asyncio.sleep(1)
         healthy, _, _ = await platforms._probe_external(base, "/api/tags")
         if healthy:
-            return True, f"Ollama 已启动（PID {PROC.pid}）"
+            return True, f"Ollama 已启动（PID {PROC.pid}，模型目录 {models}）"
     return False, "Ollama 进程已启动，但端口还没响应，请查看 data/logs/ollama.log"
 
 
-async def _deploy_ollama(key: str, endpoint: str = "") -> tuple[bool, str, bool]:
-    info = detect(key)
-    skipped = bool(info["installed"])
-    if skipped:
-        _set(key, step="跳过安装", msg="本机已安装 Ollama，跳过下载与安装")
+async def _deploy_ollama(key: str, endpoint: str = "", force: bool = False) -> tuple[bool, str, bool]:
+    cfg = load_config()
+    portable = portable_ollama(cfg)
+    sys_exe = _system_ollama()
+    skipped = bool(portable and not force) or bool(sys_exe and not force and not portable)
+    if portable and not force:
+        _set(key, step="跳过安装", msg=f"已使用工作台目录里的 Ollama：{portable}")
+    elif sys_exe and not force:
+        _set(key, step="跳过安装",
+             msg=f"检测到系统安装的 Ollama（{sys_exe}），先用它；要统一到 platforms/ollama 请点“装到工作台目录”")
     else:
-        _set(key, pct=8, step="安装", msg="开始安装 Ollama")
-        ok, msg = await _install_ollama(key)
+        _set(key, pct=8, step="安装", msg="开始安装便携版 Ollama 到 platforms/ollama")
+        ok, msg = await _install_ollama(key, force=force)
         if not ok:
             return False, msg, False
-    ok, msg = await _start_ollama(key, endpoint)
+    ok, msg = await _start_ollama(key, endpoint, force=force)
+    if portable_ollama(cfg) and _has_models(system_ollama_models_dir()) and not _has_models(ollama_models_dir(cfg)):
+        msg += "；系统目录里还有旧模型，可点“迁移旧模型”把 .ollama 的模型搬进来"
     return ok, msg, skipped
 
 
@@ -383,6 +558,71 @@ async def _deploy_custom(key: str, endpoint: str = "") -> tuple[bool, str, bool]
     return False, detail, False
 
 
+async def adopt_ollama_models() -> dict[str, Any]:
+    """把系统版 Ollama 的模型（~/.ollama/models）搬到 platforms/ollama/models。
+
+    同一个盘上挪动是改名，几乎瞬间完成；跨盘会自动退化成复制后删除。
+    """
+    cfg = load_config()
+    src = system_ollama_models_dir()
+    dst = ollama_models_dir(cfg)
+    if not _has_models(src):
+        return {"ok": False, "msg": f"{src} 里没有模型，不需要迁移"}
+    if not portable_ollama(cfg):
+        return {"ok": False, "msg": "请先点“装到工作台目录”把 Ollama 便携版装进 platforms/ollama，再迁移模型"}
+    if _state("ollama").get("running"):
+        return {"ok": False, "msg": "Ollama 正在部署，请稍后再迁移"}
+    base = platforms.endpoints(cfg).get("ollama", "")
+    proc = PROCS.get("ollama")
+    ours = bool(proc and proc.poll() is None)
+    healthy, _, _ = await platforms._probe_external(base, "/api/tags")
+    if healthy and not ours:
+        return {"ok": False, "msg": "本机 Ollama 服务正在运行（不是工作台拉起的），请先退出托盘里的 Ollama 再迁移"}
+    if ours:
+        try:
+            proc.terminate()
+            proc.wait(timeout=15)
+        except Exception:
+            pass
+    moved = 0
+    total = 0
+    errors: list[str] = []
+    for sub in ("blobs", "manifests"):
+        s = src / sub
+        if not s.exists():
+            continue
+        d = dst / sub
+        d.mkdir(parents=True, exist_ok=True)
+        for item in sorted(s.iterdir()):
+            target = d / item.name
+            if target.exists():
+                continue
+            try:
+                size = item.stat().st_size if item.is_file() else 0
+                shutil.move(str(item), str(target))
+                moved += 1
+                total += size
+            except Exception as exc:
+                errors.append(f"{item.name}: {exc}")
+    for sub in ("blobs", "manifests"):
+        s = src / sub
+        try:
+            if s.exists() and not any(s.iterdir()):
+                s.rmdir()
+        except Exception:
+            pass
+    restarted = ""
+    if ours:
+        ok, msg = await _start_ollama("ollama", base)
+        restarted = f"；重启 Ollama：{msg}" if ok else f"；重启 Ollama 失败：{msg}"
+    size_text = f"{total / 2**30:.1f} GB" if total >= 2**30 else f"{total / 2**20:.0f} MB"
+    if errors:
+        return {"ok": False, "msg": f"迁移了 {moved} 个文件（{size_text}），{len(errors)} 个失败：{errors[0]}",
+                "moved": moved, "errors": errors[:5], "dst": str(dst)}
+    return {"ok": True, "msg": f"已把系统目录的模型搬到 {dst}（{moved} 个文件，{size_text}）{restarted}",
+            "moved": moved, "dst": str(dst), "restarted": bool(restarted)}
+
+
 async def deploy(key: str, force: bool = False, endpoint: str = "") -> dict:
     if key not in platforms.PLATFORMS:
         return {"ok": False, "msg": "未知平台"}
@@ -398,7 +638,7 @@ async def deploy(key: str, force: bool = False, endpoint: str = "") -> dict:
         if key == "llama.cpp":
             ok, msg, skipped = await _deploy_llama(key, force)
         elif key == "ollama":
-            ok, msg, skipped = await _deploy_ollama(key, endpoint)
+            ok, msg, skipped = await _deploy_ollama(key, endpoint, force)
         elif key == "lmstudio":
             ok, msg, skipped = await _deploy_lmstudio(key, endpoint)
         elif key == "vllm":

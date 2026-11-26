@@ -183,6 +183,8 @@ input, select, textarea { color: var(--text); }
 .login-card h2 { margin: 0 0 4px; font-size: 18px; }
 .login-card .desc { margin: 0 0 18px; color: var(--muted); font-size: 12px; }
 .login-card label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+.login-card .remember-line { display: flex; align-items: center; gap: 7px; margin: 2px 0 14px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.login-card .remember-line input { width: auto; margin: 0; }
 .login-card input {
   width: 100%; margin-top: 5px; padding: 9px 11px; font-size: 14px;
   border: 1px solid var(--line); border-radius: 9px; outline: none; background: #fff;
@@ -255,6 +257,14 @@ input, select, textarea { color: var(--text); }
 .platform-url:focus { border-color: #b9c6f7; }
 .platform-url:disabled { color: var(--muted); background: #f5f7fc; }
 .platform-installed { margin-top: 7px; color: #64748b; font-size: 11px; line-height: 1.5; word-break: break-all; }
+.platform-paths { margin-top: 5px; display: flex; flex-direction: column; gap: 3px; }
+.platform-path { display: flex; align-items: baseline; gap: 6px; font-size: 10.5px; color: #7b879e; }
+.platform-path span { flex: none; color: #5b6780; }
+.platform-path code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, Consolas, monospace; color: #33415c; }
+.platform-path .link { flex: none; border: 0; background: transparent; color: var(--brand); font-size: 10.5px;
+  padding: 0 2px; cursor: pointer; }
+.platform-path .link:hover { text-decoration: underline; }
 .platform-actions { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
 .platform-actions .btn { flex: none; }
 .platform-progress { margin-top: 8px; }

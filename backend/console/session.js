@@ -200,6 +200,56 @@ document.addEventListener("click", async (ev) => {
       setTimeout(() => { t.textContent = "部署已选平台"; t.disabled = false; }, 1800);
       return;
     }
+    else if (t.dataset.copyPath) {
+      const text = t.dataset.copyPath;
+      try {
+        await navigator.clipboard.writeText(text);
+        uiToast("已复制路径");
+      } catch (e) { uiToast("复制失败，请手动选择路径"); }
+      return;
+    }
+    else if (t.dataset.pdeployManage) {
+      const key = t.dataset.pdeployManage;
+      if (S.platformPolling[key]) return;
+      const old = t.textContent;
+      t.disabled = true;
+      t.textContent = "准备安装…";
+      try {
+        const endpoint = (platformEndpointValues()[key] || "").trim();
+        const qs = `force=true${endpoint ? `&endpoint=${encodeURIComponent(endpoint)}` : ""}`;
+        const r = await api(`/api/system/local-platforms/${encodeURIComponent(key)}/deploy?${qs}`, { method: "POST" });
+        if (!r.ok) throw new Error(r.msg || "无法开始安装");
+        t.textContent = "安装中…";
+        await pollPlatform(key);
+      } catch (e) {
+        uiToast(e.message);
+      } finally {
+        const btn = document.querySelector(`[data-pdeploy-manage="${key}"]`);
+        if (btn) { btn.textContent = old; btn.disabled = false; }
+      }
+      return;
+    }
+    else if (t.dataset.adoptModels) {
+      const key = t.dataset.adoptModels;
+      const old = t.textContent;
+      t.disabled = true;
+      t.textContent = "迁移中…";
+      try {
+        const r = await api("/api/system/local-platforms/ollama/adopt-models", { method: "POST" });
+        uiToast(r.msg || (r.ok ? "迁移完成" : "迁移失败"));
+        if (r.ok) {
+          const data = await api("/api/system/local-deploy?scan=1");
+          S.deployData = { ...(S.deployData || {}), ...data };
+          renderPlatforms(S.deployData);
+        }
+      } catch (e) {
+        uiToast(e.message);
+      } finally {
+        const btn = document.querySelector(`[data-adopt-models="${key}"]`);
+        if (btn) { btn.textContent = old; btn.disabled = false; }
+      }
+      return;
+    }
     else if (t.dataset.pdeploy) {
       const key = t.dataset.pdeploy;
       const p = (S.platforms || []).find((x) => x.key === key) || {};
@@ -356,6 +406,7 @@ $("loginForm").addEventListener("submit", async (ev) => {
     const d = await r.json();
     if (!r.ok) throw new Error(errorMessage(d, S.setupMode ? "初始化失败" : "登录失败"));
     if (d.access_token) localStorage.setItem(TOKEN_KEY, d.access_token);
+    saveConsoleUser($("u").value.trim());
     S.setupMode = false;
     const me = await api("/api/auth/me");
     applyAdminPermissions(me.user);
