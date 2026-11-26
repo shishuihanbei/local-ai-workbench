@@ -7,6 +7,44 @@ on:
   workflow_dispatch:
 
 jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: local-ai-workbench:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start container and wait for health
+        run: |
+          docker run -d --name wb-smoke -p 9100:9100 \
+            -e WORKBENCH_DATA=/data -e WORKBENCH_SERVE_FRONTEND=1 \
+            local-ai-workbench:smoke
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9100/api/health; then ok=1; break; fi
+            sleep 3
+          done
+          echo
+          docker ps -a
+          docker logs wb-smoke
+          if [ "$ok" != "1" ]; then echo "health check failed"; exit 1; fi
+
+      - name: Check frontend page
+        run: |
+          curl -fsS http://127.0.0.1:9100/api/health
+          curl -fsS http://127.0.0.1:9100/ | head -c 400
+          echo
+
   build:
     runs-on: ubuntu-latest
     permissions:

@@ -2,22 +2,28 @@ name: local-ai-workbench
 
 services:
   workbench:
+    # 两种用法二选一：
+    # 1) 在仓库目录直接 docker compose up -d：用本地源码构建镜像（默认方式）
+    # 2) 只用镜像：docker compose pull && docker compose up -d
+    #    官方镜像在 ghcr.io，私有仓库需要先 docker login ghcr.io
     build: .
-    image: local-ai-workbench:latest
+    image: ghcr.io/shishuihanbei/local-ai-workbench:latest
     container_name: local-ai-workbench
     restart: unless-stopped
     ports:
       - "9100:9100"
     volumes:
-      - ./data:/data
-      - ./models:/models
-      - ./llama:/llama
+      - ./data:/data          # 数据库、配置、上传、日志；必须可写并纳入备份
+      - ./models:/models      # GGUF 模型目录（可选，镜像不含模型）
+      - ./llama:/llama        # llama.cpp 可执行文件（可选）
     environment:
-      TZ: Asia/Shanghai
+      TZ: ${TZ:-Asia/Shanghai}
       WORKBENCH_DATA: /data
       WORKBENCH_MODELS: /models
       WORKBENCH_LLAMA: /llama
       WORKBENCH_SERVE_FRONTEND: "1"
+      # 首次启动会自动生成 data/secret.key；多副本或多个容器共用一份 data 时再显式指定同一个值
+      WORKBENCH_SECRET: ${WORKBENCH_SECRET:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

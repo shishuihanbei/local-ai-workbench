@@ -71,10 +71,11 @@ chmod +x start.sh
 ### Docker / NAS
 
 ```bash
-docker compose up -d
+docker compose up -d --build     # 用源码构建（推荐，第一次约几分钟）
+# 或者：docker compose pull && docker compose up -d   （需要先 docker login ghcr.io）
 ```
 
-默认映射 `9100:9100`，数据落在 `./data`。群晖、威联通、Unraid、TrueNAS 的图文步骤见 [NAS 安装说明](docs/install-nas.md)。
+默认映射 `9100:9100`，数据落在 `./data`（含 `workbench.db` 和 `secret.key`，两个都要备份）。群晖、威联通、Unraid、TrueNAS 的步骤和常见问题见 [NAS 安装说明](docs/install-nas.md)。容器里只跑 Web 服务和数据库，模型服务放在宿主机（Ollama 等）用 `host.docker.internal` 接入。
 
 ## 接一个模型
 

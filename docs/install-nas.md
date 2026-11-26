@@ -11,6 +11,8 @@
 
 模型不打进镜像。把模型目录挂进容器，或在局域网里接 Ollama / LM Studio / vLLM。
 
+容器里只跑 Web 服务和数据库。想在本机推理，模型服务（Ollama 等）放在宿主机或另一台机器，容器里用 `http://host.docker.internal:11434` 访问；容器内没有 GPU 直通，不要把 llama.cpp 二进制塞进容器里跑。
+
 ## 2. 目录规划
 
 建议在 NAS 上建：
@@ -26,16 +28,36 @@
 
 ## 3. Docker Compose
 
+两种方式，任选一种：
+
+**A. 用源码本地构建**（不需要拉镜像，第一次要装依赖，几分钟）
+
 ```bash
 git clone <仓库地址> local-ai-workbench
 cd local-ai-workbench
+docker compose up -d --build
+docker compose logs -f
 ```
 
-按实际路径改 `docker-compose.yml` 的 volumes，然后：
+国内网络 pip 慢的话，改用：
 
 ```bash
+docker compose build --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 docker compose up -d
-docker compose logs -f
+```
+
+**B. 直接用镜像**（不构建，速度最快）
+
+```bash
+# 私有仓库里的镜像需要先登录；仓库转公开后可去掉登录
+echo <你的 GitHub Token> | docker login ghcr.io -u <你的 GitHub 用户名> --password-stdin
+docker pull ghcr.io/shishuihanbei/local-ai-workbench:latest
+docker run -d --name local-ai-workbench --restart unless-stopped \
+  -p 9100:9100 \
+  -v /volume1/docker/local-ai-workbench/data:/data \
+  -e WORKBENCH_DATA=/data -e WORKBENCH_SERVE_FRONTEND=1 \
+  --add-host host.docker.internal:host-gateway \
+  ghcr.io/shishuihanbei/local-ai-workbench:latest
 ```
 
 打开：
@@ -45,6 +67,8 @@ http://<NAS 的局域网 IP>:9100/
 ```
 
 首次进入初始化管理员。
+
+`data/` 目录首次启动会生成 `workbench.db` 和 `secret.key`，两个文件必须一起备份；丢 `secret.key` 后已保存的供应商 API Key 解不开。
 
 ## 4. 群晖 DSM
 
@@ -97,21 +121,32 @@ NAS 自带的反向代理（群晖 Application Portal、威联通 Reverse Proxy�
 
 ## 9. 升级
 
+源码构建方式：
+
 ```bash
 cd local-ai-workbench
+git pull
+docker compose up -d --build
+```
+
+镜像方式：
+
+```bash
 docker compose pull
 docker compose up -d
 ```
 
-数据库迁移在容器启动时自动执行。升级前备份 `data/`。
+数据库迁移在容器启动时自动执行。升级前备份 `data/`（含 `secret.key`）。
 
 ## 10. 常见问题
 
 | 现象 | 处理 |
 | --- | --- |
 | 容器起来但页面 502 | 看 `docker compose logs`；确认端口和健康检查 |
-| `data` 权限错误 | 容器内以 root 运行；把宿主机 `data` 改成可写 |
-| ARM NAS 拉不到镜像 | 用 `docker compose build` 在本机构建，或使用多架构镜像 |
+| `docker compose pull` 拉不到镜像 | 私有镜像要先 `docker login ghcr.io`；或者直接 `docker compose up -d --build` 本地构建 |
+| `data` 权限错误 | 容器内以 root 运行，文件属主是 root；需要 DSM 里读写就 `sudo chown -R 你的用户 data` |
+| ARM NAS 拉不到镜像 | 用 `docker compose up -d --build` 在本机构建，CI 已提供 `linux/arm64` 多架构镜像 |
 | 模型加载失败 | 模型目录映射到 `/models`，控制台里路径填 `/models/xxx.gguf` |
+| 容器内看不到宿主机模型服务 | 用 `http://host.docker.internal:11434`（compose 已加 `extra_hosts`），别填 `127.0.0.1` |
 | 上传大文件失败 | 反代调大 `client_max_body_size`，并确认 NAS 空间足够 |
 | 重启后数据没了 | 检查 volumes 是否映射到持久目录，而不是容器内 `/data` |
