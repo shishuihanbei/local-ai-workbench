@@ -1,3 +1,6 @@
+# 开发与测试依赖（运行时不需要）
+pytest==8.3.4
 
-# 浏览器交互冒烟（tests/test_e2e_smoke.py；只有设了 WORKBENCH_E2E=1 才会跑）
+# 浏览器交互冒烟（tests/test_e2e_smoke.py）
+# 只在设了 WORKBENCH_E2E=1 时才跑，见 README「自动化测试」
 playwright==1.49.1
