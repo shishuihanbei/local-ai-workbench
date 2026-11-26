@@ -727,6 +727,8 @@
     $("#profileName").textContent = S.user.username;
     $("#profileRole").textContent = S.user.role === "admin" ? "管理员" : "普通用户";
     $("#sidebarUser").textContent = S.user.role === "admin" ? "管理员账号" : "个人账号";
+    const consoleEntry = document.querySelector("#consoleEntry");
+    if (consoleEntry) consoleEntry.hidden = S.user.role !== "admin";
   }
 
   async function loadMe() {
@@ -3144,6 +3146,7 @@
     $$("[data-authmode]").forEach((b) => b.addEventListener("click", () => setAuthMode(b.dataset.authmode)));
     $$("[data-authmethod]").forEach((b) => b.addEventListener("click", () => setAuthMethod(b.dataset.authmethod)));
     $("#toConsole").addEventListener("click", () => { window.location.href = "/console/"; });
+    document.querySelector("#consoleEntry")?.addEventListener("click", () => { window.location.href = "/console/"; });
 
     $("#newChatBtn").addEventListener("click", newChat);
     $("#allFeaturesBtn")?.addEventListener("click", openFeatureCenter);

@@ -694,7 +694,7 @@ function renderShortcuts(st) {
   const exists = (st.items || []).filter((x) => x.exists).length;
   badge.className = "badge " + (!supported ? "warn" : exists ? "good" : "ok");
   badge.textContent = !supported ? (st.platform === "docker" ? "容器内无桌面" : "当前系统不支持")
-    : exists === 2 ? "已创建" : exists ? "缺一个" : "未创建";
+    : exists ? "已创建" : "未创建";
   const urls = st.urls || {};
   const frontUrl = $("shortcutFrontUrl");
   const consoleUrl = $("shortcutConsoleUrl");
