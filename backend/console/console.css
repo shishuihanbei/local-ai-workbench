@@ -236,6 +236,17 @@ input, select, textarea { color: var(--text); }
 .model-filter.active { border-color: #4f6ef7; background: #eef2ff; color: #3450d4; font-weight: 600; }
 .model-filter b { font-weight: 600; font-size: 11px; opacity: .8; }
 .model-note { margin-bottom: 10px; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
+.ollama-pull { margin: 12px 0 4px; padding: 11px 12px; border: 1px solid #dfe6f5; border-radius: 10px; background: #f8faff; }
+.ollama-pull-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; margin-bottom: 8px; color: var(--muted); font-size: 11.5px; line-height: 1.6; }
+.ollama-pull-head b { color: var(--text); font-size: 12.5px; }
+.ollama-pull-head code { padding: 1px 5px; border-radius: 4px; background: #eef2ff; color: #3450d4; font-size: 11px; }
+.ollama-pull-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ollama-pull-row input { width: 190px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 12.5px; }
+.ollama-pull-row input:focus { outline: none; border-color: #b9c6f7; box-shadow: 0 0 0 3px rgba(79,110,247,.1); }
+.ollama-pull-row .hint { color: var(--muted); font-size: 11.5px; }
+.ollama-pull-progress { margin-top: 9px; }
+.ollama-pull-progress .bar { height: 6px; }
+.ollama-pull-progress .progress-text { margin-top: 5px; color: var(--muted); font-size: 11.5px; }
 .model-group td { padding: 7px 10px; background: #f5f7fc; border-top: 1px solid var(--line); }
 .model-group span { font-size: 12.5px; font-weight: 700; color: var(--text); }
 .model-group em { margin-left: 8px; font-style: normal; font-size: 11px; color: var(--muted); }

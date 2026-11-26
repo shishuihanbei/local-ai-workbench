@@ -5,7 +5,7 @@
 > 2. 按既有流程改代码、跑测试、发版本；
 > 3. 按第 10–11 章做重构，而不破坏现网。
 >
-> 文档基准：`main` 分支最新提交（2026-11-26），测试 **225 passed**（另有 5 条浏览器交互冒烟，`WORKBENCH_E2E=1` 时单独跑，约 17 秒），API 版本 `0.8.5.0`。凡是数字（端点数、表数、行数）都是实测值，改动后请同步更新本文。
+> 文档基准：`main` 分支最新提交（2026-11-26），测试 **239 passed**（另有 5 条浏览器交互冒烟，`WORKBENCH_E2E=1` 时单独跑，约 17 秒），API 版本 `0.8.5.0`。凡是数字（端点数、表数、行数）都是实测值，改动后请同步更新本文。
 
 ---
 
@@ -183,7 +183,10 @@ platforms/
 ### 3.3 模型与路由
 
 - 模型清单 52 条内置（九大分类），支持下载 GGUF、上传自有 GGUF、独立引擎仓库下载、删除、改别名。
+- 下载来源按引擎分开：llama.cpp 走 GGUF 直链（`models_dir/<filename>`）；Ollama 走 registry tag（`ollama pull <tag>` → `platforms/ollama/models` 的 blobs/manifests）；vLLM/SGLang/ComfyUI 等独立引擎整仓库下到各自目录。同一个模型在多平台下各存一份、格式不互通（`backend/ollama_tags.py` 存“内置 key → Ollama tag”映射，模型列表每条带 `ollama_tag/ollama_ready/ollama_pulled`）。
 - 本地 llama.cpp 生命周期：安装 → 加载 → 卸载 → 切换（切换有"别人正在生成"保护）。
+- 平台卸载：`POST /api/system/local-platforms/{key}/uninstall` → `platform_deploy.uninstall()`，先停工作台拉起的进程（Ollama serve / llama-server）与端口，再删 `platforms/<key>` 程序、`lib` 与该平台的便携包缓存，**保留** `platforms/ollama/models` 与 `data/installers/`；系统安装的平台（`managed=false`）拒绝并提示手动卸载。
+- Ollama 拉模型：`POST /api/system/local-platforms/ollama/pull` 走 Ollama 的 `/api/pull` 流式接口，进度写进 `platform_deploy.PULL`，`GET` 同路径轮询，完成后 `platform_models.invalidate()` 让下拉立刻刷新。
 - 平台模型：已勾选且健康的外部 OpenAI 兼容服务，自动把 `/v1/models` 暴露到前端下拉。
 - 供应商与路由：`providers`（云端 Key、价格）、`routes`（策略与 fallback），`routing.resolve` 做最终决策。
 - 实现：`routers/models.py`、`services/llama.py`、`platforms.py`、`platform_models.py`、`routing.py`、`model_usage.py`、`access.py`。
@@ -222,7 +225,7 @@ platforms/
 
 ### 3.9 运维与部署
 
-- 硬件探测、llama.cpp / 平台一键部署、独立引擎 pip 安装与进度。平台程序与模型统一落在 `platforms/`：llama.cpp → `platforms/llama.cpp`；Ollama 便携版 → `platforms/ollama`（模型 `platforms/ollama/models`，下载缓存 `platforms/.downloads`）；已系统安装的 Ollama 可一键接管或迁移模型。
+- 硬件探测、llama.cpp / 平台一键部署、独立引擎 pip 安装与进度。平台程序与模型统一落在 `platforms/`：llama.cpp → `platforms/llama.cpp`；Ollama 便携版 → `platforms/ollama`（模型 `platforms/ollama/models`，下载缓存 `platforms/.downloads`）；已系统安装的 Ollama 可一键接管或迁移模型。部署卡上的「卸载」只删工作台自己装进去的程序与缓存，留着用户 pull 的模型和 `data/installers` 的安装包。
 - 开机自启、桌面快捷方式、内网穿透（cloudflared）、网络诊断。
 - 备份/恢复/整机迁移/网站分享包、日志查看、系统设置。
 - 实现：`services/installer.py`、`platform_deploy.py`、`engine_install.py`、`autostart.py`、`shortcuts.py`、`tunnel.py`、`backup.py`、`netinfo.py`，路由 `system.py`（43 个端点，最大的运维入口）。
@@ -927,3 +930,4 @@ app/
 - 每完成一个重构阶段，在第 10 章该阶段打勾并记录实际耗时与偏差原因。
 
 （文档结束）
+

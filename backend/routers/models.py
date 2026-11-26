@@ -9,12 +9,13 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from .. import ollama_tags
 from ..config import load_config, model_file_path, save_config
 from ..db import (MODEL_CATALOG_EXTRAS, MODEL_SEED, audit, execute, executemany,
                   fetch_all, fetch_one, model_repo, model_url)
 from ..security import admin_user, current_user
 from ..services import (access, engine_install, engines, hardware, hf_models, llama,
-                        model_usage, platform_models)
+                        model_usage, platform_deploy, platform_models)
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -68,6 +69,15 @@ async def catalog(user: dict = Depends(current_user)):
     status = await llama.server.status()
     prof = hardware.profile()
     engine_state = engines.status(prof)
+    # Ollama 是另一套模型体系（registry tag + blobs），这里只把“同名模型在 Ollama 里叫什么”
+    # 和“Ollama 现在能不能用”带给前端，真正的下载仍然走各自的引擎。
+    ollama_ids: list[str] = []
+    try:
+        reach = await platform_models.reachable(cfg)
+        ollama_ids = [str(m.get("key") or "") for m in reach if m.get("platform_key") == "ollama"]
+    except Exception:
+        ollama_ids = []
+    ollama_info = platform_deploy.detect("ollama")
     items = []
     for r in rows:
         installable = bool(r.get("installable", 1))
@@ -138,8 +148,12 @@ async def catalog(user: dict = Depends(current_user)):
             label = f"推荐 {engine_info['recommend']}" if engine_info["ready"] else "需先装引擎"
             advice = {"level": "good" if engine_info["ready"] else "warn",
                       "label": label, "text": engine_info["text"]}
+        o_tag = ollama_tags.tag_for(r["key"], r.get("alias") or "")
         items.append({
             **r,
+            "ollama_tag": o_tag,
+            "ollama_ready": bool(ollama_ids),
+            "ollama_pulled": bool(o_tag and o_tag in ollama_ids),
             "installable": installable,
             "category": category,
             "category_label": CATEGORY_LABELS.get(category, category),
@@ -189,6 +203,16 @@ async def catalog(user: dict = Depends(current_user)):
     return {
         "items": await access.filter_catalog(items, user), "server": status,
         "models_dir": cfg["models_dir"], "local_enabled": local_enabled,
+        # Ollama 是否可用跟着模型列表一起返回，模型页不用先切到「部署」页才有数据
+        "ollama": {
+            "installed": bool(ollama_info.get("installed")),
+            "managed": bool(ollama_info.get("managed")),
+            "path": ollama_info.get("path") or "",
+            "models_path": ollama_info.get("models_path") or "",
+            "running": bool(ollama_ids),
+            "pulled": ollama_ids,
+            "pull": platform_deploy.pull_state(),
+        },
         "hardware": {
             "cpu": prof["cpu"], "cores": prof["cores"],
             "ram_total_gb": prof["ram_total_gb"], "ram_free_gb": prof["ram_free_gb"],

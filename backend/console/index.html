@@ -1788,8 +1788,23 @@ ollama pull qwen2.5:7b
           <button class="btn small" id="refreshModels" title="把内置清单里缺失的模型补回来，不覆盖已有模型">更新</button>
         </div>
       </div>
+      <div class="ollama-pull" id="ollamaPullBox" hidden>
+        <div class="ollama-pull-head">
+          <b>从 Ollama 拉取模型</b>
+          <span>Ollama 的模型不在内置清单里：填它的 tag（如 <code>qwen2.5:7b</code>、<code>deepseek-r1:7b</code>），拉到 Ollama 自己的模型目录，结束后自动出现在前端切换列表。</span>
+        </div>
+        <div class="ollama-pull-row">
+          <input id="ollamaTag" placeholder="qwen2.5:7b" autocomplete="off" spellcheck="false">
+          <button class="btn small primary" id="ollamaPullBtn">拉取</button>
+          <span class="hint" id="ollamaPullNote">模型落到 Ollama 自己的模型目录；卸载 Ollama 时会保留这些模型</span>
+        </div>
+        <div class="ollama-pull-progress" id="ollamaPullProgress" hidden>
+          <div class="bar"><i id="ollamaPullBar"></i></div>
+          <div class="progress-text" id="ollamaPullText"></div>
+        </div>
+      </div>
       <div class="model-filters" id="modelFilters"></div>
-      <div class="model-note" id="modelNote">按用途分类展示。文字/代码模型可直接下载并用 llama.cpp 加载；多模态、绘画、视频、语音、向量等需要独立引擎，本机装上推荐引擎后才能下载模型。</div>
+      <div class="model-note" id="modelNote">按用途分类展示。同一个模型在不同引擎里是不同格式，装几个平台就有几份：llama.cpp 用 GGUF 直链（下到模型目录）；Ollama 用 registry tag（上方输入框或行内「用 Ollama 拉取」）；vLLM / SGLang 等独立引擎下整个仓库到自己的目录，互不覆盖。</div>
       <div class="table-wrap">
         <table class="tbl">
           <thead>

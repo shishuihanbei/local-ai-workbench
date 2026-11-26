@@ -190,10 +190,19 @@ function renderModelRows() {
         if (m.downloaded && !m.loaded) act.push(`<button class="btn small" data-load="${esc(m.key)}" title="${m.available === false ? "加载模型会重新开启本地部署" : ""}">${m.available === false ? "加载并开启" : "加载"}</button>`);
         if (m.loaded) act.push(`<span class="badge ok">使用中</span>`);
       }
+      // 同一个模型在 Ollama 里还有一套“tag + blobs”的取法，装了 Ollama 就多给一个入口
+      if (m.ollama_tag && m.ollama_ready) {
+        act.push(m.ollama_pulled
+          ? `<span class="badge ok" title="Ollama 里已经有这个模型">Ollama 已拉取</span>`
+          : `<button class="btn small ghost" data-opull="${esc(m.ollama_tag)}" title="执行 ollama pull ${esc(m.ollama_tag)}，落到 Ollama 的模型目录">用 Ollama 拉取</button>`);
+      }
+      const oTag = m.ollama_tag
+        ? `<div class="sub">Ollama：${esc(m.ollama_tag)}${m.ollama_pulled ? " · 已拉取" : (m.ollama_ready ? "" : " · 服务未启动")}</div>`
+        : "";
       html.push(`<tr>
         <td><div class="name">${esc(m.label || m.key)}</div><div class="sub">${esc(m.key)}${m.filename ? " · " + esc(m.filename) : ""}</div></td>
         <td><span class="badge cat">${esc(m.category_label || modelCategoryLabel(m.category))}</span></td>
-        <td><div>${esc(m.engine || "—")}</div>${m.installable === false ? `<div class="sub">推荐 ${esc(m.engine_recommend || "独立引擎")} · ${m.engine_ready ? "已安装" : "未安装"}</div>` : ""}</td>
+        <td><div>${esc(m.engine || "—")}</div>${m.installable === false ? `<div class="sub">推荐 ${esc(m.engine_recommend || "独立引擎")} · ${m.engine_ready ? "已安装" : "未安装"}</div>` : ""}${oTag}</td>
         <td>${m.bytes ? mb(m.bytes) : (m.total_bytes ? "约 " + mb(m.total_bytes) : "—")}</td>
         <td>${statusBadge(m)}</td>
         <td>${adviceBadge(m.advice)}</td>
@@ -257,10 +266,15 @@ function renderPlatforms(data) {
     const adopt = (p.managed && p.legacy_models_path) && !(p.install && p.install.running)
       ? `<button class="btn small ghost" data-adopt-models="${esc(p.key)}">迁移旧模型</button>`
       : "";
+    // 只有工作台自己装进 platforms/ 的平台才给“卸载”；系统安装的会由后端拒绝并说明
+    const removable = p.installed && (p.managed || p.key === "llama.cpp");
+    const uninstall = removable && !(p.install && p.install.running)
+      ? `<button class="btn small danger" data-puninstall="${esc(p.key)}" title="停掉进程与端口，删掉工作台装的程序和下载缓存；保留你下载的模型和 data\\installers 里的安装包">卸载</button>`
+      : "";
     const action = p.key === "custom"
       ? `<button class="btn small" data-pdeploy="${esc(p.key)}">${esc(label)}</button>
          <button class="btn small ghost" data-custom-guide>接入说明</button>`
-      : `<button class="btn small ${p.action === "install" ? "primary" : ""}" data-pdeploy="${esc(p.key)}" ${disabled ? "disabled" : ""}>${esc(label)}</button>${manage}${adopt}`;
+      : `<button class="btn small ${p.action === "install" ? "primary" : ""}" data-pdeploy="${esc(p.key)}" ${disabled ? "disabled" : ""}>${esc(label)}</button>${manage}${adopt}${uninstall}`;
     return `<div class="platform-card ${on ? "on" : ""}">
       <div class="platform-head">
         <label><input type="checkbox" data-platform="${esc(p.key)}" ${on ? "checked" : ""}><b>${esc(p.name)}</b>${mm}</label>
@@ -408,6 +422,89 @@ function renderModels(data) {
   renderModelFilters(items);
   renderModelRows();
   renderEngineSummary(items);
+  renderOllamaPull();
+}
+
+/* Ollama 的模型不在内置清单里，走它自己的 registry：给个输入框按 tag 拉，
+   拉完自动进模型下拉；装了 Ollama 才会显示这块（状态跟着 /api/models 一起返回）。 */
+function ollamaPlatform() {
+  const info = (S.models && S.models.ollama) || null;
+  if (info) return info;
+  // 老接口没有这个字段时退回部署页数据
+  const list = ((S.deployData && S.deployData.platforms) || S.platforms || []);
+  return list.find((x) => x.key === "ollama") || null;
+}
+
+function renderOllamaPull() {
+  const box = $("ollamaPullBox");
+  if (!box) return;
+  const p = ollamaPlatform();
+  const have = !!(p && (p.managed || p.installed));
+  box.hidden = !have;
+  const note = $("ollamaPullNote");
+  if (note && p) {
+    note.textContent = p.running
+      ? `Ollama 服务在跑，模型目录 ${p.models_path || ""}`
+      : (p.installed ? "Ollama 已安装但服务没在跑：先在「部署」页点“启动”，再来拉模型" : "");
+  }
+  const st = (S.models && S.models.ollama && S.models.ollama.pull) || S.ollamaPull || {};
+  renderOllamaPullState(st);
+  if (!box.hidden && st.running) pollOllamaWatch();
+}
+
+/* 轻量轮询：只在拉取进行中才真的转起来，避免模型页每 3 秒都多打一个请求 */
+async function pollOllamaWatch() {
+  if (S.pullWatching) return;
+  S.pullWatching = true;
+  try {
+    for (let i = 0; i < 40; i += 1) {
+      await new Promise((r) => setTimeout(r, 3000));
+      let st;
+      try { st = await api("/api/system/local-platforms/ollama/pull"); }
+      catch (e) { continue; }
+      if (st && st.running) { S.ollamaPull = st; renderOllamaPullState(st); }
+      else if (st && S.ollamaPull && S.ollamaPull.running) { S.ollamaPull = st; renderOllamaPullState(st); await loadAll(); return; }
+    }
+  } finally {
+    S.pullWatching = false;
+  }
+}
+
+function renderOllamaPullState(st) {
+  const box = $("ollamaPullProgress");
+  if (!box) return;
+  const show = !!st && (st.running || st.finished_at || st.ok !== null);
+  box.hidden = !show;
+  if (!show) return;
+  const bar = $("ollamaPullBar");
+  if (bar) bar.style.width = `${Math.max(0, Math.min(100, Number(st.pct || 0)))}%`;
+  const text = $("ollamaPullText");
+  if (text) {
+    const head = st.running ? `${st.step || "拉取中"} ${st.pct || 0}%` : (st.ok ? "拉取完成" : (st.step || "失败"));
+    text.textContent = `${head} · ${st.msg || ""}`.replace(/\s+/g, " ").trim();
+  }
+}
+
+async function pollOllamaPull() {
+  if (S.pullPolling) return;
+  S.pullPolling = true;
+  try {
+    for (let i = 0; i < 1800; i += 1) {
+      let st;
+      try { st = await api("/api/system/local-platforms/ollama/pull"); }
+      catch (e) { await new Promise((r) => setTimeout(r, 2000)); continue; }
+      S.ollamaPull = st;
+      renderOllamaPullState(st);
+      if (!st.running) {
+        await loadAll();
+        uiToast(st.ok ? (st.msg || "拉取完成") : (st.msg || "拉取失败"));
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  } finally {
+    S.pullPolling = false;
+  }
 }
 
 function renderEngineSummary(items) {

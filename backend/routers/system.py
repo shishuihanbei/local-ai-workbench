@@ -18,6 +18,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ..config import DATA_DIR, LOG_DIR, load_config, model_file_path, save_config
 from ..db import audit, fetch_all, fetch_one
+from .. import ollama_tags
 from ..security import admin_user, any_user_or_none, current_user, user_from_any_token
 from ..services import (autostart, backup, hardware, installer, llama, netinfo, platform_deploy,
                         platform_models, platforms, retention, shortcuts, storage, websearch)
@@ -58,6 +59,10 @@ class SettingsBody(BaseModel):
 class LocalDeployBody(BaseModel):
     enabled: bool
     platforms: list[str] | None = None
+
+
+class OllamaPullBody(BaseModel):
+    tag: str = ""
     endpoints: dict[str, str] | None = None
     github_proxy: str | None = None
 
@@ -649,6 +654,34 @@ async def adopt_ollama_models(user: dict = Depends(admin_user)):
     await audit(user, "system.platform.ollama.adopt", detail=str(result.get("msg", ""))[:300])
     platform_models.invalidate()
     return result
+
+
+@router.post("/local-platforms/{key}/uninstall")
+async def uninstall_platform(key: str, user: dict = Depends(admin_user)):
+    """卸载工作台装进 platforms/ 的程序：停进程、关端口、删程序与下载缓存，
+    保留 Ollama 的 models 目录和 data/installers 里的安装包。"""
+    if key not in platforms.PLATFORMS:
+        raise HTTPException(404, "未知平台")
+    result = await platform_deploy.uninstall(key)
+    await audit(user, "system.platform.uninstall", key, detail=str(result.get("msg", ""))[:300])
+    return result
+
+
+@router.post("/local-platforms/ollama/pull")
+async def pull_ollama_model(body: OllamaPullBody, user: dict = Depends(admin_user)):
+    """按 Ollama 的 tag 拉模型（qwen2.5:7b 这类），落到 platforms/ollama/models。"""
+    try:
+        tag = ollama_tags.normalize_tag(body.tag)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    result = await platform_deploy.ollama_pull(tag)
+    await audit(user, "system.platform.ollama.pull", tag, detail=str(result.get("msg", ""))[:300])
+    return result
+
+
+@router.get("/local-platforms/ollama/pull")
+async def pull_ollama_status(user: dict = Depends(admin_user)):
+    return platform_deploy.pull_state()
 
 
 @router.get("/local-platforms/{key}/progress")

@@ -256,6 +256,73 @@ document.addEventListener("click", async (ev) => {
       }
       return;
     }
+    else if (t.id === "ollamaPullBtn") {
+      const input = $("ollamaTag");
+      const tag = (input && input.value.trim()) || "";
+      if (!tag) { uiToast("先填一个 Ollama tag，例如 qwen2.5:7b"); return; }
+      t.disabled = true;
+      const old = t.textContent;
+      t.textContent = "拉取中…";
+      try {
+        const r = await api("/api/system/local-platforms/ollama/pull", {
+          method: "POST", body: JSON.stringify({ tag }),
+        });
+        uiToast(r.msg || "已开始拉取");
+        if (!r.ok) { t.textContent = old; t.disabled = false; return; }
+        if (input) input.value = "";
+        await pollOllamaPull();
+      } catch (e) {
+        uiToast(e.message);
+        t.textContent = old;
+        t.disabled = false;
+      }
+      return;
+    }
+    else if (t.dataset.puninstall) {
+      const key = t.dataset.puninstall;
+      if (S.platformPolling[key]) return;
+      const ok = await confirmInline(
+        `卸载 ${key}？会先停掉工作台拉起的进程和相关端口，再删掉工作台装进 platforms 的程序与下载缓存；`
+        + "你自己下载的模型和 data\\installers 里的安装包会保留。",
+        "卸载");
+      if (!ok) return;
+      const old = t.textContent;
+      t.disabled = true;
+      t.textContent = "卸载中…";
+      try {
+        const r = await api(`/api/system/local-platforms/${encodeURIComponent(key)}/uninstall`, { method: "POST" });
+        uiToast(r.msg || (r.ok ? "已卸载" : "卸载失败"));
+        if (!r.ok) { t.textContent = old; t.disabled = false; return; }
+        const data = await api("/api/system/local-deploy?scan=1");
+        S.deployData = { ...(S.deployData || {}), ...data };
+        renderPlatforms(S.deployData);
+        await loadAll();
+      } catch (e) {
+        uiToast(e.message);
+        t.textContent = old;
+        t.disabled = false;
+      }
+      return;
+    }
+    else if (t.dataset.opull) {
+      const tag = t.dataset.opull;
+      const old = t.textContent;
+      t.disabled = true;
+      t.textContent = "拉取中…";
+      try {
+        const r = await api("/api/system/local-platforms/ollama/pull", {
+          method: "POST", body: JSON.stringify({ tag }),
+        });
+        uiToast(r.msg || "已开始拉取");
+        if (!r.ok) { t.textContent = old; t.disabled = false; return; }
+        await pollOllamaPull();
+      } catch (e) {
+        uiToast(e.message);
+        t.textContent = old;
+        t.disabled = false;
+      }
+      return;
+    }
     else if (t.dataset.pdeploy) {
       const key = t.dataset.pdeploy;
       const p = (S.platforms || []).find((x) => x.key === key) || {};

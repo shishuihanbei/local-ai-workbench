@@ -1,6 +1,6 @@
 # 本地 AI 工作台
 
-> 当前版本 **0.8.5.0** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
+> 当前版本 **0.8.6.0** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
 
 单进程部署：FastAPI 后端 + 用户前端 + 管理控制台 + OpenAI 兼容 API。模型在本机运行，对话记录存本机 SQLite，不经过云端。
 
@@ -284,6 +284,25 @@ docker run -d --name local-ai-workbench -p 9100:9100 \
 - **怎么让它出现**：`ollama pull` 完成后，部署页点“更新”→ 勾选 Ollama → “保存选择”。之后用户端「模型」下拉就会列出这些模型，聊天请求直接发给 `http://127.0.0.1:11434/v1`（工作台会自动补 `/v1`），不走 llama.cpp。
 - **看不到模型时排查**：① Ollama 卡片是不是“已连接”；② 地址是不是根地址（`http://127.0.0.1:11434`，不要带 `/v1`）；③ 没有勾选并保存；④ 浏览器直接打开 `http://127.0.0.1:11434/v1/models` 看有没有返回模型。
 - **切换模型**：选 Ollama 的模型不会启动/重启 llama.cpp，也不会弹出“等它说完”，因为推理在 Ollama 进程里跑，工作台只做路由。
+
+### 模型从哪下：按引擎分开，不是一条统一的直链
+
+同一个权重在不同引擎里是**不同格式**，所以没有一个“通用下载地址”，界面按引擎分别给安装方式：
+
+- **llama.cpp → GGUF 直链**：模型页行内的“下载”按清单里的仓库 + 文件名，从 HuggingFace / ModelScope 拉单个 `.gguf` 到 `models_dir`，下载完点“加载”由 llama.cpp 起服务。
+- **Ollama → registry tag**：`ollama pull <tag>`（例如 `qwen2.5:7b`、`deepseek-r1:7b`），落到 Ollama 自己的模型目录（便携版是 `platforms/ollama/models`，`blobs/` 存权重、`manifests/` 存 tag）。模型页顶部有“从 Ollama 拉取模型”的输入框，可以填任意 tag；内置清单里能对上的常见模型，行内会直接出现「用 Ollama 拉取」按钮（标签映射见 `backend/ollama_tags.py`）。
+- **vLLM / SGLang / ComfyUI 等独立引擎 → 整仓库下载**：先把推荐引擎装上（`engine_ready`），再点“下载”把整个 HF 仓库拉到自己的目录。
+
+**装了多个平台怎么办**：各装各的，互不覆盖——Ollama 存 blobs、llama.cpp 存 `.gguf`，格式不能互换，也不能把 Ollama 的模型塞给 llama.cpp。界面上每行都标着引擎和对应来源；最终用户在「模型」下拉里看到哪些，取决于部署页**勾选并连通**了哪个平台，工作台只做路由。
+
+### 卸载平台：删程序、保模型
+
+部署卡片上“启动/一键部署”旁边多了「卸载」，只对**工作台自己装的**平台出现（`platforms/ollama` 的便携版、`platforms/llama.cpp`）：
+
+- **卸载时**：先停掉工作台拉起的进程（Ollama 的 `serve`、llama-server），释放 11434 / 8080 端口；再删 `platforms/<key>` 里的程序和 `lib`、`platforms/.downloads` 里这个平台的便携包；完成后回报释放了多少空间，卡片回到“可部署”。
+- **保留**：你自己 pull 的模型（`platforms/ollama/models`）和 `data/installers` 里的安装包都不动，重装后直接能用。
+- **拒绝的情况**：系统安装的 Ollama / LM Studio（工作台没装东西，去 Windows「设置 → 应用」卸）；Ollama 端口被托盘里的另一个进程占着（先在托盘右键 Quit，再点卸载）。
+- 接口：`POST /api/system/local-platforms/{key}/uninstall`；Ollama 拉模型是 `POST /api/system/local-platforms/ollama/pull`（`{"tag": "qwen2.5:7b"}`）+ `GET` 同路径查进度。
 
 ### 登录页记住账号
 

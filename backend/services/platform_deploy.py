@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 import os
 import platform
 import shutil
@@ -625,6 +626,217 @@ async def adopt_ollama_models() -> dict[str, Any]:
                 "moved": moved, "errors": errors[:5], "dst": str(dst)}
     return {"ok": True, "msg": f"已把系统目录的模型搬到 {dst}（{moved} 个文件，{size_text}）{restarted}",
             "moved": moved, "dst": str(dst), "restarted": bool(restarted)}
+
+
+# ---------------------------------------------------------------- Ollama 拉取模型
+PULL: dict[str, Any] = {"running": False, "tag": "", "pct": 0, "step": "", "msg": "尚未拉取",
+                       "ok": None, "error": "", "started_at": 0, "finished_at": 0}
+
+
+def pull_state() -> dict[str, Any]:
+    item = dict(PULL)
+    item["elapsed"] = round(time.time() - item["started_at"], 1) if item["running"] and item["started_at"] else 0
+    return item
+
+
+def _pull_set(**kw) -> None:
+    PULL.update(kw)
+
+
+async def ollama_pull(tag: str) -> dict[str, Any]:
+    """用 Ollama 自己的 HTTP 接口拉模型，进度落在 PULL 状态里供控制台轮询。
+
+    走 ``/api/pull`` 而不是命令行，是因为它能直接给出 ``completed/total`` 字节数，
+    控制台可以显示百分比；pull 结束后模型就落在 OLLAMA_MODELS（platforms/ollama/models）。
+    """
+    cfg = load_config()
+    base = platforms.endpoints(cfg).get("ollama", "")
+    healthy, _, detail = await platforms._probe_external(base, "/api/tags")
+    if not healthy:
+        return {"ok": False, "msg": f"Ollama 服务没在运行（{base}）：请先在部署卡片点“启动”，再拉模型"}
+    if PULL.get("running"):
+        return {"ok": False, "msg": f"正在拉取 {PULL.get('tag') or '模型'}，请等这一轮结束"}
+    _pull_set(running=True, tag=tag, pct=1, step="排队", msg=f"准备拉取 {tag}",
+              ok=None, error="", started_at=time.time(), finished_at=0)
+    asyncio.create_task(_pull_task(base, tag))
+    return {"ok": True, "msg": f"开始拉取 {tag}；模型会落到 {ollama_models_dir(cfg)}"}
+
+
+async def _pull_task(base: str, tag: str) -> None:
+    from . import platform_models  # 拉完让模型列表缓存立刻失效
+    try:
+        _pull_set(pct=3, step="连接", msg=f"连接 {base} 拉取 {tag}")
+        async with httpx.AsyncClient(timeout=None) as client:
+            async with client.stream("POST", f"{base}/api/pull",
+                                     json={"name": tag, "stream": True}) as resp:
+                if resp.status_code != 200:
+                    body = (await resp.aread()).decode("utf-8", "replace")[:300]
+                    raise RuntimeError(f"Ollama 返回 {resp.status_code}：{body}")
+                async for line in resp.aiter_lines():
+                    line = (line or "").strip()
+                    if not line:
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except Exception:
+                        continue
+                    status = str(payload.get("status") or "").strip()
+                    total = int(payload.get("total") or 0)
+                    done = int(payload.get("completed") or 0)
+                    if payload.get("error"):
+                        raise RuntimeError(str(payload["error"])[:300])
+                    if total and done:
+                        pct = 5 + round(min(done / total, 0.99) * 85, 1)
+                        _pull_set(pct=pct, step="下载",
+                                  msg=f"{status or '下载'} {done / 2**20:.0f}/{total / 2**20:.0f} MB")
+                    elif status:
+                        _pull_set(step="处理", msg=status[:160], pct=max(PULL.get("pct", 0), 5))
+        platform_models.invalidate()
+        _pull_set(running=False, ok=True, pct=100, step="完成",
+                  msg=f"{tag} 已拉取完成，可在“模型”页切换使用", finished_at=time.time())
+    except Exception as exc:
+        _pull_set(running=False, ok=False, step="失败", error=str(exc)[:300],
+                  msg=f"拉取 {tag} 失败：{str(exc)[:200]}", finished_at=time.time())
+
+
+# ---------------------------------------------------------------- 卸载（删程序、保模型）
+def _dir_bytes(path: Path) -> int:
+    total = 0
+    try:
+        if path.is_file():
+            return path.stat().st_size
+        for p in path.rglob("*"):
+            try:
+                if p.is_file():
+                    total += p.stat().st_size
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return total
+
+
+def _is_under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except Exception:
+        return False
+
+
+def _human(n: int) -> str:
+    if n >= 2**30:
+        return f"{n / 2**30:.2f} GB"
+    if n >= 2**20:
+        return f"{n / 2**20:.0f} MB"
+    return f"{n / 2**10:.0f} KB"
+
+
+async def _kill_ours(proc: subprocess.Popen | None, timeout: float = 15) -> bool:
+    if not proc or proc.poll() is not None:
+        return False
+    try:
+        if IS_WINDOWS:
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                           capture_output=True, creationflags=CREATE_NO_WINDOW)
+        else:
+            proc.terminate()
+        proc.wait(timeout=timeout)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+    return True
+
+
+async def uninstall(key: str) -> dict[str, Any]:
+    """卸载工作台自己装进 platforms/ 的东西，顺手关掉进程与端口。
+
+    保留两类“使用者自己下的东西”：Ollama 的 models 目录、data\\installers 里的安装包。
+    系统安装（LM Studio、系统版 Ollama）不归工作台管，直接拒绝并提示去系统里卸。
+    """
+    if key not in platforms.PLATFORMS:
+        return {"ok": False, "msg": "未知平台"}
+    if _state(key).get("running"):
+        return {"ok": False, "msg": "这个平台正在部署，等它跑完再卸载"}
+    if key == "ollama" and PULL.get("running"):
+        return {"ok": False, "msg": f"正在拉取 {PULL.get('tag')}，等拉完再卸载"}
+
+    cfg = load_config()
+    root = _platforms_root(cfg)
+    kept_models = ""
+    targets: list[Path] = []
+    freed = 0
+
+    if key == "ollama":
+        if not portable_ollama(cfg):
+            return {"ok": False, "msg": "这台机子的 Ollama 装在系统目录（不是工作台装的），工作台没有可删的东西；"
+                                        "要卸载请到 Windows“设置 → 应用”或托盘里退出后手动删除"}
+        base = platforms.endpoints(cfg).get("ollama", "")
+        proc = PROCS.get("ollama")
+        ours = bool(proc and proc.poll() is None)
+        healthy, _, _ = await platforms._probe_external(base, "/api/tags")
+        if healthy and not ours:
+            return {"ok": False, "msg": "Ollama 服务正在运行，但不是工作台拉起的（多半是托盘里的 Ollama）。"
+                                        "请先在托盘右键 Quit，再点“卸载”"}
+        stopped = await _kill_ours(proc) if ours else False
+        d = ollama_dir(cfg)
+        models = ollama_models_dir(cfg)
+        kept_models = str(models)
+        for child in sorted(d.iterdir()) if d.exists() else []:
+            if child.name == "models":
+                continue
+            targets.append(child)
+        # 下载缓存里那个便携包也清掉，省一份磁盘
+        _, name = ollama_archive()
+        cache = root / ".downloads" / name
+        if cache.exists():
+            targets.append(cache)
+        freed = sum(_dir_bytes(p) for p in targets)
+        for p in targets:
+            try:
+                if p.is_dir():
+                    shutil.rmtree(p, ignore_errors=True)
+                else:
+                    p.unlink(missing_ok=True)
+            except Exception:
+                pass
+        if d.exists() and not _has_models(models):
+            shutil.rmtree(d, ignore_errors=True)
+            kept_models = ""
+    elif key == "llama.cpp":
+        try:
+            await llama.server.stop()
+        except Exception:
+            pass
+        flags = CREATE_NO_WINDOW
+        if IS_WINDOWS:
+            subprocess.run(["taskkill", "/IM", "llama-server.exe", "/F"],
+                           capture_output=True, creationflags=flags)
+        else:
+            subprocess.run(["pkill", "-f", "llama-server"], capture_output=True)
+        d = Path(str(cfg.get("llama_dir") or "")).expanduser()
+        if not d.exists() or not _is_under(d, root):
+            return {"ok": False, "msg": f"llama.cpp 不在工作台目录里（{d or '未配置'}），工作台没有可删的东西；请手动删除"}
+        freed = _dir_bytes(d)
+        shutil.rmtree(d, ignore_errors=True)
+        kept_models = str(cfg.get("models_dir") or "")
+    else:
+        return {"ok": False, "msg": "LM Studio、vLLM、自定义平台都是系统安装或外部服务，工作台不接管卸载；"
+                                    "请到各自目录/程序列表里手动卸载"}
+
+    if PULL.get("tag") and key == "ollama":
+        _pull_set(running=False, ok=None, pct=0, step="", msg="尚未拉取", tag="")
+    _set(key, running=False, ok=None, skipped=False, pct=0, step="", msg="已卸载，可重新一键部署",
+         error="", started_at=0, finished_at=time.time())
+    from . import platform_models
+    platform_models.invalidate()
+    msg = f"已卸载 {key}，释放 {_human(freed)}；相关进程和端口已关闭"
+    if kept_models:
+        msg += f"；你的模型保留在 {kept_models}"
+    msg += f"；{DATA_DIR / 'installers'} 里的安装包也保留着"
+    return {"ok": True, "msg": msg, "freed": freed, "kept_models": kept_models}
 
 
 async def deploy(key: str, force: bool = False, endpoint: str = "") -> dict:
