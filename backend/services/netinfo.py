@@ -11,6 +11,72 @@ from fastapi import Request
 from ..config import load_config
 
 _LAN_IP: str | None = None
+_LOCAL_IPS: set[str] | None = None
+
+
+def local_ips() -> set[str]:
+    """本机地址集合：回环 + 所有网卡地址 + 主机名解析结果。
+
+    用于判断"这个请求是不是从运行工作台的这台电脑发出的"。
+    只认 127.0.0.1 会把"本机用局域网 IP 打开"误判成远程（历史 bug）。
+    """
+    global _LOCAL_IPS
+    if _LOCAL_IPS:
+        return _LOCAL_IPS
+    ips = {"127.0.0.1", "::1", "localhost"}
+    try:
+        for item in socket.getaddrinfo(socket.gethostname(), None):
+            addr = str(item[4][0] or "").split("%")[0]
+            if addr:
+                ips.add(addr)
+    except Exception:
+        pass
+    try:
+        import psutil
+
+        for _name, addrs in psutil.net_if_addrs().items():
+            for a in addrs:
+                if a.family in (socket.AF_INET, socket.AF_INET6) and a.address:
+                    ips.add(str(a.address).split("%")[0])
+    except Exception:
+        pass
+    _LOCAL_IPS = ips
+    return ips
+
+
+def is_local_ip(ip: str) -> bool:
+    raw = str(ip or "").strip()
+    if not raw:
+        return False
+    try:
+        addr = ipaddress.ip_address(raw.split("%")[0])
+    except ValueError:
+        return raw.lower() in ("localhost",)
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    if addr.is_loopback:
+        return True
+    return str(addr) in local_ips()
+
+
+def is_local_request(request: Request) -> bool:
+    """请求是否来自运行工作台的这台电脑（含本机用局域网地址访问的情况）。
+
+    真实 TCP 连接的 client.host 一定是 IP；出现非 IP（unix socket、进程内
+    ASGI 测试客户端）时只能是本机发生，按本机处理。带代理头的值一律按 IP 判断，
+    避免伪造 x-forwarded-for 绕开限制。
+    """
+    for header in ("cf-connecting-ip", "x-real-ip", "x-forwarded-for"):
+        if request.headers.get(header):
+            return is_local_ip(client_ip(request))
+    host = (request.client.host if request.client else "") or ""
+    if not host:
+        return True
+    try:
+        ipaddress.ip_address(host.split("%")[0])
+    except ValueError:
+        return True
+    return is_local_ip(host)
 
 
 def client_ip(request: Request) -> str:

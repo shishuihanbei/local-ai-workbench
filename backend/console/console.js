@@ -1376,6 +1376,10 @@ $("loginForm").addEventListener("submit", async (ev) => {
     applyAdminPermissions(me.user);
     applyBranding(S.branding, me.user.username);
     showMain();
+    try {
+      const la = await api("/api/system/local-access");
+      S.localClient = !!la.local;
+    } catch { S.localClient = true; }
     await switchTab(initialTab());
   } catch (e) { $("alert").textContent = e.message; }
   finally { btn.disabled = false; }
@@ -1394,6 +1398,10 @@ $("loginForm").addEventListener("submit", async (ev) => {
     applyAdminPermissions(me.user);
     applyBranding(S.branding, me.user.username);
     showMain();
+    try {
+      const la = await api("/api/system/local-access");
+      S.localClient = !!la.local;
+    } catch { S.localClient = true; }
     await switchTab(initialTab());
   } catch { showLogin(); }
 })();
@@ -4045,9 +4053,11 @@ function setBackupNotice(text, kind = "info") {
 }
 
 function setMigrationActions(show) {
+  const local = S.localClient !== false;
   for (const id of ["openMigrationFolderBtn", "downloadMigrationFileBtn"]) {
     const el = $(id);
-    if (el) el.hidden = !show;
+    // 远程（另一台电脑/外网）访问时后端无法操作服务器桌面，直接不显示“打开文件夹”
+    if (el) el.hidden = !show || (id === "openMigrationFolderBtn" && !local);
     if (!show) el.textContent = id === "openMigrationFolderBtn" ? "打开文件夹" : "下载到浏览器";
   }
 }
@@ -4966,9 +4976,10 @@ function setShareNotice(text, kind = "info") {
 }
 
 function setShareActions(show) {
+  const local = S.localClient !== false;
   for (const id of ["openShareFolderBtn", "downloadShareFileBtn"]) {
     const el = $(id);
-    if (el) el.hidden = !show;
+    if (el) el.hidden = !show || (id === "openShareFolderBtn" && !local);
     if (!show) el.textContent = id === "openShareFolderBtn" ? "打开文件夹" : "下载到浏览器";
   }
 }

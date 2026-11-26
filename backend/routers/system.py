@@ -180,6 +180,19 @@ async def get_settings(request: Request, user: dict = Depends(admin_user)):
     return data
 
 
+@router.get("/local-access")
+async def local_access(request: Request, user: dict = Depends(current_user)):
+    """当前浏览器是否运行在工作台这台电脑上（决定“打开文件夹”类按钮可用）。
+
+    注意：本机通过局域网地址访问也算本机——只认 127.0.0.1 会误判。
+    """
+    return {
+        "local": netinfo.is_local_request(request),
+        "client_ip": netinfo.client_ip(request),
+        "origin": netinfo.origin(request),
+    }
+
+
 @router.put("/settings")
 async def put_settings(body: dict, user: dict = Depends(admin_user)):
     cfg = load_config()
@@ -314,9 +327,8 @@ async def migration_download(request: Request, token: str | None = None, save: b
 @router.post("/open-migration-folder")
 async def open_migration_folder(request: Request, token: str | None = None):
     await _admin_from_request(request, token)
-    host = request.client.host if request.client else ""
-    if host not in {"127.0.0.1", "::1", "localhost"}:
-        raise HTTPException(403, "只能在运行工作台的电脑上打开这个文件夹")
+    if not netinfo.is_local_request(request):
+        raise HTTPException(403, "只能在运行工作台的电脑上打开这个文件夹（本机用局域网地址访问也可以）")
     try:
         path = await run_in_threadpool(backup.open_migration_folder)
     except backup.BackupError as exc:
@@ -357,9 +369,8 @@ async def share_download(request: Request, token: str | None = None, save: bool 
 @router.post("/open-share-folder")
 async def open_share_folder(request: Request, token: str | None = None):
     await _admin_from_request(request, token)
-    host = request.client.host if request.client else ""
-    if host not in {"127.0.0.1", "::1", "localhost"}:
-        raise HTTPException(403, "只能在运行工作台的电脑上打开这个文件夹")
+    if not netinfo.is_local_request(request):
+        raise HTTPException(403, "只能在运行工作台的电脑上打开这个文件夹（本机用局域网地址访问也可以）")
     try:
         path = await run_in_threadpool(backup.open_share_folder)
     except backup.BackupError as exc:
