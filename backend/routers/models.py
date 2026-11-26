@@ -14,7 +14,7 @@ from ..db import (MODEL_CATALOG_EXTRAS, MODEL_SEED, audit, execute, executemany,
                   fetch_all, fetch_one, model_repo, model_url)
 from ..security import admin_user, current_user
 from ..services import (access, engine_install, engines, hardware, hf_models, llama,
-                        platform_models)
+                        model_usage, platform_models)
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -36,6 +36,12 @@ CATEGORY_LABELS = {
 
 class LoadBody(BaseModel):
     key: str
+    force: bool = False
+
+
+class SelectBody(BaseModel):
+    key: str
+    force: bool = False
 
 
 class AddBody(BaseModel):
@@ -240,8 +246,35 @@ async def progress(key: str, user: dict = Depends(current_user)):
     return await llama.download_progress(key)
 
 
+def _refuse_if_busy(key: str, user: dict, force: bool, status: dict) -> None:
+    """别人正在用本地模型回答时拒绝切换，返回 409 让前端选等待或强制。"""
+    if force:
+        return
+    holders = model_usage.busy(str(user.get("username") or ""))
+    if not holders:
+        return
+    raise HTTPException(409, detail={
+        "code": "model_busy",
+        "message": "有会话正在用本地模型回答，切换会中断它",
+        "target": key,
+        "running": str(status.get("model") or ""),
+        "items": holders,
+    })
+
+
+@router.get("/in-use")
+async def in_use(user: dict = Depends(current_user)):
+    """当前本地模型被谁、被几个会话占用；前端切换前用它判断要不要等待。"""
+    status = await llama.server.status()
+    return {
+        "running": str(status.get("model") or ""),
+        "healthy": bool(status.get("healthy")),
+        "busy": model_usage.busy(str(user.get("username") or "")),
+    }
+
+
 @router.post("/select")
-async def select(body: LoadBody, user: dict = Depends(current_user)):
+async def select(body: SelectBody, user: dict = Depends(current_user)):
     """用户选择模型时按需切换到该模型；只允许本人可用且已下载完整的模型。"""
     if not await access.can_use(user, body.key):
         raise HTTPException(403, "该模型未对当前用户开放")
@@ -267,6 +300,7 @@ async def select(body: LoadBody, user: dict = Depends(current_user)):
     status = await llama.server.status()
     if status.get("healthy") and status.get("model") in (body.key, row.get("alias") or ""):
         return {"ok": True, "msg": "模型已加载", "status": status}
+    _refuse_if_busy(body.key, user, body.force, status)
     ok, msg = await llama.server.start(body.key)
     await audit(user, "model.select" if ok else "model.select.fail", body.key, msg,
                 "ok" if ok else "fail")
@@ -282,6 +316,10 @@ async def load(body: LoadBody, user: dict = Depends(admin_user)):
         raise HTTPException(404, "模型不存在")
     if not int(row.get("installable", 1)):
         raise HTTPException(400, f"该模型需要独立引擎（{row.get('engine') or '未接入'}），当前不能由 llama.cpp 加载")
+    status = await llama.server.status()
+    if status.get("healthy") and status.get("model") in (body.key, row.get("alias") or ""):
+        return {"ok": True, "msg": "模型已加载", "status": status}
+    _refuse_if_busy(body.key, user, body.force, status)
     ok, msg = await llama.server.start(body.key)
     await audit(user, "model.load" if ok else "model.load.fail", body.key, msg, "ok" if ok else "fail")
     if not ok:
@@ -290,7 +328,15 @@ async def load(body: LoadBody, user: dict = Depends(admin_user)):
 
 
 @router.post("/unload")
-async def unload(user: dict = Depends(admin_user)):
+async def unload(force: bool = False, user: dict = Depends(admin_user)):
+    holders = model_usage.busy("")
+    if holders and not force:
+        raise HTTPException(409, detail={
+            "code": "model_busy",
+            "message": "有会话正在用本地模型回答，卸载会中断它",
+            "running": holders[0]["model"],
+            "items": holders,
+        })
     await llama.server.stop()
     cfg = load_config()
     cfg["local_enabled"] = False

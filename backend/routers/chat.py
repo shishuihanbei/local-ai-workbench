@@ -19,7 +19,7 @@ from ..config import load_config
 from ..db import audit, execute, fetch_all, fetch_one, parse_meta
 from ..security import current_user, user_from_any_token
 from ..services import (access, attachments, cluster, collab, docgen, kb, library, llama, memory,
-                        moderation, prompts, quota, routing, skills, tts, websearch)
+                        model_usage, moderation, prompts, quota, routing, skills, tts, websearch)
 
 router = APIRouter(prefix="/api", tags=["chat"])
 log = logging.getLogger(__name__)
@@ -551,6 +551,12 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
                     cluster.end(candidate["node_id"])
             raise RuntimeError("所有节点都失败" + ("：" + "；".join(errors[-3:]) if errors else ""))
 
+        # 本地 llama.cpp 是全局单模型：这里登记占用，切换模型前会检查。
+        usage_model = ""
+        if decision.get("provider") == "local" and not is_pool:
+            usage_model = str(getattr(llama.server, "model_key", "") or model_name)
+            model_usage.begin(usage_model, str(user.get("username") or ""))
+
         try:
             yield f"data: {json.dumps({'type':'meta','conversation_id':cid,'kb':extra.get('kb',[]),'web':extra.get('web') or None,'memory':extra.get('memory') or None,'model':model_name,'provider':decision['provider'],'trace_id':ctx['trace_id'],'route':decision['strategy'],'file_mode':bool(extra.get('file_mode')),'output_format':extra.get('output_format') or None}, ensure_ascii=False)}\n\n".encode()
             if extra.get("web_fallback"):
@@ -621,6 +627,8 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             status = "error"
             yield f"data: {json.dumps({'type':'error','message':err}, ensure_ascii=False)}\n\n".encode()
         finally:
+            if usage_model:
+                model_usage.end(usage_model, str(user.get("username") or ""))
             if not body.regenerate:
                 try:
                     await memory.maybe_capture(user["id"], body.message, cid)

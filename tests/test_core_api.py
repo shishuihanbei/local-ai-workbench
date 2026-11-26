@@ -170,6 +170,91 @@ def test_independent_model_download_starts_when_engine_ready(client, admin_token
     assert r.json()["msg"] == "已开始下载"
 
 
+def test_model_usage_tracks_and_scopes_by_user():
+    from backend.services import model_usage
+
+    model_usage.clear()
+    model_usage.begin("1.5b", "alice")
+    model_usage.begin("1.5b", "bob")
+    snap = model_usage.snapshot()
+    assert len(snap) == 1 and snap[0]["count"] == 2
+    assert snap[0]["users"] == ["alice", "bob"]
+
+    mine = model_usage.busy("alice")
+    assert len(mine) == 1 and mine[0]["count"] == 1 and mine[0]["users"] == ["bob"]
+    assert model_usage.busy("carol")[0]["count"] == 2
+
+    model_usage.end("1.5b", "alice")
+    assert model_usage.busy("alice")[0]["users"] == ["bob"]
+    model_usage.end("1.5b", "bob")
+    assert model_usage.snapshot() == []
+    assert model_usage.busy("carol") == []
+
+
+def test_select_refuses_while_another_user_generating(client, admin_token, monkeypatch, tmp_path):
+    import asyncio
+
+    from backend.db import execute
+    from backend.routers import models as models_router
+    from backend.services import model_usage
+
+    fake = tmp_path / "model.gguf"
+    fake.write_bytes(b"x" * 16)
+    monkeypatch.setattr(models_router, "model_file_path", lambda cfg, name: fake)
+    old_bytes = asyncio.run(_model_total_bytes("7b"))
+    asyncio.run(execute("UPDATE models SET total_bytes=0 WHERE key='7b'"))
+
+    async def fake_status():
+        return {"healthy": True, "running": True, "model": "1.5b"}
+
+    monkeypatch.setattr(models_router.llama.server, "status", fake_status)
+
+    model_usage.clear()
+    model_usage.begin("1.5b", "someone-else")
+    try:
+        r = client.post("/api/models/select", headers=auth(admin_token), json={"key": "7b"})
+        assert r.status_code == 409, r.text
+        detail = r.json()["detail"]
+        assert detail["code"] == "model_busy"
+        assert detail["items"][0]["users"] == ["someone-else"]
+
+        called = {"start": 0}
+
+        async def fake_start(key):
+            called["start"] += 1
+            return True, "ok"
+
+        monkeypatch.setattr(models_router.llama.server, "start", fake_start)
+        r = client.post("/api/models/select", headers=auth(admin_token),
+                        json={"key": "7b", "force": True})
+        assert r.status_code == 200, r.text
+        assert called["start"] == 1
+    finally:
+        model_usage.clear()
+        asyncio.run(execute("UPDATE models SET total_bytes=? WHERE key='7b'", (old_bytes,)))
+
+
+async def _model_total_bytes(key: str) -> int:
+    from backend.db import fetch_one
+    row = await fetch_one("SELECT total_bytes FROM models WHERE key=?", (key,))
+    return int(row["total_bytes"] or 0)
+
+
+def test_in_use_endpoint_lists_other_sessions(client, admin_token):
+    from backend.services import model_usage
+
+    model_usage.clear()
+    model_usage.begin("R1-Distill-Qwen-1.5B", "someone-else")
+    try:
+        r = client.get("/api/models/in-use", headers=auth(admin_token))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["busy"] and body["busy"][0]["model"] == "R1-Distill-Qwen-1.5B"
+        assert body["busy"][0]["users"] == ["someone-else"]
+    finally:
+        model_usage.clear()
+
+
 def test_backup_requires_login(client):
     client.cookies.clear()
     r = client.get("/api/system/backup")

@@ -576,3 +576,25 @@ html[data-theme="dark"] .quick-card.q-amber .q-icon,
 html[data-theme="dark"] .fc-ic.amber { background: #342817; color: #e7bd74; }
 html[data-theme="dark"] .quick-card.q-purple .q-icon,
 html[data-theme="dark"] .fc-ic.purple { background: #261f3e; color: #bda8ff; }
+
+/* ------------------------------ 模型占用提示 ------------------------------ */
+.wb-mask {
+  position: fixed; inset: 0; z-index: 120; display: flex; align-items: center;
+  justify-content: center; padding: 20px; background: rgba(12, 18, 30, .44);
+  backdrop-filter: blur(2px);
+}
+.wb-dialog {
+  width: min(430px, 100%); padding: 22px 22px 18px; border-radius: 14px;
+  border: 1px solid var(--ui-line); background: var(--panel);
+  box-shadow: 0 24px 60px rgba(12, 18, 30, .26); color: var(--ui-text);
+}
+.wb-dialog h3 { margin: 0 0 8px; font-size: 15px; font-weight: 650; color: var(--ui-ink); }
+.wb-busy-tip { margin: 0 0 12px; font-size: 12.5px; line-height: 1.7; }
+.wb-busy-list {
+  margin: 0 0 16px; padding: 10px 12px; border-radius: 9px; background: var(--ui-soft);
+  list-style: none; font-size: 12px; line-height: 1.9; color: var(--ui-text);
+}
+.wb-busy-list li + li { margin-top: 2px; }
+.wb-busy-list b { color: var(--ui-ink); font-weight: 600; }
+.wb-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.wb-dialog-actions .btn { min-height: 34px; padding: 0 14px; font-size: 12.5px; }

@@ -241,6 +241,9 @@
     if (Array.isArray(data.detail)) {
       return data.detail.map((x) => x.msg || String(x)).join("；");
     }
+    if (data.detail && typeof data.detail === "object") {
+      return String(data.detail.message || data.detail.code || fallback);
+    }
     if (data.detail) return String(data.detail);
     if (data.error) return String(data.error.message || data.error);
     return fallback;
@@ -268,7 +271,12 @@
     if (text) {
       try { data = JSON.parse(text); } catch { data = text; }
     }
-    if (!res.ok) throw new Error(errorText(data, `请求失败（${res.status}）`));
+    if (!res.ok) {
+      const err = new Error(errorText(data, `请求失败（${res.status}）`));
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
     return data;
   }
 
@@ -796,6 +804,89 @@
     updateWelcome();
   }
 
+  /* 本地 llama.cpp 一次只加载一个模型，切换会重启进程；
+     别人正在回答时先提示，让切换方自己选等待、强制还是取消。 */
+  function busyRowsHtml(items) {
+    return (items || []).map((it) => {
+      const users = (it.users || []).join("、") || "其他账号";
+      const secs = it.seconds ? ` · 已 ${it.seconds} 秒` : "";
+      return `<li><b>${esc(it.model)}</b> · ${it.count || 1} 个回答 · ${esc(users)}${secs}</li>`;
+    }).join("");
+  }
+
+  function askBusySwitch(items) {
+    return new Promise((resolve) => {
+      const mask = document.createElement("div");
+      mask.className = "wb-mask";
+      mask.innerHTML = `<div class="wb-dialog" role="dialog" aria-modal="true">
+        <h3>本地模型正在被使用</h3>
+        <p class="wb-busy-tip">本机同一时间只能加载一个模型。现在有别人的回答正在生成，直接切换会把它中断。</p>
+        <ul class="wb-busy-list">${busyRowsHtml(items)}</ul>
+        <div class="wb-dialog-actions">
+          <button type="button" class="btn ghost" data-act="cancel">取消</button>
+          <button type="button" class="btn danger" data-act="force">强制切换</button>
+          <button type="button" class="btn primary" data-act="wait">等它说完</button>
+        </div>
+      </div>`;
+      const onKey = (e) => { if (e.key === "Escape") done("cancel"); };
+      const done = (v) => {
+        document.removeEventListener("keydown", onKey);
+        mask.remove();
+        resolve(v);
+      };
+      document.addEventListener("keydown", onKey);
+      mask.addEventListener("click", (e) => {
+        if (e.target === mask) return done("cancel");
+        const act = e.target.closest("[data-act]");
+        if (act) done(act.dataset.act);
+      });
+      document.body.appendChild(mask);
+    });
+  }
+
+  function openWaitMask(items) {
+    const mask = document.createElement("div");
+    mask.className = "wb-mask";
+    mask.innerHTML = `<div class="wb-dialog" role="dialog" aria-modal="true">
+      <h3>正在等对方说完</h3>
+      <p class="wb-busy-tip">回答结束后会自动切到新模型。等待期间对方的回答不会被打断。</p>
+      <ul class="wb-busy-list">${busyRowsHtml(items)}</ul>
+      <div class="wb-dialog-actions">
+        <button type="button" class="btn ghost" data-act="cancel">取消等待</button>
+      </div>
+    </div>`;
+    document.body.appendChild(mask);
+    const list = mask.querySelector(".wb-busy-list");
+    const ctl = {
+      cancelled: false,
+      update(next) { list.innerHTML = busyRowsHtml(next); },
+      close() { mask.remove(); },
+    };
+    mask.addEventListener("click", (e) => {
+      if (e.target === mask || e.target.closest('[data-act="cancel"]')) {
+        ctl.cancelled = true;
+        ctl.close();
+      }
+    });
+    return ctl;
+  }
+
+  async function waitForFree(ctl) {
+    let last = [];
+    for (let i = 0; i < 240 && !ctl.cancelled; i += 1) {
+      try {
+        const d = await api("/api/models/in-use");
+        last = d.busy || [];
+      } catch {
+        last = last || [];
+      }
+      if (!ctl.cancelled && !last.length) return true;
+      if (!ctl.cancelled) ctl.update(last);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    return false;
+  }
+
   async function ensureModelLoaded(key) {
     const model = S.models.find((m) => m.key === key);
     if (!model || model.loaded === true || S.modelSwitching) return;
@@ -803,14 +894,39 @@
       setModel(key);
       return;
     }
+    const previous = (S.prefs && S.prefs.model) || "";
     S.modelSwitching = true;
     const select = $("#modelSelect");
     select.disabled = true;
     toast("正在切换模型…");
+    let force = false;
+    let givenUp = false;
     try {
-      await api("/api/models/select", { method: "POST", body: { key } });
-      await loadModels();
-      toast("模型已就绪");
+      while (true) {
+        try {
+          await api("/api/models/select", { method: "POST", body: { key, force } });
+          await loadModels();
+          toast("模型已就绪");
+          return;
+        } catch (e) {
+          const detail = (e && e.data && e.data.detail) || {};
+          if (e.status !== 409 || detail.code !== "model_busy") throw e;
+          const items = detail.items || [];
+          const act = await askBusySwitch(items);
+          if (act === "cancel") { givenUp = true; break; }
+          if (act === "force") { force = true; continue; }
+          force = false;
+          const ctl = openWaitMask(items);
+          const free = await waitForFree(ctl);
+          ctl.close();
+          if (!free) { givenUp = true; break; }
+        }
+      }
+      if (givenUp) {
+        if (previous) setModel(previous);
+        await loadModels();
+        toast("已取消切换，保持原来的模型");
+      }
     } catch (e) {
       const loaded = S.models.find((m) => modelRunnable(m));
       if (loaded) setModel(loaded.key);
