@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import importlib.util
+import os
 import platform
 import shutil
 import time
@@ -144,60 +145,154 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+ZIP_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+
+
+def file_head(path: Path, limit: int = 8) -> bytes:
+    """读文件开头几个字节，用来判断它到底是不是压缩包。"""
+    try:
+        with open(path, "rb") as f:
+            return f.read(limit) or b""
+    except Exception:
+        return b""
+
+
+def head_hint(path: Path) -> str:
+    """把开头几十个字节变成能看懂的一句话，报错时告诉用户下回来的是什么。"""
+    try:
+        raw = file_head(path, 160)
+        if not raw:
+            return "空文件（0 字节）"
+        if raw[:4] in ZIP_MAGIC:
+            return "zip 头"
+        if raw[:4] == b"Rar!":
+            return "rar 压缩包"
+        if raw[:2] == b"\x1f\x8b":
+            return "gzip/tgz 压缩包"
+        text = "".join(chr(b) if 32 <= b < 127 else " " for b in raw)
+        text = " ".join(text.split())[:120]
+        return f"不是压缩包（开头是网页/文本：{text or '不可识别字节'}）" if text else "不可识别字节"
+    except Exception:
+        return "无法读取"
+
+
+def looks_like_zip(path: Path) -> bool:
+    return file_head(path, 4) in ZIP_MAGIC
+
+
+def _is_network_error(exc: BaseException) -> bool:
+    import httpx
+    return isinstance(exc, (httpx.TimeoutException, httpx.TransportError, httpx.RemoteProtocolError))
+
+
 async def _download(url: str, dest: Path, on_progress: Callable[[int, int, str], None] | None = None) -> str:
-    """下载 GitHub 资源；直连失败自动改走加速镜像。"""
+    """下载安装包：先写 .part，断了就续传，成功才改名为正式文件。
+
+    - 大包（Ollama 1.7 GB）在网络抖动时不会再从头开始，也不用担心下回来半截；
+    - 失败重试 4 次，每次紧接上次的字节位置（HTTP Range）；
+    - 直连失败自动走加速镜像（只对 GitHub 链接）。
+    """
+    import asyncio
+
     errors: list[str] = []
-    candidates = url_candidates(url)
-    total = 0
-    done = 0
-    for idx, candidate in enumerate(candidates):
-        try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(90, connect=8, read=45)) as c:
-                async with c.stream("GET", candidate, headers={"User-Agent": "workbench-installer"}) as r:
-                    r.raise_for_status()
-                    total = int(r.headers.get("content-length") or 0)
-                    done = 0
-                    with open(dest, "wb") as f:
-                        async for chunk in r.aiter_bytes(1024 * 512):
-                            f.write(chunk)
-                            done += len(chunk)
-                            note = "直连" if idx == 0 else "加速镜像"
-                            if on_progress:
-                                on_progress(done, total, note)
-                            elif total:
-                                _set(pct=round(min(done / total, 0.99) * 60, 1),
-                                     msg=f"{note}下载中 {done/2**20:.0f}/{total/2**20:.0f} MB")
-            if total and done != total:
-                raise RuntimeError(f"下载不完整：{done}/{total} bytes")
-            digest = _sha256(dest)
-            _set(sha256=digest, bytes=done)
-            return digest
-        except Exception as exc:
-            errors.append(("直连" if idx == 0 else "加速") + f"失败：{type(exc).__name__}")
-            dest.unlink(missing_ok=True)
-            continue
-    raise RuntimeError("下载失败（直连和加速都没通）。请点“网络诊断”检查网络；" + "；".join(errors[-3:]))
+    part = dest.with_name(dest.name + ".part")
+    part.parent.mkdir(parents=True, exist_ok=True)
+    attempts = 4
+    for idx, candidate in enumerate(url_candidates(url)):
+        label = "直连" if idx == 0 else "加速镜像"
+        for attempt in range(1, attempts + 1):
+            have = part.stat().st_size if part.exists() else 0
+            headers = {"User-Agent": "workbench-installer"}
+            if have:
+                headers["Range"] = f"bytes={have}-"
+            try:
+                async with httpx.AsyncClient(follow_redirects=True,
+                                             timeout=httpx.Timeout(60, connect=10, read=120)) as c:
+                    async with c.stream("GET", candidate, headers=headers) as r:
+                        if have and r.status_code == 206:
+                            mode = "ab"
+                            total = have + int(r.headers.get("content-length") or 0)
+                        else:
+                            if r.status_code == 416:      # 服务器说范围不合法，重下
+                                part.unlink(missing_ok=True)
+                                have = 0
+                                raise RuntimeError("续传位置失效，已重新下载")
+                            r.raise_for_status()
+                            mode = "wb"
+                            have = 0
+                            total = int(r.headers.get("content-length") or 0)
+                        done = have
+                        with open(part, mode) as f:
+                            async for chunk in r.aiter_bytes(1024 * 512):
+                                f.write(chunk)
+                                done += len(chunk)
+                                if on_progress:
+                                    on_progress(done, total, label)
+                                elif total:
+                                    _set(pct=round(min(done / total, 0.99) * 60, 1),
+                                         msg=f"{label}下载中 {done/2**20:.0f}/{total/2**20:.0f} MB")
+                got = part.stat().st_size
+                if total and got != total:
+                    raise RuntimeError(f"下载不完整：{got}/{total} bytes")
+                digest = _sha256(part)
+                os.replace(part, dest)
+                _set(sha256=digest, bytes=got)
+                return digest
+            except Exception as exc:
+                size = part.stat().st_size if part.exists() else 0
+                errors.append(f"{label}第 {attempt} 次失败：{type(exc).__name__}")
+                if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None \
+                        and exc.response.status_code in (403, 404, 410):
+                    part.unlink(missing_ok=True)
+                    break                     # 这种错误换镜像或重试都没意义
+                if size and on_progress:
+                    on_progress(size, 0, f"{label}已存 {size/2**20:.0f} MB，准备续传")
+                await asyncio.sleep(min(2 * attempt, 8))
+    kept = part.stat().st_size if part.exists() else 0
+    tip = f"已保留 {kept/2**20:.0f} MB 的续传文件，再点一次“一键部署”会接着下。" if kept else ""
+    raise RuntimeError("下载失败（直连和加速都没通）。请点“网络诊断”检查网络；"
+                       + (tip + " " if tip else "")
+                       + "；".join(errors[-3:]))
 
 
 def _check_archive(path: Path) -> None:
     """解压前检查包结构和压缩完整性。"""
+    if not path.exists():
+        raise RuntimeError(f"安装包不存在：{path}")
     if str(path).endswith(".tar.gz"):
         import tarfile
-        with tarfile.open(path) as tf:
-            for member in tf.getmembers():
-                p = Path(member.name)
+        try:
+            with tarfile.open(path) as tf:
+                for member in tf.getmembers():
+                    p = Path(member.name)
+                    if p.is_absolute() or ".." in p.parts:
+                        raise RuntimeError("安装包包含不安全路径")
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(
+                f"安装包解不开：{head_hint(path)}，文件 {path.stat().st_size/2**20:.1f} MB，"
+                f"请删掉 {path} 后重新部署") from exc
+        return
+    if not looks_like_zip(path):
+        raise RuntimeError(
+            f"下载回来的不是 zip：{head_hint(path)}，文件 {path.stat().st_size/2**20:.1f} MB。"
+            f"多半是网络被劫持或加速镜像返回了网页，已自动删掉缓存，请重试")
+    try:
+        with zipfile.ZipFile(path) as z:
+            bad = z.testzip()
+            if bad:
+                raise RuntimeError(f"安装包压缩校验失败：{bad}")
+            for name in z.namelist():
+                p = Path(name)
                 if p.is_absolute() or ".." in p.parts:
                     raise RuntimeError("安装包包含不安全路径")
-        return
-    with zipfile.ZipFile(path) as z:
-        bad = z.testzip()
-        if bad:
-            raise RuntimeError(f"安装包压缩校验失败：{bad}")
-        for name in z.namelist():
-            p = Path(name)
-            if p.is_absolute() or ".." in p.parts:
-                raise RuntimeError("安装包包含不安全路径")
-
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(
+            f"安装包解不开（可能不完整或被改写）：{head_hint(path)}，"
+            f"文件 {path.stat().st_size/2**20:.1f} MB，请删掉后重新部署") from exc
 
 def _extract(zip_path: Path, target: Path) -> Path:
     _set(pct=62, step="解压", msg="正在解压安装包")

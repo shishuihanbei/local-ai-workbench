@@ -255,25 +255,54 @@ def ollama_archive() -> tuple[str, str]:
 
 def _extract_archive(archive: Path, target: Path) -> None:
     """校验压缩包后整包解压到 target，保留内部目录结构（lib/、bin/ 都要）。"""
+    if not archive.exists() or archive.stat().st_size == 0:
+        raise RuntimeError(f"安装包不存在或为空：{archive}")
     tmp = platform_store.workbench_tmp(load_config(), "extract")
     try:
         if archive.name.endswith(".tgz") or archive.name.endswith(".tar.gz"):
-            with tarfile.open(archive) as tf:
-                for member in tf.getmembers():
-                    parts = Path(member.name).parts
-                    if Path(member.name).is_absolute() or ".." in parts:
-                        raise RuntimeError("安装包包含不安全路径")
-                tf.extractall(tmp, filter="data")
+            try:
+                with tarfile.open(archive) as tf:
+                    for member in tf.getmembers():
+                        parts = Path(member.name).parts
+                        if Path(member.name).is_absolute() or ".." in parts:
+                            raise RuntimeError("安装包包含不安全路径")
+                    tf.extractall(tmp, filter="data")
+            except RuntimeError:
+                raise
+            except Exception as exc:
+                raise RuntimeError(
+                    f"安装包解不开：{installer.head_hint(archive)}，"
+                    f"文件 {archive.stat().st_size/2**20:.1f} MB") from exc
         else:
-            with zipfile.ZipFile(archive) as zf:
-                bad = zf.testzip()
-                if bad:
-                    raise RuntimeError(f"安装包压缩校验失败：{bad}")
-                for name in zf.namelist():
-                    parts = Path(name).parts
-                    if Path(name).is_absolute() or ".." in parts:
-                        raise RuntimeError("安装包包含不安全路径")
-                zf.extractall(tmp)
+            hint = installer.head_hint(archive)
+            size = archive.stat().st_size / 2**20
+            if not installer.looks_like_zip(archive):
+                # 网页/错误页当压缩包下回来的常见情形：删掉缓存，下次重下
+                try:
+                    archive.unlink()
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    f"下载回来的不是 zip：{hint}，文件 {size:.1f} MB，已删除坏缓存，请重试")
+            try:
+                with zipfile.ZipFile(archive) as zf:
+                    bad = zf.testzip()
+                    if bad:
+                        raise RuntimeError(f"安装包压缩校验失败：{bad}")
+                    for name in zf.namelist():
+                        parts = Path(name).parts
+                        if Path(name).is_absolute() or ".." in parts:
+                            raise RuntimeError("安装包包含不安全路径")
+                    zf.extractall(tmp)
+            except RuntimeError:
+                raise
+            except Exception as exc:
+                try:
+                    archive.unlink()
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    f"安装包解不开（{hint}，文件 {size:.1f} MB），已删除坏缓存，请重试") from exc
         target.mkdir(parents=True, exist_ok=True)
         shutil.copytree(tmp, target, dirs_exist_ok=True)
     finally:
@@ -537,8 +566,12 @@ async def _install_ollama(key: str, force: bool = False) -> tuple[bool, str]:
             _set(key, pct=60, step="本地包", msg=f"使用本地便携包 {archive.name}")
         else:
             archive = cache
-            if cache.exists() and cache.stat().st_size > 0 and force:
-                cache.unlink()
+            if force:
+                cache.unlink(missing_ok=True)
+                cache.with_name(cache.name + ".part").unlink(missing_ok=True)
+            if cache.exists() and cache.stat().st_size > 0 and not installer.looks_like_zip(cache):
+                # 上次下回来的不是 zip（网页/错误页），直接丢掉重下
+                cache.unlink(missing_ok=True)
             if cache.exists() and cache.stat().st_size > 0:
                 _set(key, pct=60, step="本地缓存", msg=f"使用已下载的 {name}")
             else:
@@ -683,8 +716,9 @@ async def _install_lmstudio(key: str, force: bool = False) -> tuple[bool, str, b
     url, name, sha_url = lmstudio_archive()
     target = lmstudio_dir(cfg)
     archive = platform_store.download_dir(cfg, "lmstudio") / name
-    if archive.exists() and archive.stat().st_size > 0 and force:
-        archive.unlink()
+    if force:
+        archive.unlink(missing_ok=True)
+        archive.with_name(archive.name + ".part").unlink(missing_ok=True)
     if not (archive.exists() and archive.stat().st_size > 0):
         _set(key, pct=6, step="下载", msg=f"下载 LM Studio 无界面版 {name}")
         await _download_file(key, url, archive)
