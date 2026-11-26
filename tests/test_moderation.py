@@ -234,7 +234,7 @@ def test_moderation_console_contract():
 
     root = Path(__file__).parents[1]
     html = (root / "backend" / "console" / "index.html").read_text(encoding="utf-8")
-    js = (root / "backend" / "console" / "console.js").read_text(encoding="utf-8")
+    js = "".join(p.read_text(encoding="utf-8") for p in sorted((root / "backend" / "console").rglob("*.js")))
     assert 'id="pane-moderation"' in html
     assert 'data-tab="moderation"' in html
     assert 'id="modWordRows"' in html

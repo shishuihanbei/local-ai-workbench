@@ -13,20 +13,20 @@ def test_console_serves_injected_version(client):
     assert r.status_code == 200
     html = r.text
     assert "__ASSET_VERSION__" not in html, "占位符没有被替换"
-    assert "console.js?v=" in html and "console.css?v=" in html
-    assert f"console.js?v={ASSET_VERSION}" in html
+    assert "core.js?v=" in html and "console.css?v=" in html
+    assert f"/console/core.js?v={ASSET_VERSION}" in html
     assert f"console.css?v={ASSET_VERSION}" in html
 
 
 def test_console_without_trailing_slash(client):
     r = client.get("/console", follow_redirects=False)
     assert r.status_code == 200
-    assert f"console.js?v={ASSET_VERSION}" in r.text
+    assert f"/console/core.js?v={ASSET_VERSION}" in r.text
 
 
 def test_console_assets_still_reachable(client):
     """注入只改入口 HTML，静态资源仍由 mount 正常提供。"""
-    for path in ("/console/console.js", "/console/console.css", "/console/favicon.svg"):
+    for path in ("/console/core.js", "/console/boot.js", "/console/panels/data.js", "/console/console.css", "/console/favicon.svg"):
         r = client.get(path)
         assert r.status_code == 200, path
         assert r.content

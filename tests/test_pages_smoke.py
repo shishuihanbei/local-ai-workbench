@@ -60,6 +60,6 @@ def test_referenced_assets_all_resolve(client):
 def test_console_page_declares_every_tab(client):
     """控制台入口至少要有导航和脚本；tab 面板由 JS 建，这里只兜住改版后的空壳。"""
     html = client.get("/console/").text
-    assert "console.js?v=" in html
+    assert "core.js?v=" in html
     assert "console.css?v=" in html
     assert "<html" in html.lower()

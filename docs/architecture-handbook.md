@@ -78,7 +78,7 @@ workbench/
 │   ├── logbus.py          调用记录（requests/spans）批量落库
 │   ├── routers/           25 个模块，见附录 A
 │   ├── services/          46 个模块，见附录 B
-│   └── console/           管理控制台（index.html + console.js + console.css，静态挂载）
+│   └── console/           管理控制台（index.html + core/models/session/tabs/boot + panels/*.js + console.css，静态挂载）
 ├── frontend/              用户端（index.html + app.js + app.css + app.ui.css + 共享页）
 ├── tests/                 27 个 pytest 文件，195 条用例
 ├── docs/                  本文档与后续设计说明
@@ -259,13 +259,27 @@ data/
 
 | 文件 | 行数 | 职责 |
 |---|---|---|
-| index.html | 2980 | 31 个 tab 的页面骨架 |
-| console.js | 8982 | 全部渲染与请求，按注释分为约 30 个分组 |
-| console.css | 1984 | 控制台样式 |
+| index.html | 2780 | 31 个 tab 的页面骨架，底部按顺序加载 13 个脚本 |
+| core.js | 247 | 全局状态 `S`、`api / esc / toast / confirm`、登录与外壳、品牌水印、导航与权限 |
+| models.js | 724 | 硬件、平台安装、模型清单与引擎、开机自启、桌面快捷方式 |
+| session.js | 370 | `loadAll` / `switchTab`、全局事件入口、登录提交 |
+| tabs.js | 1208 | 管理页签框架（M0–M2）、页标题 `TITLES` 与使用说明 `PAGE_TUTORIALS` |
+| panels/observe.js | 257 | 概览、调用记录、供应商、路由 |
+| panels/people.js | 821 | 用户与模型权限、登录方式、API Key |
+| panels/content.js | 1215 | 本地前端与穿透、知识库、网站分享 |
+| panels/data.js | 1692 | 数据库中心、表管理、SQL 控制台、连接、备份与迁移 |
+| panels/cluster.js | 301 | 多机算力池、自定义技能 |
+| panels/prompts.js | 473 | 提示词中心 |
+| panels/ops.js | 670 | 审计日志、协作套件、联网检索、附件解析 |
+| panels/front.js | 541 | 提示词交互、前台功能与图标库、页面输入事件 |
+| boot.js | 21 | 启动引导，**必须最后加载**（首个 await 之后会调用各面板渲染） |
+| console.css | 1921 | 控制台样式 |
+
+拆分规则（0.8.3.0+）：只按行区间切片，不改一行代码，因此行为与单文件时期完全等价；所有文件共享同一个全局词法作用域，函数声明可跨文件互相调用，但 `const/let` 的初始化顺序按加载顺序，新增文件不要插到 `core.js` 之前。
 
 31 个 tab：概览、调用记录、用户、合作伙伴、小队、公告、工单、会话分享、模型、供应商、路由、技能、提示词、智能体、知识库、资料库、记忆、机构、前台功能、内容安全、登录方式、API、网络、联网检索、附件解析、部署、算力池、备份、审计、数据库、网站分享。
 
-**事件模型**：`document.addEventListener("click")` 单入口分发，靠 `el.id` 或 `el.closest("[data-xxx]")` 判断；每个 tab 切换时整体重渲染对应 DOM。这是当前控制台"改一个按钮要翻大文件"的根因（见 T1）。
+**事件模型**：`document.addEventListener("click")` 单入口分发，靠 `el.id` 或 `el.closest("[data-xxx]")` 判断；每个 tab 切换时整体重渲染对应 DOM。0.8.3.0+ 起单文件巨石已按页签拆成 13 个文件（见 T1）：改某个页只动 `panels/` 下对应那一个文件。
 
 ### 4.3 版本与缓存
 
@@ -433,7 +447,7 @@ Start-Process .\.venv\Scripts\python.exe -ArgumentList "-m","uvicorn","backend.m
 **C. 新增一个控制台页面**
 
 1. `console/index.html` 加 tab 与面板骨架；
-2. `console.js` 在对应注释分组下加渲染函数 + 事件分支（单入口 click 分发）；
+2. `backend/console/panels/<域>.js` 里加渲染函数 + 事件分支（单入口 click 分发；不知道放哪个就查 4.2 的表）；
 3. 权限：`permission_for_path` 里登记路径前缀，否则普通管理员看不到；
 4. 页面必须有"详细说明"入口（项目既有约定）。
 
@@ -518,7 +532,7 @@ stop.ps1 → git pull → start.ps1 -NoBrowser → /api/health → 打开控制�
 
 | 编号 | 问题 | 证据 | 影响 | 建议 |
 |---|---|---|---|---|
-| T1 | 控制台单文件巨石 | `console.js` 8527 行 / 403 个顶层函数，`index.html` 2768 行 | 改一个按钮要通读大文件；合并冲突高发 | 按 tab 拆成 `console/<tab>.js`，保留全局分发入口 |
+| T1 | 控制台单文件巨石 | 原 `console.js` 9031 行 / 403 个顶层函数，`index.html` 2780 行 | 改一个按钮要通读大文件；合并冲突高发 | **已解决（0.8.3.0+）**：按页签拆成 13 个文件（core / models / session / tabs / boot + `panels/*.js` 8 个），最大 `panels/data.js` 1692 行；只切行区间不改代码，31 个页签逐一打开无报错（见 4.2） |
 | T2 | 用户端同样巨石 | `app.js` 4889 行，`index.html` 755 行 | 同上 | 按域拆 ES Module，先拆"设置""协作"两个低耦合域 |
 | T3 | 单写者数据层 | 共享连接 + `asyncio.Lock`，SQLite WAL | 无法多实例；长事务会阻塞所有请求 | 抽 repository，迁移 PG 后去掉全局锁 |
 | T4 | 业务规则下沉到路由 | `chat.py` 770 行内直接拼 SQL、判配额 | 换库/换表结构要改 HTTP 层 | 引入 `application/` 用例层 |
@@ -636,7 +650,7 @@ app/
 ### 阶段 2：前端拆分（5–7 天，可与阶段 3 并行）
 - T1 控制台按 tab 拆文件，先拆 4 个纯展示页（概览、审计、公告、工单），验证 registry 机制；
 - T2 用户端拆 `settings` 与 `collab` 两域；
-- 验收：拆完后 `console.js` 主文件 < 1500 行；31 页逐页截图比对无差异；T9 加 5 条 Playwright 冒烟。
+- 验收：**已完成（0.8.3.0+）**：拆成 13 个文件、最大 1692 行；31 个页签逐一打开、说明与刷新按钮实测无 JS 报错；仍待补 T9 的 Playwright 交互冒烟。
 - 回滚：保留旧文件一个版本周期，用特性开关切回。
 
 ### 阶段 3：后端分层（7–10 天）
