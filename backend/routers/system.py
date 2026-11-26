@@ -1,6 +1,7 @@
 """系统信息、日志、设置、审计、备份。"""
 from __future__ import annotations
 
+import json
 import platform
 import shutil
 import socket
@@ -18,7 +19,7 @@ from ..config import DATA_DIR, LOG_DIR, load_config, model_file_path, save_confi
 from ..db import audit, fetch_all, fetch_one
 from ..security import admin_user, any_user_or_none, current_user, user_from_any_token
 from ..services import (autostart, backup, hardware, installer, llama, netinfo, platform_deploy, platforms,
-                        retention, shortcuts, websearch)
+                        retention, shortcuts, storage, websearch)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -203,6 +204,29 @@ async def put_settings(body: dict, user: dict = Depends(admin_user)):
     save_config(cfg)
     await audit(user, "settings.update", detail=",".join(changed))
     return {"ok": True, "changed": changed}
+
+
+@router.get("/storage")
+async def storage_status(user: dict = Depends(admin_user)):
+    """模型目录、部署平台目录，以及默认位置。"""
+    return storage.status()
+
+
+@router.put("/storage")
+async def storage_update(body: dict, user: dict = Depends(admin_user)):
+    """保存自定义模型目录 / 部署平台目录；只改路径，不自动搬文件。"""
+    try:
+        result = await run_in_threadpool(
+            storage.set_paths,
+            (body or {}).get("models_dir"),
+            (body or {}).get("platforms_dir"),
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await audit(user, "settings.storage", detail=json.dumps(
+        {"models_dir": result.get("models_dir"), "platforms_dir": result.get("platforms_dir")},
+        ensure_ascii=False))
+    return result
 
 
 @router.get("/audit")

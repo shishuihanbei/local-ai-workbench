@@ -87,6 +87,41 @@ def test_restore_accepts_own_backup(client, admin_token):
     assert client.get("/api/health").status_code == 200
 
 
+def test_storage_paths_default_to_program_root(client, admin_token, tmp_path):
+    from backend import config as cfgmod
+
+    cfg = cfgmod.load_config()
+    keys = ("models_dir", "platforms_dir", "llama_dir", "llama_bin")
+    old = {k: cfg.get(k) for k in keys}
+    try:
+        r = client.get("/api/system/storage", headers=auth(admin_token))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["defaults"]["models_dir"] == str(cfgmod.BASE_DIR / "models")
+        assert body["defaults"]["platforms_dir"] == str(cfgmod.BASE_DIR / "platforms")
+        assert not body["defaults"]["models_dir"].startswith("D:\\AI\\models"), body
+
+        models = tmp_path / "models"
+        platforms = tmp_path / "platforms"
+        r = client.put("/api/system/storage", headers=auth(admin_token),
+                       json={"models_dir": str(models), "platforms_dir": str(platforms)})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["models_dir"] == str(models) and models.is_dir()
+        assert body["platforms_dir"] == str(platforms) and platforms.is_dir()
+        assert body["llama_dir"] == str(platforms / "llama.cpp")
+
+        r = client.put("/api/system/storage", headers=auth(admin_token),
+                       json={"models_dir": "relative/models"})
+        assert r.status_code == 400
+    finally:
+        cfg = cfgmod.load_config()
+        for key, value in old.items():
+            if value is not None:
+                cfg[key] = value
+        cfgmod.save_config(cfg)
+
+
 def test_frontend_settings_follow_access_host(client, admin_token):
     from backend import config as cfgmod
 
@@ -134,10 +169,22 @@ def test_frontend_settings_follow_access_host(client, admin_token):
         cfgmod.save_config(cfg)
 
 
-def test_model_select_requires_downloaded_file(client, admin_token):
-    r = client.post("/api/models/select", headers=auth(admin_token), json={"key": "1.5b"})
-    assert r.status_code == 400, r.text
-    assert "下载" in r.json()["detail"]
+def test_model_select_requires_downloaded_file(client, admin_token, tmp_path):
+    from backend import config as cfgmod
+
+    cfg = cfgmod.load_config()
+    old = cfg.get("models_dir")
+    cfg["models_dir"] = str(tmp_path / "models")
+    tmp_path.joinpath("models").mkdir()
+    cfgmod.save_config(cfg)
+    try:
+        r = client.post("/api/models/select", headers=auth(admin_token), json={"key": "1.5b"})
+        assert r.status_code == 400, r.text
+        assert "下载" in r.json()["detail"]
+    finally:
+        cfg = cfgmod.load_config()
+        cfg["models_dir"] = old
+        cfgmod.save_config(cfg)
 
 
 def test_frontend_model_dropdown_contract():

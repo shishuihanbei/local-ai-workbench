@@ -297,6 +297,8 @@ def status() -> dict:
         "llama": hardware.llama_info(),
         "models_dir": cfg["models_dir"],
         "models_dir_exists": Path(cfg["models_dir"]).exists(),
+        "platforms_dir": cfg.get("platforms_dir", ""),
+        "llama_dir": cfg["llama_dir"],
         "python_packages": pkgs,
         "deps_ok": all(pkgs.values()),
         "install": STATE,

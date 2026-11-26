@@ -36,6 +36,12 @@ log = logging.getLogger("workbench")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    try:
+        from .services import storage
+        st = storage.ensure()
+        log.info("存储目录：模型 %s；平台 %s", st["models_dir"], st["platforms_dir"])
+    except Exception:
+        log.exception("存储目录初始化失败，将使用配置里的原路径")
     await init_db()
     try:
         from .services import prompts as prompt_registry

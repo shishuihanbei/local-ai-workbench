@@ -60,7 +60,7 @@ changed = []
 if not Path(cfg["models_dir"]).exists():
     cfg["models_dir"] = str(Path.cwd() / "models"); changed.append("models_dir")
 if not Path(cfg["llama_dir"]).exists():
-    cfg["llama_dir"] = str(Path.cwd() / "llama"); changed.append("llama_dir")
+    cfg["llama_dir"] = str(Path.cwd() / "platforms" / "llama.cpp"); changed.append("llama_dir")
 if changed:
     save_config(cfg)
     print("已把不存在的目录改到包内：" + ", ".join(changed))
@@ -77,18 +77,7 @@ if [ -f data/workbench.pid ]; then
   fi
 fi
 
-port_in_use() {
-  if command -v ss >/dev/null 2>&1; then
-    ss -ltn 2>/dev/null | grep -q ":$PORT "
-  elif command -v lsof >/dev/null 2>&1; then
-    lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1
-  elif command -v netstat >/dev/null 2>&1; then
-    netstat -an 2>/dev/null | grep -q ":$PORT .*LISTEN"
-  else
-    return 1
-  fi
-}
-if port_in_use; then
+if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":$PORT "; then
   echo "[失败] 端口 $PORT 已被占用，可换端口：PORT=9200 ./start.sh"
   exit 1
 fi

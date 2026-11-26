@@ -20,6 +20,20 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 DB_PATH = DATA_DIR / "workbench.db"
 CONFIG_PATH = DATA_DIR / "config.json"
 
+
+def default_models_dir() -> Path:
+    """模型目录：始终在程序根目录下，不写死某台机器的绝对路径。"""
+    return BASE_DIR / "models"
+
+
+def default_platforms_dir() -> Path:
+    """下载的部署平台（llama.cpp 等）统一放在根目录 platforms 下。"""
+    return BASE_DIR / "platforms"
+
+
+def default_llama_dir() -> Path:
+    return default_platforms_dir() / "llama.cpp"
+
 for _d in (DATA_DIR, LOG_DIR, UPLOAD_DIR, AUDIO_DIR, EXPORT_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
@@ -29,8 +43,9 @@ CREATE_NO_WINDOW = 0x08000000 if IS_WINDOWS else 0
 DEFAULTS: dict[str, Any] = {
     "host": "0.0.0.0",
     "port": 9000,
-    "models_dir": str(Path(os.getenv("WORKBENCH_MODELS") or BASE_DIR / "models")),
-    "llama_dir": str(Path(os.getenv("WORKBENCH_LLAMA") or BASE_DIR / "llama")),
+    "models_dir": str(Path(os.getenv("WORKBENCH_MODELS") or default_models_dir())),
+    "platforms_dir": str(Path(os.getenv("WORKBENCH_PLATFORMS") or default_platforms_dir())),
+    "llama_dir": str(Path(os.getenv("WORKBENCH_LLAMA") or default_llama_dir())),
     "llama_bin": "",                 # 空 = 自动探测 <llama_dir>/llama-server(.exe)
     "upstream_base": "http://127.0.0.1:8080/v1",
     "upstream_key": "sk-deepseek-local",

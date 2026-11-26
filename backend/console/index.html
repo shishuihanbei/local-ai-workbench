@@ -1373,6 +1373,30 @@
 
     <section class="cards" id="hwCards"></section>
 
+    <section class="panel" id="storagePanel">
+      <div class="panel-head">
+        <h2>存储位置</h2>
+        <div class="panel-tools"><span class="badge" id="storageBadge">读取中…</span></div>
+      </div>
+      <p class="hint" style="margin:0 0 12px">
+        模型和下载的部署平台默认都放在程序根目录下：<b>models</b> 放模型，<b>platforms</b> 放 llama.cpp 等下载的平台。不写死某台机器的绝对路径，换机器、换盘都不用改代码。
+      </p>
+      <div class="storage-grid">
+        <label for="storageModels">模型目录
+          <input id="storageModels" spellcheck="false" autocomplete="off" placeholder="默认 程序根目录\models">
+        </label>
+        <label for="storagePlatforms">部署平台目录
+          <input id="storagePlatforms" spellcheck="false" autocomplete="off" placeholder="默认 程序根目录\platforms">
+        </label>
+      </div>
+      <p class="hint mono" id="storageHint">llama.cpp —</p>
+      <div class="storage-actions">
+        <button class="btn primary" id="storageSave" type="button">保存位置</button>
+        <button class="btn small ghost" id="storageDefault" type="button">填入默认位置</button>
+      </div>
+      <p class="hint" id="storageMsg"></p>
+    </section>
+
     <section class="panel">
       <div class="panel-head">
         <h2>部署平台</h2>

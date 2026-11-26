@@ -43,7 +43,7 @@ workbench/
 └── README.md
 ```
 
-模型不放在工程内，默认读取 `D:\AI\models`，llama.cpp 默认 `D:\AI\llama`，均可在 `data/config.json` 修改。
+模型放在程序根目录的 `models`，下载的部署平台统一放在 `platforms`（llama.cpp 在 `platforms/llama.cpp`）；安装后自动创建，可在控制台「部署 · 存储位置」改成别的目录，不写死绝对路径。
 
 ## 快速开始
 
@@ -317,8 +317,9 @@ curl "http://127.0.0.1:9100/v1/chat/completions" \
 | `platform_endpoints` | 外部平台根地址，如 `http://127.0.0.1:11434`，不要带 `/v1` |
 | `github_proxy` | GitHub 下载线路：`auto` 自动选最快镜像，`off` 只直连，或填自定义加速前缀 |
 | `ctx` / `threads` | 上下文长度与线程数 |
-| `models_dir` | 模型目录，默认 `D:\AI\models` |
-| `llama_dir` | llama.cpp 目录，默认 `D:\AI\llama` |
+| `models_dir` | 模型目录，默认程序根目录下的 `models`，可在控制台「部署 · 存储位置」修改 |
+| `platforms_dir` | 下载的部署平台目录，默认程序根目录下的 `platforms` |
+| `llama_dir` | llama.cpp 目录，默认 `<platforms_dir>/llama.cpp` |
 | `serve_frontend` | 是否由本进程托管用户端，默认 `true` |
 | `allow_register` | 是否允许访客自助注册，默认 `true` |
 | `brand_logo` | `data/branding/` 下的 Logo 文件名，由控制台「外观」上传/删除 |\n| `brand_tagline` / `brand_primary` | 品牌副标题与主色（十六进制），主色会覆盖用户端 `--brand` 主题色 |\n| `brand_login_title` / `brand_login_lead` / `brand_login_foot` | 登录页大标题、说明和页脚文案，支持换行 |\n| `brand_auth_subtitle` | 登录卡片副标题 |\n| `brand_icp` / `brand_icp_url` | ICP 备案号与链接，链接留空使用官方查询入口 |\n| `brand_police` / `brand_police_url` | 公安备案号与链接 |\n| `brand_copyright` | 页脚版权；留空自动生成 `© 年份 + 品牌名称` |\n| `websearch_enabled` | 联网检索总开关，默认 `true`；关闭后用户端和定时任务都跳过检索 |

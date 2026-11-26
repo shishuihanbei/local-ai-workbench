@@ -1947,3 +1947,17 @@ body.guide-open { overflow: hidden; }
 .shortcut-mode select:focus, .shortcut-mode input:focus {
   border-color: #b9c6f7; box-shadow: 0 0 0 3px rgba(79, 110, 247, .1);
 }
+
+/* 存储位置：模型目录 / 部署平台目录 */
+.storage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0 0 10px; }
+.storage-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+.storage-grid input {
+  width: 100%; box-sizing: border-box; padding: 9px 11px; border: 1px solid var(--line);
+  border-radius: 9px; font-size: 13px; font-family: inherit; background: #fff; outline: none;
+}
+.storage-grid input:focus { border-color: #b9c6f7; box-shadow: 0 0 0 3px rgba(79, 110, 247, .1); }
+.storage-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+@media (max-width: 720px) {
+  .storage-grid { grid-template-columns: 1fr; }
+  .storage-actions .btn { width: 100%; }
+}

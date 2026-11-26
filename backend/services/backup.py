@@ -212,7 +212,7 @@ if (Test-Path $cfgPath) {
     try {
         $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
         $models = Join-Path $root "models"
-        $llama = Join-Path $root "llama"
+        $llama = Join-Path $root "platforms\llama.cpp"
         if (Test-Path $models) { $cfg.models_dir = $models }
         if (Test-Path $llama) { $cfg.llama_dir = $llama }
         $cfg.serve_frontend = $true
@@ -238,7 +238,7 @@ cfg_path = os.path.join(root, "data", "config.json")
 if os.path.exists(cfg_path):
     try:
         cfg = json.load(open(cfg_path, encoding="utf-8"))
-        for key, sub in (("models_dir", "models"), ("llama_dir", "llama")):
+        for key, sub in (("models_dir", "models"), ("llama_dir", "platforms/llama.cpp")):
             path = os.path.join(root, sub)
             if os.path.isdir(path):
                 cfg[key] = path

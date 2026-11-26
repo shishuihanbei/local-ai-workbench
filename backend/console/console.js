@@ -632,13 +632,63 @@ function renderDeployment(hw, models, deploy) {
   if (hw.install.install && hw.install.install.running) pollInstall();
 }
 
+function renderStorage(st) {
+  if (!st) return;
+  S.storage = st;
+  if ($("storageModels")) $("storageModels").value = st.models_dir || "";
+  if ($("storagePlatforms")) $("storagePlatforms").value = st.platforms_dir || "";
+  const badge = $("storageBadge");
+  if (badge) {
+    badge.className = "badge good";
+    badge.textContent = "已就绪";
+  }
+  if ($("storageHint")) {
+    $("storageHint").textContent = `llama.cpp 安装位置：${st.llama_dir}${st.llama_dir_exists ? "（已存在）" : "（安装时自动创建）"}`;
+  }
+  if ($("storagePanel")) {
+    $("storagePanel").dataset.defaults = JSON.stringify(st.defaults || {});
+  }
+}
+
+async function loadStorage() {
+  const st = await api("/api/system/storage");
+  renderStorage(st);
+}
+
+async function saveStorage() {
+  const models = ($("storageModels") && $("storageModels").value.trim()) || "";
+  const platforms = ($("storagePlatforms") && $("storagePlatforms").value.trim()) || "";
+  const btn = $("storageSave");
+  const old = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "保存中…";
+  try {
+    const st = await api("/api/system/storage", {
+      method: "PUT",
+      body: JSON.stringify({ models_dir: models, platforms_dir: platforms }),
+    });
+    renderStorage(st);
+    if ($("storageMsg")) $("storageMsg").textContent = "已保存；正在运行的服务重启后会按新目录加载模型。";
+    uiToast("存储位置已保存");
+    btn.textContent = "已保存";
+    setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 1800);
+  } catch (e) {
+    if ($("storageMsg")) $("storageMsg").textContent = e.message;
+    uiToast(e.message);
+    btn.textContent = "保存失败";
+    setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 1800);
+  }
+}
+
 async function loadDeployment() {
-  const [hw, models, deploy] = await Promise.all([
+  const [hw, models, deploy, storage] = await Promise.all([
     api("/api/system/hardware"),
     api("/api/models"),
     api("/api/system/local-deploy"),
+    api("/api/system/storage"),
   ]);
   renderDeployment(hw, models, deploy);
+  renderStorage(storage);
 }
 
 /* ---------------------------------------------------------------- 开机自启 */
@@ -1098,6 +1148,17 @@ document.addEventListener("click", async (ev) => {
         t.textContent = old;
         t.disabled = false;
       }
+      return;
+    }
+    else if (t.id === "storageSave") {
+      await saveStorage();
+      return;
+    }
+    else if (t.id === "storageDefault") {
+      const defaults = (S.storage && S.storage.defaults) || {};
+      if ($("storageModels")) $("storageModels").value = defaults.models_dir || "";
+      if ($("storagePlatforms")) $("storagePlatforms").value = defaults.platforms_dir || "";
+      if ($("storageMsg")) $("storageMsg").textContent = "已填入程序根目录下的默认位置，点「保存位置」生效。";
       return;
     }
     else if (t.id === "savePlatforms") {

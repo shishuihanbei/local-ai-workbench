@@ -62,6 +62,9 @@ function Find-Python([switch]$CompatibleOnly) {
         $candidates.Add("D:\Python$v\python.exe")
         $candidates.Add("C:\Program Files\Python$v\python.exe")
     }
+    $candidates.Add("D:\AI\python312\python.exe")
+    $candidates.Add("D:\AI\python311\python.exe")
+    $candidates.Add("D:\AI\python310\python.exe")
 
     if (Get-Command py -ErrorAction SilentlyContinue) {
         foreach ($ver in @("3.12", "3.11", "3.10", "3.13")) {
@@ -203,7 +206,7 @@ if not Path(cfg["models_dir"]).exists():
     cfg["models_dir"] = str(Path.cwd() / "models")
     changed.append("models_dir")
 if not Path(cfg["llama_dir"]).exists():
-    cfg["llama_dir"] = str(Path.cwd() / "llama")
+    cfg["llama_dir"] = str(Path.cwd() / "platforms" / "llama.cpp")
     changed.append("llama_dir")
 if changed:
     save_config(cfg)
