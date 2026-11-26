@@ -622,6 +622,16 @@ curl "http://127.0.0.1:9100/v1/chat/completions" \
 
 当前覆盖健康检查、管理员初始化/登录、模型分类清单、未登录拦截、备份内容与恢复往返、迁移包和分享包内容校验、协作套件、文档生成，以及工作台定时任务的计划计算与增删改查。
 
+另有 5 条**浏览器交互冒烟**（Playwright），真起一个服务、真开浏览器点一遍：用户端登录、发消息收到流式回复、设置抽屉、控制台改品牌、分享页只读。它们默认跳过，因为要装浏览器内核：
+
+```powershell
+.\\.venv\\Scripts\\python.exe -m playwright install chromium
+$env:WORKBENCH_E2E="1"
+.\\.venv\\Scripts\\python.exe -m pytest -q tests/test_e2e_smoke.py   # 期望 5 passed
+```
+
+CI 里三个 job：`test`（3.10/3.12 跑 pytest）、`frontend`（`node --check` + 每个脚本仍被页面引用）、`e2e`（装浏览器跑上面这 5 条）。
+
 ## 拷贝到另一台机器
 
 1. 复制整个 `workbench` 目录，包含 `data/`（含 `workbench.db`、`secret.key`、`config.json`），不要复制 `.venv`。

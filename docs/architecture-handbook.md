@@ -5,7 +5,7 @@
 > 2. 按既有流程改代码、跑测试、发版本；
 > 3. 按第 10–11 章做重构，而不破坏现网。
 >
-> 文档基准：`main` 分支最新提交（2026-11-26），测试 **195 passed**，API 版本 `0.8.3.0`。凡是数字（端点数、表数、行数）都是实测值，改动后请同步更新本文。
+> 文档基准：`main` 分支最新提交（2026-11-26），测试 **195 passed**（另有 5 条浏览器交互冒烟，`WORKBENCH_E2E=1` 时单独跑，约 17 秒），API 版本 `0.8.3.0`。凡是数字（端点数、表数、行数）都是实测值，改动后请同步更新本文。
 
 ---
 
@@ -80,12 +80,12 @@ workbench/
 │   ├── services/          46 个模块，见附录 B
 │   └── console/           管理控制台（index.html + core/models/session/tabs/boot + panels/*.js + console.css，静态挂载）
 ├── frontend/              用户端（index.html + 12 个域脚本 + app.css + app.ui.css + 共享页）
-├── tests/                 27 个 pytest 文件，195 条用例
+├── tests/                 28 个 pytest 文件：195 条用例 + test_e2e_smoke.py（5 条浏览器冒烟，默认跳过）
 ├── docs/                  本文档与后续设计说明
 ├── data/                  运行期数据（见 2.5）
 ├── models/                本地 GGUF
 ├── platforms/             本地推理平台安装目录（llama.cpp 等）
-└── .github/workflows/     ci.yml（3.10/3.12 矩阵跑 pytest）、docker.yml（构建+冒烟+推 GHCR）
+└── .github/workflows/     ci.yml（3.10/3.12 矩阵跑 pytest + 前端脚本检查 + e2e 浏览器冒烟）、docker.yml（构建+冒烟+推 GHCR）
 ```
 
 ### 2.4 请求链路
@@ -413,7 +413,12 @@ Set-Location D:\AI\workbench
 .\.venv\Scripts\python.exe -m pip install pytest   # 仓库里的 requirements-dev.txt 只有 pytest
 # 跑测试（必须给 secret，且不要指到线上 data 目录）
 $env:WORKBENCH_SECRET="pytest-secret-key-do-not-use-in-production"
-.\.venv\Scripts\python.exe -m pytest -q          # 期望 195 passed
+.\.venv\Scripts\python.exe -m pytest -q          # 期望 195 passed（e2e 自动跳过）
+
+# 浏览器交互冒烟：装内核后单独跑，约 17 秒
+.\.venv\Scripts\python.exe -m playwright install chromium
+$env:WORKBENCH_E2E="1"
+.\.venv\Scripts\python.exe -m pytest -q tests/test_e2e_smoke.py   # 期望 5 passed
 ```
 
 测试的 `conftest.py` 自己 `mkdtemp` 并固定 `WORKBENCH_DATA`，但**shell 里残留的 `WORKBENCH_DATA` 会污染它**——曾出现 `no such table: auth_identities` 的假失败，根因就是环境变量指到了别的临时目录。跑测试前 `Remove-Item Env:WORKBENCH_DATA`。
@@ -551,7 +556,7 @@ stop.ps1 → git pull → start.ps1 -NoBrowser → /api/health → 打开控制�
 | T6 | 错误契约不统一 | 部分返回 `{code}` 事件，部分抛 `HTTPException(detail=str)` | 前端只能靠文案判断 | **已解决（0.8.3.0）**：`backend/errors.py` + 全局处理器补齐 `code`（见 4.4 / 附录 F）；剩余是把 333 处 `HTTPException` 逐步换成 `APIError` 以细化业务码 |
 | T7 | 无 API 版本化 | 333 个操作平铺在 266 条路径 | 破坏性变更无法灰度、第三方接入会断 | 新能力走 `/api/v2`，旧端点加兼容层 |
 | T8 | 本地模型串行 | `services/llama.py` 单进程托管 | 100 人并发时队列化严重 | 短期靠准入限流；中期接算力池/外部 vLLM |
-| T9 | 前端零自动化测试 | `tests/` 全为后端用例 | 回归靠人工截图 | **部分缓解（0.8.3.0+）**：`tests/test_pages_smoke.py` 解析每个入口页引用的 js/css 并逐个请求断言可达；CI 增加 `node --check` 与「每个脚本仍被某个页面引用」两项；仍缺浏览器级交互冒烟（Playwright 5 条：登录/发消息/建知识库/控制台改配置/分享页） |
+| T9 | 前端零自动化测试 | `tests/` 全为后端用例 | 回归靠人工截图 | **已解决（0.8.3.0+）**：三层兜底——`tests/test_pages_smoke.py` 断言每个入口页引用的 js/css 可达；CI `frontend` job 做 `node --check` 与「每个脚本仍被某页引用」；`tests/test_e2e_smoke.py` 用 Playwright 真点 5 条路径（登录 / 发消息收流式回复 / 设置抽屉切分区 / 控制台登录并改品牌 / 分享页只读），任一条 console 报错即失败，CI `e2e` job 跑 |
 | T10 | 版本号三处不一 | `main.py` 0.8.1、`/api/health` 0.8.1、资源 `0.8.2.2` | 无法判断线上跑的是哪版 | **已解决（0.8.3.0）**：`backend/version.py` 单源，资源版本由 `render_page()` 注入（见 4.3） |
 | T11 | 重活混在线程池 | OCR/docgen/迁移用默认 executor（32 线程） | 并发上传时挤占事件循环调度 | 独立 `ThreadPoolExecutor(max_workers=4)` 或任务队列 |
 | T12 | 三套备份逻辑 | `backup.py`、`database_admin`、`system` 分享 | 语义重叠，恢复路径易混 | 统一 `SnapshotService`，明确三种语义 |
@@ -661,7 +666,7 @@ app/
 ### 阶段 2：前端拆分（5–7 天，可与阶段 3 并行）
 - T1 控制台按 tab 拆文件，先拆 4 个纯展示页（概览、审计、公告、工单），验证 registry 机制；
 - T2 用户端拆分：**已完成**，12 个域文件、最大 1197 行；
-- 验收：**已完成（0.8.3.0+）**：拆成 13 个文件、最大 1692 行；31 个页签逐一打开、说明与刷新按钮实测无 JS 报错；仍待补 T9 的 Playwright 交互冒烟。
+- 验收：**已完成（0.8.3.0+）**：拆成 13 个文件、最大 1692 行；31 个页签逐一打开、说明与刷新按钮实测无 JS 报错；控制台路径已进 `tests/test_e2e_smoke.py`（登录 + 改品牌）。
 - 回滚：保留旧文件一个版本周期，用特性开关切回。
 
 ### 阶段 3：后端分层（7–10 天）
