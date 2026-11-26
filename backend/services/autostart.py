@@ -119,7 +119,7 @@ def _linux_unit(root: Path, port: int, as_root: bool) -> str:
         "NoNewPrivileges=true\n"
         "PrivateTmp=true\n"
         "ProtectSystem=full\n"
-        f"ReadWritePaths={DATA_DIR} {root / 'models'} {root / 'llama'}\n\n"
+        f"ReadWritePaths=-{DATA_DIR} -{root / 'models'} -{root / 'llama'}\n\n"
         "[Install]\n"
         "WantedBy=multi-user.target\n"
     )

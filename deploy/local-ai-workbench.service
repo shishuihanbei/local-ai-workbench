@@ -21,7 +21,7 @@ KillSignal=SIGINT
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=__APP_DIR__/data __APP_DIR__/models __APP_DIR__/llama
+ReadWritePaths=-__APP_DIR__/data -__APP_DIR__/models -__APP_DIR__/llama
 
 [Install]
 WantedBy=multi-user.target
