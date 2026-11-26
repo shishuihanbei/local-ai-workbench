@@ -447,7 +447,7 @@ Start-Process .\.venv\Scripts\python.exe -ArgumentList "-m","uvicorn","backend.m
 **E. 改前端样式**
 
 1. 只改 `frontend/app.ui.css` 或 `console.css`，优先走已有 CSS 变量；
-2. 改完把 `index.html` 里的 `?v=` 版本号 +1；
+2. 改完把 `backend/version.py` 的 `ASSET_VERSION` 上调（页面里的 `?v=__ASSET_VERSION__` 由后端注入，不用手改 HTML）；
 3. 窄屏（≤600px）必须自测，历史问题多出在这里。
 
 ### 6.4 提交、CI 与发布
@@ -476,6 +476,13 @@ stop.ps1 → git pull → start.ps1 -NoBrowser → /api/health → 打开控制�
 ```
 
 **回滚**：`git revert <sha>` 或 `git reset --hard <上一个 tag>` → 重启；数据层回滚用 `data/backups` 的 zip，**不要**用旧代码跑新库（迁移不可逆）。
+
+**发布与镜像标签**
+
+- 产品版本是四段（`0.8.3.0`），**不是合法 semver**（semver 只认 `X.Y.Z`）。镜像版本标签因此不能依赖 `type=semver`，要用 `type=ref,event=tag` 让 tag 名原样成为镜像标签（`v0.8.3.0`）；两条 `type=semver` 保留给未来可能出现的三段 tag。
+- 发布顺序：`git tag -a vX.Y.Z.W` → `git push origin vX.Y.Z.W` → `gh release create vX.Y.Z.W --notes-file …`。打 tag 会同时触发 Docker 工作流的 smoke 和多架构推送。
+- `latest` 只在 `main` 分支构建时打，release 不覆盖它。
+- tag 打错要挪回：删本地与远端 tag → 在新提交上重建 → `gh release edit <tag> --draft=false`（删 tag 那一刻 release 会变成 draft）。
 
 ### 6.5 需求到上线的固定节奏
 

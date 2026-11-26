@@ -74,6 +74,9 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=ref,event=branch
+            # 产品版本是四段（0.8.3.0），不是合法 semver，type=semver 不会产出标签；
+            # 这里让 tag 名原样成为镜像标签（v0.8.3.0）
+            type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
