@@ -181,13 +181,56 @@ def _new_page(browser):
     return ctx, page, errors
 
 
-def _login_user(page, base: str):
-    page.goto(base + "/", wait_until="domcontentloaded")
-    page.wait_for_selector("#authUser", state="visible", timeout=20000)
-    page.fill("#authUser", ADMIN)
-    page.fill("#authPass", PASSWORD)
-    page.click("#authSubmit")
-    page.wait_for_selector("#appView", state="visible", timeout=20000)
+def _login_user(page, base: str, tries: int = 3):
+    """走登录界面登录。
+
+    前端的 boot() 是异步的：它要 await 拉品牌与登录方式，之后才把登录表单露出来；
+    偶发情况下表单露出来了但这一轮 fill 的内容被随后的渲染清掉，点提交就变成空表单。
+    所以这里「填 → 点 → 等 appView」失败就重来一次，并把页面上的报错带出来。
+    """
+    last = ""
+    for attempt in range(tries):
+        page.goto(base + "/", wait_until="domcontentloaded")
+        page.wait_for_selector("#authUser", state="visible", timeout=20000)
+        page.fill("#authUser", ADMIN)
+        page.fill("#authPass", PASSWORD)
+        page.click("#authSubmit")
+        try:
+            page.wait_for_selector("#appView", state="visible", timeout=15000)
+            return
+        except Exception:
+            note = ""
+            try:
+                note = page.inner_text("#authError") if page.is_visible("#authError") else ""
+            except Exception:
+                pass
+            last = f"第 {attempt + 1} 次登录没进主界面；表单报错={note!r}，url={page.url}"
+    raise AssertionError(last)
+
+
+def _api_login(base: str) -> tuple[str, str]:
+    r = httpx.post(base + "/api/auth/login",
+                   json={"username": ADMIN, "password": PASSWORD}, timeout=15)
+    assert r.status_code == 200, f"接口登录失败：{r.status_code} {r.text}"
+    return r.cookies.get("wb_session"), r.cookies.get("wb_csrf")
+
+
+def _open_app(browser, server):
+    """不走登录界面，直接带会话 cookie 进主界面。
+
+    登录界面本身由 test_user_login_renders_app 覆盖；其余用例没必要反复点它，
+    少一次 UI 时序依赖，CI 才不容易抖。
+    """
+    ctx, page, errors = _new_page(browser)
+    sess, csrf = _api_login(server["base"])
+    ctx.add_cookies([
+        {"name": "wb_session", "value": sess, "url": server["base"] + "/"},
+        {"name": "wb_csrf", "value": csrf or "", "url": server["base"] + "/"},
+    ])
+    page.goto(server["base"] + "/", wait_until="domcontentloaded")
+    page.wait_for_selector("#appView", state="visible", timeout=25000)
+    return ctx, page, errors
+
 
 
 def _wait_text(page, selector: str, want: str, timeout: float = 30):
@@ -222,9 +265,8 @@ def test_user_login_renders_app(browser, e2e_server):
 
 
 def test_send_message_streams_reply(browser, e2e_server):
-    ctx, page, errors = _new_page(browser)
+    ctx, page, errors = _open_app(browser, e2e_server)
     try:
-        _login_user(page, e2e_server["base"])
         # 模型下拉是登录后才拉的（要探测平台），等它真的选上模型再发；
         # 否则前端会先弹「当前账号没有可用模型」，请求根本没发出去
         page.wait_for_selector("#modelSelect option", state="attached", timeout=25000)
@@ -242,9 +284,8 @@ def test_send_message_streams_reply(browser, e2e_server):
 
 
 def test_settings_drawer_opens_and_switches(browser, e2e_server):
-    ctx, page, errors = _new_page(browser)
+    ctx, page, errors = _open_app(browser, e2e_server)
     try:
-        _login_user(page, e2e_server["base"])
         page.click("#userChip")
         page.wait_for_selector("#settingsDrawer", state="visible", timeout=15000)
         assert "active" in (page.locator("#dpanel-account").get_attribute("class") or "")
