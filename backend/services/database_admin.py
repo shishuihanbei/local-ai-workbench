@@ -17,6 +17,7 @@ import ssl
 import threading
 import time
 import uuid
+from collections import Counter
 from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
@@ -1123,14 +1124,21 @@ def health(connection_id: str = "local") -> dict[str, Any]:
     with _open(record) as (engine, con):
         if engine == "sqlite":
             integrity = con.execute("PRAGMA integrity_check").fetchone()[0]
-            fk_rows = con.execute("PRAGMA foreign_key_check").fetchmany(100)
+            fk_rows = con.execute("PRAGMA foreign_key_check").fetchmany(200)
+            fk_details = [{"table": str(r[0]), "rowid": int(r[1]) if r[1] is not None else None,
+                           "parent": str(r[2])} for r in fk_rows]
+            fk_summary = "、".join(
+                f"{table} → {parent} {count} 条"
+                for (table, parent), count in Counter(
+                    (d["table"], d["parent"]) for d in fk_details).most_common())
             page_size = int(con.execute("PRAGMA page_size").fetchone()[0] or 0)
             page_count = int(con.execute("PRAGMA page_count").fetchone()[0] or 0)
             free_pages = int(con.execute("PRAGMA freelist_count").fetchone()[0] or 0)
             checks.append({"name": "完整性检查", "ok": str(integrity).lower() == "ok",
                            "detail": str(integrity)})
-            checks.append({"name": "外键检查", "ok": not fk_rows,
-                           "detail": "未发现断裂外键" if not fk_rows else f"发现 {len(fk_rows)} 条异常"})
+            checks.append({"name": "外键检查", "ok": not fk_details,
+                           "detail": "未发现断裂外键" if not fk_details else f"发现 {len(fk_details)} 条异常",
+                           "hint": fk_summary, "details": fk_details})
             checks.append({"name": "可回收空间", "ok": True,
                            "detail": f"{round(free_pages * page_size / 1024 / 1024, 2)} MB 空闲页"})
             checks.append({"name": "文件大小", "ok": True,
@@ -1167,6 +1175,40 @@ def vacuum(connection_id: str = "local") -> dict[str, Any]:
     after = Path(record["path"]).stat().st_size
     return {"ok": True, "before": before, "after": after,
             "saved": max(0, before - after)}
+
+
+def repair_foreign_keys(connection_id: str = "local") -> dict[str, Any]:
+    """清掉指向不存在父行的孤儿记录，修复 PRAGMA foreign_key_check 报的异常。
+
+    修复前自动落一份快照，删除按 rowid 精确进行，父表数据不动。
+    """
+    record = _connection(connection_id)
+    if record.get("engine") != "sqlite":
+        raise DBAdminError("外键修复只针对本机 SQLite；MySQL/PostgreSQL 请用数据库自带的修复/校验工具")
+    backup_path = create_database_backup(connection_id)
+    deleted: Counter[str] = Counter()
+    skipped = 0
+    rounds = 0
+    with _open(record) as (engine, con):
+        con.isolation_level = None
+        while rounds < 5:
+            rounds += 1
+            rows = con.execute("PRAGMA foreign_key_check").fetchall()
+            if not rows:
+                break
+            con.execute("BEGIN")
+            for child, rowid, _parent, _fk in rows:
+                if rowid is None:
+                    skipped += 1
+                    continue
+                con.execute(f'DELETE FROM "{child}" WHERE rowid=?', (int(rowid),))
+                deleted[str(child)] += 1
+            con.execute("COMMIT")
+        remaining = len(con.execute("PRAGMA foreign_key_check").fetchmany(200))
+    return {"ok": remaining == 0,
+            "deleted": [{"table": t, "count": c} for t, c in deleted.items()],
+            "total": sum(deleted.values()), "skipped": skipped,
+            "remaining": remaining, "backup": backup_path.name}
 
 
 # ------------------------------------------------------------------ SQL 控制台

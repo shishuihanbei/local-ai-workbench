@@ -191,3 +191,41 @@ def test_database_table_create_rename_truncate_drop(client, admin_token):
                        json={"confirm": "users"})
     assert r.status_code == 400
     assert "依赖" in r.json()["detail"]
+
+
+def test_database_health_reports_and_repairs_orphan_rows(client, admin_token):
+    import sqlite3
+    from pathlib import Path
+
+    h = auth(admin_token)
+    from backend.config import DB_PATH
+    db_path = Path(DB_PATH)
+    con = sqlite3.connect(str(db_path))
+    try:
+        con.execute(
+            "INSERT INTO auth_identities (user_id, provider, provider_uid, display_name, meta, created_at) "
+            "VALUES (999999, 'username', 'pytest_orphan', 'pytest orphan', '{}', ?)",
+            (time.time(),))
+        con.commit()
+    finally:
+        con.close()
+
+    r = client.get("/api/admin/database/health", headers=h)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is False
+    fk = next(c for c in body["checks"] if c["name"] == "外键检查")
+    assert fk["ok"] is False
+    assert fk["details"] and fk["details"][0]["table"] == "auth_identities"
+    assert fk["details"][0]["parent"] == "users"
+    assert "auth_identities" in fk["hint"]
+
+    r = client.post("/api/admin/database/repair-foreign-keys", headers=h)
+    assert r.status_code == 200, r.text
+    fixed = r.json()
+    assert fixed["total"] >= 1 and fixed["remaining"] == 0
+    assert fixed["backup"].endswith(".db")
+    assert any(item["table"] == "auth_identities" for item in fixed["deleted"])
+
+    r = client.get("/api/admin/database/health", headers=h)
+    assert r.json()["ok"] is True

@@ -1120,6 +1120,12 @@ body.guide-open { overflow: hidden; }
 .db-health-line .ok { color: var(--good); font-weight: 700; }
 .db-health-line .bad { color: var(--bad); font-weight: 700; }
 .db-health-line span:last-child { color: var(--muted); text-align: right; overflow-wrap: anywhere; }
+.db-health-list { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 3px; padding: 0 2px; }
+.db-health-chip {
+  padding: 3px 8px; border-radius: 7px; border: 1px solid rgba(163, 35, 35, .16);
+  background: #fff4f4; color: #a32323; font: 11.5px/1.5 ui-monospace, Consolas, monospace;
+}
+.db-health-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
 .db-action-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .db-action-list .btn { text-align: left; padding: 11px 12px; line-height: 1.35; }
 .db-action-list .btn small { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; font-weight: 400; }

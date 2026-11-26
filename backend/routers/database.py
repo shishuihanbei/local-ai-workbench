@@ -245,6 +245,17 @@ async def vacuum(connection: str = "local", user: dict = Depends(admin_user)):
         _raise(exc)
 
 
+@router.post("/repair-foreign-keys")
+async def repair_foreign_keys(connection: str = "local", user: dict = Depends(admin_user)):
+    try:
+        result = await asyncio.to_thread(dba.repair_foreign_keys, connection)
+    except Exception as exc:
+        _raise(exc)
+    await audit(user, "database.repair_fk", target=connection,
+                detail=f"deleted={result.get('total')} remaining={result.get('remaining')}")
+    return result
+
+
 @router.post("/backup")
 async def backup(connection: str = "local", user: dict = Depends(admin_user)):
     try:

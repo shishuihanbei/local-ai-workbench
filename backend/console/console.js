@@ -5895,14 +5895,49 @@ async function dbSelectTable(name) {
 
 async function dbLoadHealth() {
   const d = dbState();
+  const body = $("dbHealthBody");
+  const btn = $("dbHealthBtn");
+  const label = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "检查中…"; }
+  if (body) body.innerHTML = `<span class="hint">正在检查…</span>`;
   try {
     const h = await api("/api/admin/database/health?connection=" + encodeURIComponent(d.conn));
-    $("dbHealthBody").innerHTML = (h.checks || []).map((c) => `<div class="db-health-line">
-      <span>${esc(c.name)}</span><span><b class="${c.ok ? "ok" : "bad"}">${c.ok ? "通过" : "异常"}</b> · ${esc(c.detail)}</span>
-    </div>`).join("") + `<div class="hint">耗时 ${h.latency_ms} ms</div>`;
+    const checks = h.checks || [];
+    const fk = checks.find((c) => c.name === "外键检查");
+    const bad = checks.filter((c) => !c.ok).length;
+    if (body) {
+      body.innerHTML = checks.map((c) => {
+        const detail = c.hint ? `${c.detail} · ${c.hint}` : c.detail;
+        const list = (c.details || []).length ? `<div class="db-health-list">${c.details.map((r) =>
+          `<span class="db-health-chip">${esc(r.table)} #${dbNum(r.rowid)} → ${esc(r.parent)}</span>`).join("")}</div>` : "";
+        return `<div class="db-health-line">
+          <span>${esc(c.name)}</span><span><b class="${c.ok ? "ok" : "bad"}">${c.ok ? "通过" : "异常"}</b> · ${esc(detail)}</span>
+        </div>${list}`;
+      }).join("") + `<div class="db-health-foot">
+        <span class="hint">最后检查 ${new Date().toLocaleTimeString("zh-CN", { hour12: false })} · 耗时 ${h.latency_ms} ms</span>
+        ${fk && !fk.ok ? `<button class="btn small" data-dbfixfk="1">清理这 ${(fk.details || []).length} 条孤儿记录</button>` : ""}
+      </div>`;
+    }
+    uiToast(`健康检查完成 · 耗时 ${h.latency_ms} ms`, bad ? "warn" : "info");
   } catch (e) {
-    $("dbHealthBody").innerHTML = `<div class="db-sql-error">健康检查失败：${esc(e.message)}</div>`;
+    if (body) body.innerHTML = `<div class="db-sql-error">健康检查失败：${esc(e.message)}</div>`;
+    uiToast("健康检查失败：" + e.message, "bad");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label || "重新检查"; }
   }
+}
+
+async function dbRepairForeignKey() {
+  const d = dbState();
+  const ok = await confirmInline("将删除指向已删除用户的孤儿记录，父表数据不动，修复前会自动生成一份数据库快照。", "确认清理");
+  if (!ok) return;
+  try {
+    const r = await api("/api/admin/database/repair-foreign-keys?connection=" + encodeURIComponent(d.conn), { method: "POST" });
+    uiToast(`已清理 ${r.total} 条孤儿记录 · 快照 ${r.backup}`, "info");
+  } catch (e) {
+    uiToast("修复失败：" + e.message, "bad");
+  }
+  await dbLoadHealth();
 }
 
 /* ---------------------------------------------------------------- 表管理 */
@@ -6723,6 +6758,7 @@ document.addEventListener("click", async (ev) => {
   if (el.id === "dbCreateTableClose" || el.id === "dbCreateTableCancel") { dbCloseCreateTable(); return; }
   if (el.id === "dbCreateTableSubmit") { await dbSubmitCreateTable(); return; }
   if (el.id === "dbAddColumnBtn") { dbNewColumnRow({ type: "TEXT", nullable: true }); return; }
+  if (el.closest("[data-dbfixfk]")) { await dbRepairForeignKey(); return; }
   if (el.id === "dbHealthBtn") { await dbLoadHealth(); return; }
   if (el.id === "dbBackupBtn") { await dbBackup(); return; }
   if (el.id === "dbExportMysql") { await dbExportSql("mysql"); return; }

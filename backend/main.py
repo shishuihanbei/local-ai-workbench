@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import BASE_DIR, FRONTEND_DIR, LOG_DIR, load_config
 from . import logbus
-from .db import init_db
+from .db import init_db, close_shared
 from .routers import (admin, apikeys, auth, auth_admin, branding, chat, cluster, collab, database, engines,
                       files, front as front_admin, kb,
                       library, memory,
@@ -127,6 +127,10 @@ async def lifespan(app: FastAPI):
         with suppress(asyncio.CancelledError):
             await task
     await logbus.stop()
+    try:
+        await close_shared()
+    except Exception:
+        pass
     try:
         from .services import cluster
         await cluster.stop_monitor()

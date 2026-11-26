@@ -120,6 +120,8 @@ DEFAULTS: dict[str, Any] = {
     "moderation_min_chars": 1,            # 单词长度下限，避免单字误伤
     "websearch_enabled": True,           # 管理员总开关：关闭后网页检索和定时任务都不联网
     "websearch_max_sources": 5,          # 一次联网最多取多少条搜索结果
+    "chat_max_active": 4,                # 同时进行的对话生成数，超出排队/拒绝
+    "chat_rpm": 30,                      # 每账号每分钟最多发送消息条数
     "websearch_max_pages": 2,            # 最多抓取前几篇网页正文
 }
 

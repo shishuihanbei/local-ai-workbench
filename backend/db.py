@@ -1,6 +1,7 @@
 """SQLite 访问层：建表、迁移、常用查询封装。"""
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from typing import Any, Iterable
@@ -683,6 +684,34 @@ async def connect() -> aiosqlite.Connection:
     return db
 
 
+# 常驻共享连接：多协程访问时复用同一条 aiosqlite 连接，由异步锁串行化，
+# 避免每个请求都新建连接和后台线程（100 人并发下这部分开销最明显）。
+_shared: aiosqlite.Connection | None = None
+_shared_lock = asyncio.Lock()
+
+
+async def _shared_connection() -> aiosqlite.Connection:
+    global _shared
+    if _shared is None:
+        _shared = await aiosqlite.connect(DB_PATH)
+        _shared.row_factory = aiosqlite.Row
+        await _shared.execute("PRAGMA journal_mode=WAL")
+        await _shared.execute("PRAGMA foreign_keys=ON")
+    return _shared
+
+
+async def close_shared() -> None:
+    """进程退出时关闭共享连接；初始化/迁移仍走独立的 connect()。"""
+    global _shared
+    async with _shared_lock:
+        if _shared is not None:
+            try:
+                await _shared.close()
+            except Exception:
+                pass
+            _shared = None
+
+
 async def _column_exists(db: aiosqlite.Connection, table: str, column: str) -> bool:
     cur = await db.execute(f"PRAGMA table_info({table})")
     rows = await cur.fetchall()
@@ -1290,13 +1319,11 @@ async def init_db() -> None:
 
 
 async def fetch_all(sql: str, params: Iterable[Any] = ()) -> list[dict[str, Any]]:
-    db = await connect()
-    try:
+    async with _shared_lock:
+        db = await _shared_connection()
         cur = await db.execute(sql, tuple(params))
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
-    finally:
-        await db.close()
 
 
 async def fetch_one(sql: str, params: Iterable[Any] = ()) -> dict[str, Any] | None:
@@ -1305,22 +1332,18 @@ async def fetch_one(sql: str, params: Iterable[Any] = ()) -> dict[str, Any] | No
 
 
 async def execute(sql: str, params: Iterable[Any] = ()) -> int:
-    db = await connect()
-    try:
+    async with _shared_lock:
+        db = await _shared_connection()
         cur = await db.execute(sql, tuple(params))
         await db.commit()
         return cur.lastrowid or 0
-    finally:
-        await db.close()
 
 
 async def executemany(sql: str, seq: list[tuple]) -> None:
-    db = await connect()
-    try:
-        await db.executemany(sql, seq)
+    async with _shared_lock:
+        db = await _shared_connection()
+        await db.executemany(sql, list(seq))
         await db.commit()
-    finally:
-        await db.close()
 
 
 async def get_setting(key: str, default: str | None = None) -> str | None:

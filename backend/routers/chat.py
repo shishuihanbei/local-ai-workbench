@@ -18,8 +18,9 @@ from .. import logbus, pipeline
 from ..config import load_config
 from ..db import audit, execute, fetch_all, fetch_one, parse_meta
 from ..security import current_user, user_from_any_token
-from ..services import (access, attachments, cluster, collab, docgen, kb, library, llama, memory,
-                        model_usage, moderation, prompts, quota, routing, skills, tts, websearch)
+from ..services import (access, admission, attachments, cluster, collab, docgen, kb,
+                        library, llama, memory, model_usage, moderation, prompts, quota,
+                        routing, skills, tts, websearch)
 
 router = APIRouter(prefix="/api", tags=["chat"])
 log = logging.getLogger(__name__)
@@ -487,6 +488,7 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
         first_token = True
         status = "ok"
         mod_blocked = False
+        admission_token = None
 
         async def upstream_lines():
             if not is_pool:
@@ -550,6 +552,13 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
                 finally:
                     cluster.end(candidate["node_id"])
             raise RuntimeError("所有节点都失败" + ("：" + "；".join(errors[-3:]) if errors else ""))
+
+        # 全局并发上限 + 单账号限流：拿不到名额直接在流里返回错误事件，不占用模型。
+        try:
+            admission_token = await admission.get_admission().enter(str(user["id"]))
+        except admission.AdmissionRejected as e:
+            yield f"data: {json.dumps({'type':'error','message':e.message,'code':'admission_limited'}, ensure_ascii=False)}\n\n".encode()
+            return
 
         # 本地 llama.cpp 是全局单模型：这里登记占用，切换模型前会检查。
         usage_model = ""
@@ -627,6 +636,11 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             status = "error"
             yield f"data: {json.dumps({'type':'error','message':err}, ensure_ascii=False)}\n\n".encode()
         finally:
+            if admission_token:
+                try:
+                    await admission_token.release()
+                except Exception:
+                    pass
             if usage_model:
                 model_usage.end(usage_model, str(user.get("username") or ""))
             if not body.regenerate:
