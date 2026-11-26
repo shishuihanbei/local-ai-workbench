@@ -1,6 +1,16 @@
-# 本地 AI 工作台 0.8.0
+# 本地 AI 工作台
+
+> 当前版本 **0.8.3.0** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
 
 单进程部署：FastAPI 后端 + 用户前端 + 管理控制台 + OpenAI 兼容 API。模型在本机运行，对话记录存本机 SQLite，不经过云端。
+
+![用户端 / 控制台概览 / 模型管理](docs/images/screens.png)
+
+三个界面从左到右：用户端登录与对话、控制台运行观测、模型清单（本地 53 个模型按用途分类，下载与加载状态实时可见）。
+
+- **本地模型托管是后台一等公民**：下载、加载、切换保护、中断续传、下载进度、引擎检测都在控制台完成，不依赖 Ollama 外挂；装了外部平台也能自动读 `/v1/models` 并接入。
+- **给团队用的治理**：用户 / 部门 / 管理员角色权限 / 每人每日每月 Token 配额 / 公开与小队对话分享 / 操作审计 / 内容安全，都在同一套后台里。
+- **一键起步**：Windows 双击 `start.bat`，NAS 上 `docker compose up -d`，首次启动自动初始化管理员，不用先装 Python 再配环境。
 
 ```
 工作台
@@ -330,7 +340,14 @@ curl "http://127.0.0.1:9100/v1/chat/completions" \
 | `hf_token` | 可选，下载需要授权的 gated 模型时填 Hugging Face 令牌 |
 | `serve_frontend` | 是否由本进程托管用户端，默认 `true` |
 | `allow_register` | 是否允许访客自助注册，默认 `true` |
-| `brand_logo` | `data/branding/` 下的 Logo 文件名，由控制台「外观」上传/删除 |\n| `brand_tagline` / `brand_primary` | 品牌副标题与主色（十六进制），主色会覆盖用户端 `--brand` 主题色 |\n| `brand_login_title` / `brand_login_lead` / `brand_login_foot` | 登录页大标题、说明和页脚文案，支持换行 |\n| `brand_auth_subtitle` | 登录卡片副标题 |\n| `brand_icp` / `brand_icp_url` | ICP 备案号与链接，链接留空使用官方查询入口 |\n| `brand_police` / `brand_police_url` | 公安备案号与链接 |\n| `brand_copyright` | 页脚版权；留空自动生成 `© 年份 + 品牌名称` |\n| `websearch_enabled` | 联网检索总开关，默认 `true`；关闭后用户端和定时任务都跳过检索 |
+| `brand_logo` | `data/branding/` 下的 Logo 文件名，由控制台「外观」上传/删除 |
+| `brand_tagline` / `brand_primary` | 品牌副标题与主色（十六进制），主色会覆盖用户端 `--brand` 主题色 |
+| `brand_login_title` / `brand_login_lead` / `brand_login_foot` | 登录页大标题、说明和页脚文案，支持换行 |
+| `brand_auth_subtitle` | 登录卡片副标题 |
+| `brand_icp` / `brand_icp_url` | ICP 备案号与链接，链接留空使用官方查询入口 |
+| `brand_police` / `brand_police_url` | 公安备案号与链接 |
+| `brand_copyright` | 页脚版权；留空自动生成 `© 年份 + 品牌名称` |
+| `websearch_enabled` | 联网检索总开关，默认 `true`；关闭后用户端和定时任务都跳过检索 |
 | `websearch_max_sources` | 单次最多保留的来源条数，默认 `5`，范围 1–10 |
 | `websearch_max_pages` | 最多抓取几篇网页正文，默认 `2`，范围 0–4 |
 | `cors_origins` | 允许跨域的前端来源，逗号分隔；空值表示只允许同源。默认不再使用 `*` |
@@ -466,7 +483,9 @@ curl "http://127.0.0.1:9100/v1/chat/completions" \
 | PATCH/DELETE | `/api/users/roles/{rid}` | 修改、删除管理员角色 |
 | POST | `/api/users/import` | 批量导入成员（CSV/TSV，支持表头） |
 | GET | `/api/users/export` | 导出成员 CSV（不含密码） |
-| GET/PUT | `/api/admin/org` | 企业档案、前端品牌、登录页文案、备案与全局水印 |\n| POST/DELETE | `/api/admin/org/logo` | 上传或删除用户端 Logo（管理员） |\n| GET | `/api/branding/logo` | 公开读取当前 Logo，登录页未登录也可用 |
+| GET/PUT | `/api/admin/org` | 企业档案、前端品牌、登录页文案、备案与全局水印 |
+| POST/DELETE | `/api/admin/org/logo` | 上传或删除用户端 Logo（管理员） |
+| GET | `/api/branding/logo` | 公开读取当前 Logo，登录页未登录也可用 |
 | GET/PUT | `/api/admin/moderation` | 内容安全设置、词库与命中记录 |
 | POST | `/api/admin/moderation/words` | 新增敏感词 |
 | POST | `/api/admin/moderation/words/bulk` | 批量粘贴敏感词 |
