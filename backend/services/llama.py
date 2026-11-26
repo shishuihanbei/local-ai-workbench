@@ -199,6 +199,12 @@ server = LlamaServer()
 
 
 # ---------------------------------------------------------------- 下载
+def download_active(key: str) -> bool:
+    """该模型是否真的有下载任务在跑（进程内任务表，重启即失效）。"""
+    task = _dl_tasks.get(key)
+    return bool(task and not task.done())
+
+
 async def download_model(key: str, url: str | None = None) -> dict[str, Any]:
     cfg = load_config()
     row = await fetch_one("SELECT * FROM models WHERE key=?", (key,))
@@ -208,8 +214,8 @@ async def download_model(key: str, url: str | None = None) -> dict[str, Any]:
     url = url or model_url(row["repo"] or "", row["filename"])
     target = model_file_path(cfg, row["filename"])
     target.parent.mkdir(parents=True, exist_ok=True)
-    if key in _dl_tasks and not _dl_tasks[key].done():
-        return {"ok": False, "msg": "该模型正在下载中"}
+    if download_active(key):
+        return {"ok": False, "msg": "该模型正在下载中，请等进度跑完；重复点击不会重新开始"}
 
     download_id = await execute(
         "INSERT INTO downloads(model_key,url,status,bytes,total,started_at) VALUES(?,?,?,?,?,?)",
@@ -227,7 +233,10 @@ async def download_model(key: str, url: str | None = None) -> dict[str, Any]:
                     total = int(r.headers.get("content-length") or 0) + (have if r.status_code == 206 else 0)
                     if r.status_code == 200:
                         have = 0
-                    with open(part, "ab") as f:
+                    # 206 是续传，追加写；200 是服务器不支持 Range，必须截断重写，
+                    # 否则旧 .part 的残留会被拼到新文件开头，得到一个必然损坏的超大文件。
+                    mode = "ab" if have else "wb"
+                    with open(part, mode) as f:
                         last = 0.0
                         async for chunk in r.aiter_bytes(1024 * 256):
                             f.write(chunk)
@@ -242,6 +251,8 @@ async def download_model(key: str, url: str | None = None) -> dict[str, Any]:
         except Exception as e:
             await execute("UPDATE downloads SET status='error', error=?, finished_at=? WHERE id=?",
                           (str(e)[:300], time.time(), download_id))
+        finally:
+            _dl_tasks.pop(key, None)
 
     _dl_tasks[key] = asyncio.create_task(_run())
     return {"ok": True, "msg": "已加入下载队列", "id": download_id}
@@ -254,16 +265,30 @@ async def download_progress(key: str) -> dict[str, Any]:
         return {}
     path = model_file_path(cfg, row["filename"])
     part = path.with_suffix(path.suffix + ".part")
-    size = path.stat().st_size if path.exists() else (part.stat().st_size if part.exists() else 0)
+    if part.exists():
+        size = part.stat().st_size        # 进行中/中断：以 .part 为准
+    elif path.exists():
+        size = path.stat().st_size
+    else:
+        size = 0
     expected = int(row["total_bytes"] or 0)
     last = await fetch_one("SELECT * FROM downloads WHERE model_key=? ORDER BY id DESC LIMIT 1", (key,))
-    active = key in _dl_tasks and not _dl_tasks[key].done()
+    active = download_active(key)
+    total = expected or int((last or {}).get("total") or 0)
+    if active:
+        state = "running"
+    elif last and last["status"] == "running":
+        state = "interrupted"      # 进程重启/任务退出，记录仍停在 running，可点「继续下载」
+    elif last:
+        state = last["status"]
+    else:
+        state = "done" if path.exists() else "none"
     return {
-        "bytes": size, "total": expected,
-        "pct": round(size * 100 / expected, 1) if expected else 0,
-        "status": "running" if active else (last["status"] if last else ("done" if path.exists() else "none")),
+        "bytes": size, "total": total,
+        "pct": min(100, round(size * 100 / total, 1)) if total else (100 if path.exists() else 0),
+        "status": state,
         "speed": 0, "error": (last or {}).get("error") or "",
-        "exists": path.exists(),
+        "exists": path.exists() and not part.exists(),
     }
 
 

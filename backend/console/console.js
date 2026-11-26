@@ -312,14 +312,15 @@ async function pollInstall() {
 
 async function pollModelDownload(key) {
   for (let i = 0; i < 720; i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     let p;
     try { p = await api(`/api/models/${encodeURIComponent(key)}/progress`); }
     catch (e) { continue; }
     await loadAll();
-    if (!p || p.running) continue;
-    if (p.error) uiToast(`下载失败：${p.error}`);
-    else if (p.ok) uiToast(p.msg || "下载完成");
+    if (!p || p.status === "running") continue;
+    if (p.status === "interrupted") { uiToast("下载已中断，可点「继续下载」续传"); return; }
+    if (p.status === "error" || p.error) { uiToast(`下载失败：${p.error || "网络中断"}`); return; }
+    if (p.exists) { uiToast("下载完成，可以加载了"); return; }
     return;
   }
 }
@@ -350,16 +351,19 @@ async function pollEngineInstall(key) {
 
 /* ---------------------------------------------------------------- 模型 */
 function statusBadge(m) {
+  const d = m.download || {};
+  if (d.state === "running") return `<span class="badge warn">下载中 ${m.pct || d.pct || 0}%</span>`;
+  if (d.state === "error" && !m.downloaded) return `<span class="badge bad">下载失败</span>`;
   if (m.installable === false) {
     if (m.downloaded) return `<span class="badge good">已下载</span>`;
-    if (m.partial) return `<span class="badge warn">未完成${m.pct ? " " + m.pct + "%" : ""}</span>`;
+    if (d.state === "interrupted" || m.partial) return `<span class="badge warn">已中断${m.pct ? " " + m.pct + "%" : ""}</span>`;
     return m.engine_ready
       ? `<span class="badge ok">引擎就绪</span>`
       : `<span class="badge warn">需独立引擎</span>`;
   }
   if (m.available === false) return `<span class="badge off">本地已关闭</span>`;
   if (m.downloaded) return `<span class="badge good">已下载</span>`;
-  if (m.partial) return `<span class="badge warn">未完成 ${m.pct}%</span>`;
+  if (d.state === "interrupted" || m.partial) return `<span class="badge warn">已中断 ${m.pct || 0}%</span>`;
   return `<span class="badge off">未下载</span>`;
 }
 
@@ -412,17 +416,24 @@ function renderModelRows() {
     }
     for (const m of list) {
       const act = [];
+      const dl = m.download || {};
+      const running = dl.state === "running";
+      const failed = dl.state === "error";
       if (m.installable === false) {
         if (m.engine_repo) {
           const tip = m.engine_ready
             ? `用 ${m.engine_recommend || "独立引擎"} 下载整仓库到模型目录`
             : `先在「部署」页安装 ${m.engine_recommend || "独立引擎"}，装好后才能下载`;
-          act.push(`<button class="btn small" data-dl="${esc(m.key)}" ${m.engine_ready ? "" : "disabled"} title="${esc(tip)}">${m.downloaded ? "重新下载" : (m.partial ? "继续下载" : "下载")}</button>`);
+          const label = running
+            ? `下载中…`
+            : (m.downloaded ? "重新下载" : (failed ? "重试下载" : (m.partial ? "继续下载" : "下载")));
+          act.push(`<button class="btn small" data-dl="${esc(m.key)}" ${(m.engine_ready && !running) ? "" : "disabled"} title="${esc(tip)}">${label}</button>`);
         }
         if (m.homepage) act.push(`<a class="btn small" href="${esc(m.homepage)}" target="_blank" rel="noreferrer">查看项目</a>`);
         else if (!m.engine_repo) act.push(`<span class="badge off">未接入</span>`);
       } else {
-        if (!m.downloaded) act.push(`<button class="btn small" data-dl="${esc(m.key)}">下载</button>`);
+        if (running) act.push(`<button class="btn small" disabled>下载中…</button>`);
+        else if (!m.downloaded) act.push(`<button class="btn small" data-dl="${esc(m.key)}">${failed ? "重试下载" : (m.partial ? "继续下载" : "下载")}</button>`);
         if (m.downloaded && !m.loaded) act.push(`<button class="btn small" data-load="${esc(m.key)}" title="${m.available === false ? "加载模型会重新开启本地部署" : ""}">${m.available === false ? "加载并开启" : "加载"}</button>`);
         if (m.loaded) act.push(`<span class="badge ok">使用中</span>`);
       }
@@ -1316,11 +1327,21 @@ document.addEventListener("click", async (ev) => {
       }
     }
     else if (t.dataset.dl) {
-      t.disabled = true;
       const dlKey = t.dataset.dl;
-      const r = await api(`/api/models/${dlKey}/download`, { method: "POST" });
-      if (r && r.msg) uiToast(r.msg);
-      await loadAll();
+      const item = ((S.models && S.models.items) || []).find((m) => m.key === dlKey);
+      t.disabled = true;
+      t.textContent = "下载中…";
+      // 乐观更新：这一行立刻变成「下载中」，不用等整表刷新（否则点了像没反应）
+      if (item) {
+        item.download = { ...(item.download || {}), state: "running", pct: item.pct || 0 };
+        renderModelRows();
+      }
+      try {
+        const r = await api(`/api/models/${dlKey}/download`, { method: "POST" });
+        if (r && r.msg) uiToast(r.msg);
+      } finally {
+        await loadAll();
+      }
       pollModelDownload(dlKey);
     }
     else if (t.dataset.load) {

@@ -60,6 +60,11 @@ async def catalog(user: dict = Depends(current_user)):
     cfg = load_config()
     local_enabled = bool(cfg.get("local_enabled", True))
     rows = await fetch_all("SELECT * FROM models ORDER BY sort, key")
+    dl_rows = await fetch_all(
+        "SELECT d.model_key, d.status, d.bytes, d.total, d.error, d.started_at "
+        "FROM downloads d JOIN (SELECT model_key, MAX(id) AS mid FROM downloads GROUP BY model_key) x "
+        "ON d.id = x.mid")
+    dl_map = {r["model_key"]: r for r in dl_rows}
     status = await llama.server.status()
     prof = hardware.profile()
     engine_state = engines.status(prof)
@@ -73,12 +78,38 @@ async def catalog(user: dict = Depends(current_user)):
         if installable:
             path = model_file_path(cfg, r["filename"])
             part = path.with_suffix(path.suffix + ".part")
-            exists = path.exists()
-            size = path.stat().st_size if exists else (part.stat().st_size if part.exists() else 0)
             expected = int(r["total_bytes"] or 0)
-            complete = bool(exists and (not expected or size + 1024 >= expected))
-            partial = bool(part.exists() or (exists and not complete))
+            exists = path.exists()
+            part_exists = part.exists()
+            # 有 .part 就说明有一轮下载在跑（或刚中断）：进度必须以 .part 为准。
+            # 旧的不完整 .gguf 只是历史残留，若拿它算进度，界面会永远停在旧百分比。
+            if part_exists:
+                size = part.stat().st_size
+                complete, partial = False, True
+            elif exists:
+                size = path.stat().st_size
+                complete = bool(not expected or size + 1024 >= expected)
+                partial = not complete
+            else:
+                size, complete, partial = 0, False, False
             advice = hardware.advise(expected or size, prof, int(cfg.get("ctx", 8192)))
+            dl = dl_map.get(r["key"]) or {}
+            if llama.download_active(r["key"]):
+                dl_state = "running"
+            elif dl.get("status") == "running":
+                dl_state = "interrupted"      # 记录停在 running 但进程里没任务：中断过，可继续
+            elif dl.get("status") == "error" and not complete:
+                dl_state = "error"
+            elif complete:
+                dl_state = "done"
+            elif partial:
+                dl_state = "interrupted"
+            else:
+                dl_state = "none"
+            dl_total = expected or int(dl.get("total") or 0)
+            dl_error = str(dl.get("error") or "")
+            dl_started = float(dl.get("started_at") or 0)
+            pct_val = min(100, round(size * 100 / expected, 1)) if expected else (100 if complete else 0)
         else:
             engine_info = engines.describe(engine, engine_state)
             expected = 0
@@ -87,8 +118,23 @@ async def catalog(user: dict = Depends(current_user)):
                 size = int(hf.get("bytes") or 0)
                 complete = bool(hf.get("marker"))
                 partial = bool(hf_models.partial(cfg, r["key"]))
+                if hf.get("running"):
+                    dl_state = "running"
+                elif complete:
+                    dl_state = "done"
+                elif hf.get("error"):
+                    dl_state = "error"
+                elif partial:
+                    dl_state = "interrupted"
+                else:
+                    dl_state = "none"
+                dl_total = int(hf.get("total_bytes") or 0)
+                dl_error = str(hf.get("error") or "")
+                dl_started = float(hf.get("started_at") or 0)
+                pct_val = min(100, round(float(hf.get("pct") or 0), 1))
             else:
                 size, complete, partial = 0, False, False
+                dl_state, dl_total, dl_error, dl_started, pct_val = "none", 0, "", 0.0, 0
             label = f"推荐 {engine_info['recommend']}" if engine_info["ready"] else "需先装引擎"
             advice = {"level": "good" if engine_info["ready"] else "warn",
                       "label": label, "text": engine_info["text"]}
@@ -109,7 +155,10 @@ async def catalog(user: dict = Depends(current_user)):
             "downloaded": complete,
             "partial": partial,
             "bytes": size,
-            "pct": round(size * 100 / expected, 1) if expected else (100 if complete else 0),
+            "pct": pct_val,
+            "download": {"state": dl_state, "pct": pct_val, "bytes": size,
+                         "total": dl_total, "error": dl_error,
+                         "started_at": dl_started},
             "available": local_enabled,
             "loaded": bool(installable and local_enabled and status["model"] in (r["key"], r.get("alias") or "")),
             "owned_by": "local",
