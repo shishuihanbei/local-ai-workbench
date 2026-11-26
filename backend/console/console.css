@@ -508,7 +508,7 @@ input, select, textarea { color: var(--text); }
 .backup-notice.good { background: #eefbf3; border-color: #cdeedd; color: #0f7b3f; }
 .backup-notice.warn { background: #fff8ec; border-color: #f4e3c4; color: #9a5b06; }
 .backup-notice.bad { background: #fdf0f0; border-color: #f3d6d6; color: #b03b3b; }
-.backup-notice .notice-text { flex: 1 1 320px; white-space: pre-wrap; word-break: break-all; }
+.backup-notice .notice-text { flex: 1 1 auto; min-width: 0; white-space: pre-wrap; word-break: break-all; }
 .backup-notice .notice-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; flex: none; }
 .backup-notice .notice-actions .btn[hidden] { display: none; }
 .retention-panel {
