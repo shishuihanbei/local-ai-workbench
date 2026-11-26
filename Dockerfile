@@ -16,9 +16,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
+COPY requirements-ocr.txt ./
 # 国内网络可加 --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+# 需要图片/扫描件 OCR 时加 --build-arg INSTALL_OCR=1（镜像大约多 200MB）
 ARG PIP_INDEX_URL=https://pypi.org/simple
-RUN pip install --no-cache-dir -i "${PIP_INDEX_URL}" -r requirements.txt
+ARG INSTALL_OCR=0
+RUN pip install --no-cache-dir -i "${PIP_INDEX_URL}" -r requirements.txt \
+    && if [ "$INSTALL_OCR" = "1" ]; then pip install --no-cache-dir -i "${PIP_INDEX_URL}" -r requirements-ocr.txt; fi
 
 COPY backend ./backend
 COPY frontend ./frontend

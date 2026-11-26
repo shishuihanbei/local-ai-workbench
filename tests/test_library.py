@@ -5,6 +5,8 @@ import asyncio
 import io
 import time
 
+import pytest
+
 from backend.config import load_config, save_config
 from backend.routers.chat import ChatBody, _build_context
 from backend.services import attachments
@@ -250,6 +252,7 @@ def test_library_upload_supports_word_pdf_excel(client, admin_token):
 
 
 def test_image_and_scanned_pdf_are_read_by_ocr(client, admin_token):
+    pytest.importorskip("rapidocr_onnxruntime", reason="OCR 组件未安装")
     suffix = str(int(time.time()))[-6:]
     tok, _ = _make_user(client, admin_token, f"libocr{suffix}")
     marker = f"OCR IMAGE {suffix}"

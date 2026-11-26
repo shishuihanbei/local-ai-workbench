@@ -46,6 +46,13 @@ docker compose build --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn
 docker compose up -d
 ```
 
+要让图片和扫描件也能识别文字（OCR），构建时加上：
+
+```bash
+docker compose build --build-arg INSTALL_OCR=1
+docker compose up -d
+```
+
 **B. 直接用镜像**（不构建，速度最快）
 
 ```bash
