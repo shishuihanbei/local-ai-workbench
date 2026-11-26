@@ -23,19 +23,20 @@ function renderHardware(hw) {
 function renderInstall(st) {
   S.install = st;
   const llama = st.llama;
+  // 这台机子没装 llama.cpp 就整块不显示：装了 Ollama / LM Studio 的用户不需要这个“备用入口”
+  const panel = $("installPanel");
+  if (panel) panel.hidden = !llama.installed && !st.install.running;
   $("installInfo").innerHTML = `
     <div class="status-line"><span class="dot ${llama.installed ? "on" : ""}"></span>
       <b>${llama.installed ? "llama.cpp 已就绪" : "本机未安装 llama.cpp"}</b></div>
     <div class="mono">${esc(llama.installed ? (llama.path + (llama.version ? " · " + llama.version : "")) : "安装后会写入 " + llama.llama_dir)}</div>
     <div class="mono">模型目录：${esc(st.models_dir)} ${st.models_dir_exists ? "（存在）" : "（不存在，会自动创建）"}</div>`;
 
-  const canInstall = !llama.installed && st.supported;
-  $("installBtn").hidden = !st.supported;
-  $("installBtn").textContent = llama.installed ? "修复安装 llama.cpp" : "备用安装 llama.cpp";
+  $("installBtn").hidden = !!llama.installed || !st.supported;
+  $("installBtn").textContent = "备用安装 llama.cpp";
   $("installBtn").disabled = !!st.install.running;
   $("installHint").textContent = st.install.running ? "安装进行中…"
-    : llama.installed ? "已安装；正常请在平台卡点“一键部署”"
-    : (st.supported ? "正常请用平台卡的“一键部署”；这里作为备用入口" : "当前系统需手动安装");
+    : "本机已装 llama.cpp；没装的引擎不会在这里占位，统一在上方平台卡部署";
 
   $("depsRow").innerHTML = Object.entries(st.python_packages || {}).map(([k, ok]) =>
     `<span class="chip ${ok ? "ok" : "miss"}">${esc(k)} ${ok ? "已安装" : "缺失"}</span>`).join("")
@@ -367,9 +368,22 @@ async function pollPlatform(key) {
   return null;
 }
 
+/* 本机实际部署了哪些引擎：只列已安装/已连通的，没装的不占位。 */
+function engineLines(platforms, onlyRunning) {
+  return (platforms || [])
+    .filter((p) => p && p.key !== "custom" && (onlyRunning ? p.healthy : (p.installed || p.healthy)))
+    .map((p) => {
+      const addr = String(p.base_url || "").replace(/^https?:\/\//, "").replace(/\/v1$/, "");
+      const n = (p.models || []).length;
+      const state = onlyRunning ? "" : (p.healthy ? " · 运行中" : " · 未启动");
+      return `${p.name || p.key}${addr ? " · " + addr : ""}${n ? " · " + n + " 个模型" : ""}${state}`;
+    });
+}
+
 function renderLocalDeploy(data) {
   const on = data.local_enabled !== false;
   const srv = data.server || {};
+  const platforms = data.platforms || [];
   const installed = !!(data.hardware && data.hardware.llama_installed);
   S.localEnabled = on;
   const btn = $("localDeployBtn");
@@ -381,12 +395,17 @@ function renderLocalDeploy(data) {
 
   const dot = $("localDeployDot");
   const badge = $("localDeployBadge");
+  const running = engineLines(platforms, true);
+  const deployed = engineLines(platforms, false);
+  const deployedNames = (platforms || [])
+    .filter((p) => p && p.key !== "custom" && (p.installed || p.healthy))
+    .map((p) => p.name || p.key);
   let title, desc, meta;
-  if (on && srv.running && srv.healthy) {
+  if (on && running.length) {
     dot.className = "dot on"; badge.className = "badge good"; badge.textContent = "运行中";
     title = "本地部署已开启";
     desc = "用户端和 OpenAI 接口可以调用本地模型。关闭后本地模型会立即从可用列表移除，并拒绝本地模型请求。";
-    meta = `模型 ${srv.model || "—"} · 端口 ${srv.port || 8080}${srv.external ? " · 外部进程" : ""}`;
+    meta = `引擎 ${running.join("；")}`;
   } else if (on && srv.running) {
     dot.className = "dot warn"; badge.className = "badge warn"; badge.textContent = "启动中";
     title = "本地部署已开启，服务正在启动";
@@ -394,18 +413,20 @@ function renderLocalDeploy(data) {
     meta = `模型 ${srv.model || "—"} · 端口 ${srv.port || 8080}`;
   } else if (on) {
     dot.className = "dot warn"; badge.className = "badge warn"; badge.textContent = "待运行";
-    title = "本地部署已开启，模型未运行";
-    desc = installed
-      ? "开启状态已生效。请在模型清单里下载并加载一个模型，加载后用户端即可对话。"
-      : "开启状态已生效，但本机还没有安装 llama.cpp，请先在上方平台卡点“一键部署”。";
-    meta = installed ? `模型目录 ${data.models_dir || "—"}` : "缺少 llama.cpp";
+    title = "本地部署已开启，还没有引擎在跑";
+    desc = deployed.length
+      ? `本机已装 ${deployedNames.join("、")}，但服务都没在跑。去上方平台卡点“启动”，启动后用户端即可对话。`
+      : "本机还没有部署任何本地引擎：先在上方平台卡点一个“一键部署”（llama.cpp、Ollama、LM Studio 任选其一）。";
+    meta = deployed.length ? `已装 ${deployed.join("；")}` : (installed ? `模型目录 ${data.models_dir || "—"}` : "未检测到已部署引擎");
   } else {
     dot.className = "dot"; badge.className = "badge off"; badge.textContent = "已关闭";
     title = "本地部署已关闭";
     desc = "用户端不会显示本地模型，OpenAI 接口也会拒绝本地模型请求；配置了第三方供应商时会自动改用云端。";
-    meta = (srv.external || srv.healthy)
-      ? "检测到 8080 端口仍有外部 llama-server 运行，工作台不会强制结束它。"
-      : "已停止工作台持有的本地模型进程。";
+    if (srv.external || srv.healthy) {
+      meta = "检测到 8080 端口仍有外部 llama-server 运行，工作台不会强制结束它。";
+    } else {
+      meta = deployed.length ? `已部署但已停用：${deployed.join("；")}` : "本机没有已部署的本地引擎。";
+    }
   }
   $("localDeployTitle").textContent = title;
   $("localDeployDesc").textContent = desc;
@@ -418,7 +439,11 @@ function renderModels(data) {
   const enabled = data.local_enabled !== false;
   const items = data.items || [];
   const ready = items.filter((m) => m.downloaded).length;
-  $("modelHint").textContent = `本地${enabled ? "已开启" : "已关闭"} · 服务 ${srv.running ? "运行中" : "未运行"}${srv.model ? " · 当前 " + srv.model : ""} · ${items.length} 个模型 · 已下载 ${ready} · 单模型运行，点“加载”会切换当前模型`;
+  const ollama = data.ollama || {};
+  const engineText = srv.running
+    ? `llama.cpp${srv.model ? " " + srv.model : ""} 运行中`
+    : (ollama.running ? "Ollama 运行中" : "暂无运行中的引擎");
+  $("modelHint").textContent = `本地${enabled ? "已开启" : "已关闭"} · ${engineText} · ${items.length} 个模型 · 已下载 ${ready} · 单模型运行，点“加载”会切换当前模型`;
   renderModelFilters(items);
   renderModelRows();
   renderEngineSummary(items);
@@ -563,11 +588,22 @@ function renderEngineSummary(items) {
   }).join("");
 }
 
-function renderService(hw, data) {
+function renderService(hw, data, platforms) {
   const srv = data.server || {};
   const hardware = hw || {};
+  const list = platforms || ((S.deployData && S.deployData.platforms) || []);
+  const lines = [];
+  if (srv.running || (hw && hw.llama && hw.llama.installed) || (S.install && S.install.llama && S.install.llama.installed)) {
+    lines.push(`llama.cpp · 端口 ${esc(srv.port || 8080)} · ${srv.running ? "运行中" : "未启动"}${srv.external ? "（外部进程）" : ""}`);
+  }
+  for (const p of list) {
+    if (!p || p.key === "custom" || p.key === "llama.cpp") continue;
+    if (!p.installed && !p.healthy) continue;
+    const addr = String(p.base_url || "").replace(/^https?:\/\//, "").replace(/\/v1$/, "");
+    lines.push(`${esc(p.name || p.key)} · ${esc(addr || "—")} · ${p.healthy ? "运行中" : "未启动"}`);
+  }
   $("svcRow").innerHTML = `
-    <div class="svc"><h3>模型服务</h3><p>${srv.running ? "运行中" : "未运行"}${srv.external ? "（外部进程）" : ""} · 端口 ${esc(srv.port || 8080)}</p></div>
+    <div class="svc"><h3>模型服务</h3>${lines.length ? lines.map((x) => `<p>${x}</p>`).join("") : "<p>本机还没有部署任何本地引擎</p>"}</div>
     <div class="svc"><h3>接口</h3><p><a href="/api/docs" target="_blank" rel="noreferrer">/api/docs</a> · 健康检查 /api/health</p></div>
     <div class="svc"><h3>本机配置</h3><p>${esc(hardware.cpu || "")} · ${gb(hardware.ram_total_gb || 0)} 内存</p></div>
     <div class="svc"><h3>模型目录</h3><p class="mono">${esc(data.models_dir || (hw && hw.models_dir) || "")}</p></div>`;
@@ -585,7 +621,7 @@ function renderDeployment(hw, models, deploy) {
     hardware: models.hardware || hw,
     models_dir: models.models_dir || hw.models_dir };
   renderLocalDeploy(localData);
-  renderService(hw, models);
+  renderService(hw, models, (deploy || {}).platforms);
   renderPlatforms(deploy || { platforms: [], selected: ["llama.cpp"], endpoints: {} });
   if (hw.install.install && hw.install.install.running) pollInstall();
 }

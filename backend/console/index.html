@@ -1580,7 +1580,7 @@ ollama pull qwen2.5:7b
     <section class="panel local-deploy-panel">
       <div class="panel-head">
         <h2>本地部署开关</h2>
-        <span class="hint">按上方勾选的平台开启；不勾选默认 llama.cpp</span>
+        <span class="hint">本地模型对用户端的总开关；具体引擎在平台卡里启停</span>
       </div>
       <div class="install-row">
         <div class="install-info">
@@ -1598,10 +1598,10 @@ ollama pull qwen2.5:7b
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="installPanel">
       <div class="panel-head">
-        <h2>本地部署状态</h2>
-        <span class="hint" id="installHint">正在检测…；安装请优先用上方平台卡的一键部署</span>
+        <h2>llama.cpp 状态</h2>
+        <span class="hint" id="installHint">正在检测…；没装 llama.cpp 时不占位，直接在上方平台卡选别的引擎</span>
       </div>
       <div class="install-row">
         <div class="install-info" id="installInfo"></div>

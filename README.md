@@ -304,6 +304,8 @@ docker run -d --name local-ai-workbench -p 9100:9100 \
 - **拒绝的情况**：系统安装的 Ollama / LM Studio（工作台没装东西，去 Windows「设置 → 应用」卸）；Ollama 端口被托盘里的另一个进程占着（先在托盘右键 Quit，再点卸载）。
 - 接口：`POST /api/system/local-platforms/{key}/uninstall`；Ollama 拉模型是 `POST /api/system/local-platforms/ollama/pull`（`{"tag": "qwen2.5:7b"}`）+ `GET` 同路径查进度。
 
+部署页只描述**本机实际装了的引擎**：没装 llama.cpp 就不会出现“llama.cpp 状态”这一块，装了 Ollama 就在“本地部署开关”和“服务”里显示 Ollama 的地址与运行状态——部署几个写几个，不拿 llama.cpp 当默认前提。
+
 ### 登录页记住账号
 
 用户端和控制台登录页都有“记住账号/记住用户名”勾选框，默认勾上，只把用户名存在浏览器 `localStorage`（`wb_last_username`、`wb_console_username`），不存密码；取消勾选会清掉本机记录。控制台只有在**首次初始化**（数据库里还没有管理员）时才预填 `admin` 并明确提示“这就是即将创建的第一个管理员，可以改名”，初始化之后再打开登录页输入框是空的、只回填上次登录的用户名。
