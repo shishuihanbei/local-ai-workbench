@@ -687,7 +687,24 @@ async def connect() -> aiosqlite.Connection:
 # 常驻共享连接：多协程访问时复用同一条 aiosqlite 连接，由异步锁串行化，
 # 避免每个请求都新建连接和后台线程（100 人并发下这部分开销最明显）。
 _shared: aiosqlite.Connection | None = None
-_shared_lock = asyncio.Lock()
+_shared_lock: asyncio.Lock | None = None
+_shared_lock_loop = None
+
+
+def _shared_guard() -> asyncio.Lock:
+    """按当前事件循环取锁。
+
+    模块级的 ``asyncio.Lock`` 会绑定第一次 await 时的循环，测试/脚本里多次
+    ``asyncio.run`` 再复用它就会报 "bound to a different event loop"，所以这里
+    换循环时新建一把锁；共享连接本身不属于任何循环（aiosqlite 在工作线程里跑，
+    回调走调用方 future 的循环），继续复用同一个连接，避免留下关不掉的线程。
+    """
+    global _shared_lock, _shared_lock_loop
+    loop = asyncio.get_running_loop()
+    if _shared_lock is None or _shared_lock_loop is not loop:
+        _shared_lock = asyncio.Lock()
+        _shared_lock_loop = loop
+    return _shared_lock
 
 
 async def _shared_connection() -> aiosqlite.Connection:
@@ -703,7 +720,7 @@ async def _shared_connection() -> aiosqlite.Connection:
 async def close_shared() -> None:
     """进程退出时关闭共享连接；初始化/迁移仍走独立的 connect()。"""
     global _shared
-    async with _shared_lock:
+    async with _shared_guard():
         if _shared is not None:
             try:
                 await _shared.close()
@@ -1319,7 +1336,7 @@ async def init_db() -> None:
 
 
 async def fetch_all(sql: str, params: Iterable[Any] = ()) -> list[dict[str, Any]]:
-    async with _shared_lock:
+    async with _shared_guard():
         db = await _shared_connection()
         cur = await db.execute(sql, tuple(params))
         rows = await cur.fetchall()
@@ -1332,7 +1349,7 @@ async def fetch_one(sql: str, params: Iterable[Any] = ()) -> dict[str, Any] | No
 
 
 async def execute(sql: str, params: Iterable[Any] = ()) -> int:
-    async with _shared_lock:
+    async with _shared_guard():
         db = await _shared_connection()
         cur = await db.execute(sql, tuple(params))
         await db.commit()
@@ -1340,7 +1357,7 @@ async def execute(sql: str, params: Iterable[Any] = ()) -> int:
 
 
 async def executemany(sql: str, seq: list[tuple]) -> None:
-    async with _shared_lock:
+    async with _shared_guard():
         db = await _shared_connection()
         await db.executemany(sql, list(seq))
         await db.commit()
