@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import io
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -14,6 +16,19 @@ def _fake_windows_zip(path: Path) -> Path:
     with zipfile.ZipFile(path, "w") as zf:
         zf.writestr("ollama.exe", b"MZ-fake")
         zf.writestr("lib/ollama/runners/cpu/ggml.dll", b"dll")
+    return path
+
+
+def _fake_archive(path: Path) -> Path:
+    """按后缀造对应格式的便携包（CI 的 Linux 走 tgz，本地 Windows 走 zip）。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.name.endswith(".zip"):
+        return _fake_windows_zip(path)
+    with tarfile.open(path, "w:gz") as tf:
+        for name, data in (("ollama", b"MZ-fake"), ("lib/ollama/runners/cpu/ggml.dll", b"dll")):
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tf.addfile(info, io.BytesIO(data))
     return path
 
 
@@ -33,6 +48,17 @@ def test_extract_keeps_nested_lib(tmp_path):
     assert (target / "lib" / "ollama" / "runners" / "cpu" / "ggml.dll").read_bytes() == b"dll"
 
 
+def test_extract_tgz_layout(tmp_path):
+    """Linux/macOS 走 tgz：解压后 bin/ 与 lib/ 结构要保留。"""
+    from backend.services import platform_deploy
+
+    archive = _fake_archive(tmp_path / "ollama-linux-amd64.tgz")
+    target = tmp_path / "platforms" / "ollama"
+    platform_deploy._extract_archive(archive, target)
+    assert (target / "ollama").read_bytes() == b"MZ-fake"
+    assert (target / "lib" / "ollama" / "runners" / "cpu" / "ggml.dll").read_bytes() == b"dll"
+
+
 def test_extract_rejects_zip_slip(tmp_path):
     from backend.services import platform_deploy
 
@@ -48,17 +74,20 @@ def test_install_flow_uses_cache_and_sets_models_dir(tmp_path, monkeypatch):
 
     cfg = _cfg(tmp_path)
     monkeypatch.setattr(platform_deploy, "load_config", lambda: cfg)
-    cache = tmp_path / "platforms" / ".downloads" / "ollama-windows-amd64.zip"
-    _fake_windows_zip(cache)
+    name = platform_deploy.ollama_archive()[1]
+    cache = tmp_path / "platforms" / ".downloads" / name
+    _fake_archive(cache)
 
     async def no_download(key, url, dest):
         raise AssertionError("已有缓存时不该再下载")
 
     monkeypatch.setattr(platform_deploy, "_download_file", no_download)
+    monkeypatch.setattr(platform_deploy, "_local_installer", lambda *a, **kw: "")
     ok, msg = asyncio.run(platform_deploy._install_ollama("ollama", force=False))
     assert ok is True, msg
-    exe = tmp_path / "platforms" / "ollama" / "ollama.exe"
-    assert exe.exists()
+    exe = Path(platform_deploy.portable_ollama(cfg))
+    assert exe.is_file()
+    assert exe.parent == tmp_path / "platforms" / "ollama"
     assert (tmp_path / "platforms" / "ollama" / "models").is_dir()
     state = platform_deploy.get_state("ollama")
     assert "platforms" in state["msg"] or "程序" in state["msg"]
@@ -68,10 +97,12 @@ def test_install_flow_reports_after_extract(tmp_path, monkeypatch):
     from backend.services import platform_deploy
 
     monkeypatch.setattr(platform_deploy, "load_config", lambda: _cfg(tmp_path))
-    cache = tmp_path / "platforms" / ".downloads" / "ollama-windows-amd64.zip"
+    monkeypatch.setattr(platform_deploy, "_local_installer", lambda *a, **kw: "")
+    name = platform_deploy.ollama_archive()[1]
+    cache = tmp_path / "platforms" / ".downloads" / name
 
     async def fake_download(key, url, dest):
-        _fake_windows_zip(dest)
+        _fake_archive(dest)
 
     monkeypatch.setattr(platform_deploy, "_download_file", fake_download)
     ok, msg = asyncio.run(platform_deploy._install_ollama("ollama", force=True))
