@@ -110,6 +110,24 @@ def test_install_flow_reports_after_extract(tmp_path, monkeypatch):
     assert "platforms/ollama" in msg or "platforms\\ollama" in msg
 
 
+def test_force_start_refuses_when_other_ollama_owns_port(tmp_path, monkeypatch):
+    from backend.services import platform_deploy
+
+    monkeypatch.setattr(platform_deploy, "load_config", lambda: _cfg(tmp_path))
+    exe = tmp_path / "platforms" / "ollama" / "ollama.exe"
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    exe.write_bytes(b"MZ")
+    monkeypatch.setattr(platform_deploy, "PROCS", {})
+
+    async def healthy(*a, **kw):
+        return True, [], ""
+
+    monkeypatch.setattr(platform_deploy.platforms, "_probe_external", healthy)
+    ok, msg = asyncio.run(platform_deploy._start_ollama("ollama", "", force=True))
+    assert ok is False
+    assert "Quit" in msg
+
+
 def test_start_passes_models_env(tmp_path, monkeypatch):
     from backend.services import platform_deploy
 

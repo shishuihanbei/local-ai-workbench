@@ -419,7 +419,11 @@ async def _start_ollama(key: str, endpoint: str = "", force: bool = False) -> tu
     if healthy and not force:
         return True, "Ollama 已在运行，跳过启动"
     if healthy and force:
-        return True, f"Ollama 已在 {base} 运行（不是工作台拉起的进程），如需换目录请先退出托盘里的 Ollama"
+        proc = PROCS.get(key)
+        if proc and proc.poll() is None:
+            return True, "Ollama 已在运行（工作台拉起的进程）"
+        return False, (f"{base} 上已经有另一个 Ollama 在跑（多半是托盘里的系统版）。"
+                       "请先退出它（托盘图标右键 Quit），再点一次“装到工作台目录”，这样才会用到 platforms\\ollama 的程序和模型")
     exe = portable_ollama(cfg) or detect("ollama")["path"]
     if not exe:
         return False, "没有找到 ollama 程序"
