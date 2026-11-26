@@ -48,7 +48,7 @@ jobs:
           echo "GET / -> $code"
           head -c 400 /tmp/home.html; echo
           test "$code" = "200" || { echo "FAIL: / 返回 $code，WORKBENCH_SERVE_FRONTEND 未生效"; exit 1; }
-          grep -q 'app.js?v=' /tmp/home.html || { echo "FAIL: / 不是注入后的 index.html"; exit 1; }
+          grep -q 'core.js?v=' /tmp/home.html || { echo "FAIL: / 不是注入后的 index.html"; exit 1; }
           echo "OK: container serves injected frontend at /"
 
   build:
