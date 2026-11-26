@@ -48,6 +48,8 @@ _LABELS = {
     "mineru": "MinerU",
     "surya": "Surya",
     "kokoro": "Kokoro",
+    "comfyui": "ComfyUI",
+    "ollama": "Ollama",
 }
 
 _ALIASES = {

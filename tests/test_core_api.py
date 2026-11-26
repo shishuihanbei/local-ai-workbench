@@ -89,6 +89,16 @@ def test_engine_install_starts(client, admin_token, monkeypatch):
     assert p.status_code == 200
 
 
+def test_every_independent_model_maps_to_engine_catalog(client, admin_token):
+    r = client.get("/api/models", headers=auth(admin_token))
+    assert r.status_code == 200, r.text
+    data = r.json()
+    keys = {e["key"] for e in data.get("engine_catalog", [])}
+    missing = [m["key"] for m in data["items"]
+               if m.get("installable") is False and m.get("engine_recommend_key") not in keys]
+    assert not missing, missing
+
+
 def test_independent_model_download_needs_engine(client, admin_token, monkeypatch):
     from backend.routers import models as models_router
     monkeypatch.setattr(models_router.engines, "ready_for", lambda engine, state=None: False)
