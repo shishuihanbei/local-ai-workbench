@@ -7,6 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     WORKBENCH_DATA=/data \
     WORKBENCH_MODELS=/models \
+    WORKBENCH_PLATFORMS=/platforms \
+    WORKBENCH_LLAMA=/platforms/llama.cpp \
     TZ=Asia/Shanghai
 
 WORKDIR /app
@@ -29,7 +31,7 @@ COPY frontend ./frontend
 COPY run.py ./
 COPY docs ./docs
 
-RUN mkdir -p /data /models /llama
+RUN mkdir -p /data /models /platforms/llama.cpp
 VOLUME ["/data"]
 
 EXPOSE 9100

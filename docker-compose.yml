@@ -15,12 +15,13 @@ services:
     volumes:
       - ./data:/data          # 数据库、配置、上传、日志；必须可写并纳入备份
       - ./models:/models      # GGUF 模型目录（可选，镜像不含模型）
-      - ./llama:/llama        # llama.cpp 可执行文件（可选）
+      - ./platforms:/platforms  # 下载的部署平台（llama.cpp 在 llama.cpp/ 下，可选）
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       WORKBENCH_DATA: /data
       WORKBENCH_MODELS: /models
-      WORKBENCH_LLAMA: /llama
+      WORKBENCH_PLATFORMS: /platforms
+      WORKBENCH_LLAMA: /platforms/llama.cpp
       WORKBENCH_SERVE_FRONTEND: "1"
       # 首次启动会自动生成 data/secret.key；多副本或多个容器共用一份 data 时再显式指定同一个值
       WORKBENCH_SECRET: ${WORKBENCH_SECRET:-}
