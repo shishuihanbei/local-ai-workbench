@@ -42,8 +42,14 @@ jobs:
       - name: Check frontend page
         run: |
           curl -fsS http://127.0.0.1:9100/api/health
-          curl -fsS http://127.0.0.1:9100/ | head -c 400
-          echo
+          # 严格断言：serve_frontend 生效时 GET / 必须是 200 且直接是注入后的 index.html，
+          # 不接受 307 重定向到 /console（旧断言 curl -f 对 3xx 也算通过，等于没测）
+          code=$(curl -s -o /tmp/home.html -w '%{http_code}' http://127.0.0.1:9100/)
+          echo "GET / -> $code"
+          head -c 400 /tmp/home.html; echo
+          test "$code" = "200" || { echo "FAIL: / 返回 $code，WORKBENCH_SERVE_FRONTEND 未生效"; exit 1; }
+          grep -q 'app.js?v=' /tmp/home.html || { echo "FAIL: / 不是注入后的 index.html"; exit 1; }
+          echo "OK: container serves injected frontend at /"
 
   build:
     runs-on: ubuntu-latest

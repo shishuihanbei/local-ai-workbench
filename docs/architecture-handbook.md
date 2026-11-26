@@ -5,7 +5,7 @@
 > 2. 按既有流程改代码、跑测试、发版本；
 > 3. 按第 10–11 章做重构，而不破坏现网。
 >
-> 文档基准：`main` 分支，提交 `5f77063`，测试 **156 passed**，API 版本 `0.8.1`。凡是数字（端点数、表数、行数）都是实测值，改动后请同步更新本文。
+> 文档基准：`main` 分支，提交 `9f96f3e`，测试 **192 passed**，API 版本 `0.8.3.0`。凡是数字（端点数、表数、行数）都是实测值，改动后请同步更新本文。
 
 ---
 
@@ -35,7 +35,7 @@
 ┌─────────────────────────────────────────────┐
 │ uvicorn 单进程（run.py → backend.main:app）  │
 │  ├─ 中间件：CORS、安全响应头、异常兜底        │
-│  ├─ 26 个 router 挂载（25 个文件），约 283 个端点 │
+│  ├─ 26 个 router 挂载（25 个文件），266 条路径 / 333 个操作 │
 │  ├─ 46 个 service（业务逻辑，无状态为主）      │
 │  ├─ logbus 后台协程：批量把调用记录写 requests │
 │  └─ 共享 SQLite 连接（异步锁串行化）          │
@@ -80,7 +80,7 @@ workbench/
 │   ├── services/          46 个模块，见附录 B
 │   └── console/           管理控制台（index.html + console.js + console.css，静态挂载）
 ├── frontend/              用户端（index.html + app.js + app.css + app.ui.css + 共享页）
-├── tests/                 21 个 pytest 文件，156 条用例
+├── tests/                 26 个 pytest 文件，192 条用例
 ├── docs/                  本文档与后续设计说明
 ├── data/                  运行期数据（见 2.5）
 ├── models/                本地 GGUF
@@ -388,7 +388,7 @@ Set-Location D:\AI\workbench
 .\.venv\Scripts\python.exe -m pip install pytest   # 仓库里的 requirements-dev.txt 只有 pytest
 # 跑测试（必须给 secret，且不要指到线上 data 目录）
 $env:WORKBENCH_SECRET="pytest-secret-key-do-not-use-in-production"
-.\.venv\Scripts\python.exe -m pytest -q          # 期望 156 passed
+.\.venv\Scripts\python.exe -m pytest -q          # 期望 192 passed
 ```
 
 测试的 `conftest.py` 自己 `mkdtemp` 并固定 `WORKBENCH_DATA`，但**shell 里残留的 `WORKBENCH_DATA` 会污染它**——曾出现 `no such table: auth_identities` 的假失败，根因就是环境变量指到了别的临时目录。跑测试前 `Remove-Item Env:WORKBENCH_DATA`。
@@ -398,7 +398,7 @@ $env:WORKBENCH_SECRET="pytest-secret-key-do-not-use-in-production"
 ```powershell
 Set-Location D:\AI\workbench
 .\stop.ps1; Start-Sleep 2; .\start.ps1 -NoBrowser     # 后台起服务，日志 data\logs\app.log
-Invoke-RestMethod http://127.0.0.1:9100/api/health    # {"status":"ok","version":"0.8.1"}
+Invoke-RestMethod http://127.0.0.1:9100/api/health    # {"status":"ok","version":"0.8.3.0"}
 ```
 
 验收顺序固定：**接口 → 页面 → 截图**。
@@ -482,7 +482,7 @@ stop.ps1 → git pull → start.ps1 -NoBrowser → /api/health → 打开控制�
 1. 需求卡：目标一句话 + 验收标准（可勾选）+ 不做什么；
 2. 设计：改哪些表/端点/页面，是否影响权限与配额；
 3. 实现：后端 → 测试 → 前端 → 联调；
-4. 验收：接口 + 页面 + 截图 + 回归（`pytest -q` 156 全绿）；
+4. 验收：接口 + 页面 + 截图 + 回归（`pytest -q` 192 全绿）；
 5. 交付：提交 → CI 绿 → 重启 → 现网抽查 → README/本文档同步。
 
 ---
@@ -516,8 +516,8 @@ stop.ps1 → git pull → start.ps1 -NoBrowser → /api/health → 打开控制�
 | T3 | 单写者数据层 | 共享连接 + `asyncio.Lock`，SQLite WAL | 无法多实例；长事务会阻塞所有请求 | 抽 repository，迁移 PG 后去掉全局锁 |
 | T4 | 业务规则下沉到路由 | `chat.py` 770 行内直接拼 SQL、判配额 | 换库/换表结构要改 HTTP 层 | 引入 `application/` 用例层 |
 | T5 | 权限语义分散 | `role` + `admin_roles.permissions` + `allowed_models` + 4 个 kb/library 开关 | 新增权限容易漏配，行为难预测 | 收敛成单一 `Permission` 枚举 + 一张 `user_permissions` |
-| T6 | 错误契约不统一 | 部分返回 `{code}` 事件，部分抛 `HTTPException(detail=str)` | 前端只能靠文案判断 | **已解决（0.8.3.0）**：`backend/errors.py` + 全局处理器补齐 `code`（见 4.4 / 附录 D）；剩余是把 333 处 `HTTPException` 逐步换成 `APIError` 以细化业务码 |
-| T7 | 无 API 版本化 | 283 个端点平铺在 `/api` | 破坏性变更无法灰度、第三方接入会断 | 新能力走 `/api/v2`，旧端点加兼容层 |
+| T6 | 错误契约不统一 | 部分返回 `{code}` 事件，部分抛 `HTTPException(detail=str)` | 前端只能靠文案判断 | **已解决（0.8.3.0）**：`backend/errors.py` + 全局处理器补齐 `code`（见 4.4 / 附录 F）；剩余是把 333 处 `HTTPException` 逐步换成 `APIError` 以细化业务码 |
+| T7 | 无 API 版本化 | 333 个操作平铺在 266 条路径 | 破坏性变更无法灰度、第三方接入会断 | 新能力走 `/api/v2`，旧端点加兼容层 |
 | T8 | 本地模型串行 | `services/llama.py` 单进程托管 | 100 人并发时队列化严重 | 短期靠准入限流；中期接算力池/外部 vLLM |
 | T9 | 前端零自动化测试 | `tests/` 全为后端用例 | 回归靠人工截图 | 引入 Playwright 冒烟 5 条（登录/发消息/建知识库/控制台改配置/分享页） |
 | T10 | 版本号三处不一 | `main.py` 0.8.1、`/api/health` 0.8.1、资源 `0.8.2.2` | 无法判断线上跑的是哪版 | **已解决（0.8.3.0）**：`backend/version.py` 单源，资源版本由 `render_page()` 注入（见 4.3） |
@@ -525,7 +525,7 @@ stop.ps1 → git pull → start.ps1 -NoBrowser → /api/health → 打开控制�
 | T12 | 三套备份逻辑 | `backup.py`、`database_admin`、`system` 分享 | 语义重叠，恢复路径易混 | 统一 `SnapshotService`，明确三种语义 |
 | T13 | 可观测双轨 | `logbus`（requests/spans）与 `audit_logs` 各写一套 | trace_id 无法串起"谁点的、花了多少" | 审计里记录 `request_id`，概览页按 trace 聚合 |
 | T14 | 测试共享全局状态 | `conftest` 单库 + 模块级缓存单例 | 偶发顺序依赖失败 | 每模块独立 tmp 库；单例提供 `reset_for_tests()`（`admission` 已有） |
-| T15 | 容器开关未接线 | `docker.yml` 传 `WORKBENCH_SERVE_FRONTEND=1`，`config.py`/`main.py` 只读 `config.serve_frontend` | 容器里首页 404，只能靠配置文件补救 | `config.load_config()` 里补环境变量覆盖，并在 `docker.yml` 冒烟里断言 `GET /` 返回 200 |
+| T15 | ~~容器开关未接线~~（原诊断有误） | `docker.yml` 传 `WORKBENCH_SERVE_FRONTEND=1`；实测 `config.load_config()` 对 DEFAULTS 全部键做 `WORKBENCH_<KEY>` 覆盖，bool 键按 `1/true/yes/on` 解析 | 容器首页其实正常：`WORKBENCH_SERVE_FRONTEND=1` 时 `GET /` 返回 200 且是注入后的 `index.html`（0.8.3.0 实测）；真正的缺口是 `docker.yml` 冒烟用 `curl -f` 且不跟随 307，断言偏弱 | 冒烟改为断言 `GET /` 为 200 且正文含 `<title>`，避免「重定向也算过」 |
 
 风险（非代码）：`GTX 650 1GB`、`gpu_usable=false`，本机只能跑小模型 CPU 推理；千兆内网做张量并行不现实；所以"多机"只应做成"多副本 + 调度"，不做"单模型跨机切分"。
 
@@ -612,9 +612,9 @@ app/
 原则：**每一阶段都要能独立上线、独立回滚，且不改变用户可见行为**（除非该阶段目标就是改行为）。
 
 ### 阶段 0：冻结基线（0.5 天）
-- 打 tag `v0.8.1-baseline`；记录 156 测试基线、CI 两个工作流绿、现网健康检查截图。
+- 打 tag `v0.8.1-baseline`（**尚未打**，`git tag -l` 为空；main 已到 0.8.3.0，建议改打 `v0.8.3.0`）；记录 192 测试基线、CI 两个工作流绿、现网健康检查截图。
 - 把本文档提交进仓库（`docs/`），README 增加入口链接。
-- 验收：任何人 clone 后能按 6.1 跑出 156 passed。
+- 验收：任何人 clone 后能按 6.1 跑出 192 passed。
 
 ### 阶段 1：低风险治理（2–3 天）—— ✅ 已完成（0.8.3.0）
 - T10 版本单源：新增 `backend/version.py`，`main.py` / `health` / `meta` / 备份清单 / 导库元数据全部改读常量。
@@ -634,7 +634,7 @@ app/
 ### 阶段 3：后端分层（7–10 天）
 - 建 `application/` 与 `infra/db/repository`，**先搬 `chat.py` 的读写**（风险最高、收益最大），再搬 `kb`、`workbench`；
 - 路由瘦身到"解析 → 调用例 → 返回"，SQL 只出现在 repository；
-- 验收：端点路径与响应结构零变化（用 `/api/docs` 快照 diff）；156 测试 + 新增 repository 单测全绿；`chat.py` < 300 行。
+- 验收：端点路径与响应结构零变化（用 `/api/docs` 快照 diff）；192 测试 + 新增 repository 单测全绿；`chat.py` < 300 行。
 - 回滚：新旧实现并存，配置 `use_legacy_chat=1` 切回。
 
 ### 阶段 4：可扩展（按需）
@@ -702,7 +702,7 @@ app/
 
 ## 12. 附录
 
-### 附录 A：路由清单（25 个文件 / 26 个 router 对象，约 283 个端点）
+### 附录 A：路由清单（25 个文件 / 26 个 router 对象，266 条路径 / 333 个操作）
 
 | 文件 | 行数 | 端点数 | 前缀 | 职责 |
 |---|---|---|---|---|
@@ -781,16 +781,18 @@ app/
 | quota.py | 45 | 日/月 token 配额 |
 | platform_models.py | 95 | 平台模型探测与缓存 |
 
-### 附录 C：数据表分组（48 张）
+### 附录 C：数据表分组（48 张业务表）
 
-- **身份权限（10）**：users、sessions、auth_identities、api_keys、admin_roles、user_groups、settings、front_features、front_icons、branding（存配置）
-- **对话内容（8）**：conversations、messages、generated_files、uploads、conversation_shares、cache_entries、memories、kb_docs（后两张跨域）
-- **模型路由（9）**：models、providers、routes、requests、spans、downloads、experiments、model usage（model_usage 若独立）、sensitive_words
+> `sqlite_master` 里实际是 54 项：除下列 48 张业务表，还有 6 张 FTS5 内部表（`kb_fts` 及其 `_config/_content/_data/_docsize/_idx`）。数表时先排除 FTS 影子表，否则会数成 54。下面是按实测名逐张归组的结果，各组数字相加正好 48 张。
+
+- **身份权限（9）**：users、sessions、auth_identities、api_keys、admin_roles、user_groups、settings、front_features、front_icons（brand 配置在 `config.json`，不是表）
+- **对话内容（8）**：conversations、messages、generated_files、uploads、conversation_shares、cache_entries、memories、kb_docs
+- **模型路由（8）**：models、providers、routes、requests、spans、downloads、experiments、sensitive_words（用量统计在 `requests/spans`，没有独立的 model_usage 表）
 - **协作组织（8）**：agents、squads、squad_agents、squad_members、squad_conversations、announcements、tickets、ticket_messages
-- **工作台（4）**：workbench_templates、workbench_active、workbench_shares、scheduled_tasks（+ task_runs）
+- **工作台（5）**：workbench_templates、workbench_active、workbench_shares、scheduled_tasks、task_runs
 - **提示词（3）**：prompt_templates、prompt_versions、prompt_releases
 - **运维审计（6）**：audit_logs、moderation_hits、schema_migrations、cluster_nodes、cluster_pools、cluster_members
-- **技能（2）**：custom_skills、kb_docs（共享）
+- **技能（1）**：custom_skills（kb_docs 归知识域，不重复计）
 
 > 精确字段与行数见 `data/workbench.db` 的 `PRAGMA table_info`，或控制台「数据库」页的表浏览。`settings` 表只有 3 行——绝大多数配置在 `data/config.json`，这是"配置双轨"的来源（T3 相关）。
 
@@ -817,19 +819,13 @@ app/
 | WORKBENCH_DATA | 数据目录（测试/临时实例必须隔离） |
 | WORKBENCH_SECRET | 会话与令牌签名密钥（测试必设） |
 | WORKBENCH_MODELS / WORKBENCH_PLATFORMS / WORKBENCH_LLAMA | 模型与平台目录 |
-| WORKBENCH_SERVE_FRONTEND | Docker 工作流传入，但当前代码只读 `config.serve_frontend`，该变量尚未接入（见 T15） |
+| WORKBENCH_SERVE_FRONTEND | 单进程模式开关（docker-compose / docker.yml 传入）。`load_config()` 对 DEFAULTS 里**每个**键都做 `WORKBENCH_<KEY>` 覆盖，bool 键认 `1/true/yes/on` |
 | WORKBENCH_CHAT_MAX_ACTIVE / WORKBENCH_CHAT_RPM | 覆盖并发准入参数 |
 | WORKBENCH_HF_ENDPOINT / HF_TOKEN | 模型下载源与令牌 |
 
-### 附录 F：本文档维护规则
+> 通用规则：`WORKBENCH_<KEY>` 可覆盖 `config.py` DEFAULTS 里任意一个键（键名大写），非空才生效；优先级高于 `data/config.json`。
 
-- 端点数、表数、测试数变化时，改第 2 章与附录对应数字；
-- 新增技术债或偿还技术债时，改第 8 章表格（保留编号，标注"已偿还"）；
-- 每完成一个重构阶段，在第 10 章该阶段打勾并记录实际耗时与偏差原因。
-
-（文档结束）
-
-### 附录 D：错误码表
+### 附录 F：错误码表
 
 响应体统一为 `{detail, code, ...extra}`；`detail` 是人类可读中文，`code` 是稳定契约。
 
@@ -868,3 +864,11 @@ app/
 | `confirm_required` | 409 | 破坏性操作需二次确认 | 弹确认条 |
 
 新增错误时优先 `raise APIError(status, message, code, extra={...})`；不确定就用普通 `HTTPException`，默认码仍然可用。
+
+### 附录 G：本文档维护规则
+
+- 端点数、表数、测试数变化时，改第 2 章与附录对应数字；
+- 新增技术债或偿还技术债时，改第 8 章表格（保留编号，标注"已偿还"）；
+- 每完成一个重构阶段，在第 10 章该阶段打勾并记录实际耗时与偏差原因。
+
+（文档结束）
