@@ -91,6 +91,24 @@ Linux / macOS：
 ./restart.sh
 ```
 
+### Docker / NAS
+
+已发布多架构镜像（`linux/amd64` + `linux/arm64`），不用本地构建：
+
+```bash
+docker run -d --name local-ai-workbench -p 9100:9100 \
+  -v "$PWD/data:/data" -e WORKBENCH_SERVE_FRONTEND=1 \
+  --restart unless-stopped \
+  ghcr.io/shishuihanbei/local-ai-workbench:latest
+```
+
+在仓库目录也可以直接 `docker compose up -d`，compose 已带数据卷、模型卷、健康检查和 `WORKBENCH_SERVE_FRONTEND=1`。
+
+- 镜像不含模型，首次启动后在控制台「模型」页下载；`/models` 挂到宿主目录可复用已有 GGUF。
+- `data/` 必须挂到持久目录并纳入备份，`secret.key` 与 `workbench.db` 一起保留，否则已加密的供应商 Key 无法解密。
+- 多个容器或副本共用一份 `data` 时，显式给同一个 `WORKBENCH_SECRET`。
+- 镜像标签随每次发布打 `v<版本号>` 和 `latest`，版本说明见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)。
+
 默认监听 `0.0.0.0:9100`。本机 `127.0.0.1:9100`，局域网 `http://<本机IP>:9100/`。启动脚本会把用户端、控制台和局域网地址一起打印出来。
 
 ### 桌面图标（一个就够）
@@ -338,7 +356,7 @@ curl "http://127.0.0.1:9100/v1/chat/completions" \
 | `llama_dir` | llama.cpp 目录，默认 `<platforms_dir>/llama.cpp` |
 | `hf_endpoint` | Hugging Face 下载站，默认 `https://hf-mirror.com`；想用官方站就改成 `https://huggingface.co` |
 | `hf_token` | 可选，下载需要授权的 gated 模型时填 Hugging Face 令牌 |
-| `serve_frontend` | 是否由本进程托管用户端，默认 `true` |
+| `serve_frontend` | 是否由本进程同时托管用户端（单进程模式），默认 `false`；启动脚本和 docker-compose 会把它打开，前后端分离部署时保持关闭 |
 | `allow_register` | 是否允许访客自助注册，默认 `true` |
 | `brand_logo` | `data/branding/` 下的 Logo 文件名，由控制台「外观」上传/删除 |
 | `brand_tagline` / `brand_primary` | 品牌副标题与主色（十六进制），主色会覆盖用户端 `--brand` 主题色 |
