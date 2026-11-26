@@ -1311,6 +1311,30 @@
       <div class="backup-hero-mark text"><strong>HW</strong><span>按机器适配</span></div>
     </section>
 
+    <section class="panel autostart-panel" id="autostartPanel">
+      <div class="panel-head">
+        <h2>开机自启</h2>
+        <div class="panel-tools">
+          <span class="badge" id="autostartBadge">读取中…</span>
+        </div>
+      </div>
+      <div class="autostart-body">
+        <div class="autostart-copy">
+          <p class="autostart-lead" id="autostartLead">点一次按钮，以后开机自动在后台启动工作台，不用再设任务计划、systemd 或 launchd。</p>
+          <ul class="autostart-points">
+            <li>登录后自动启动，不弹浏览器、不留窗口</li>
+            <li>使用当前这份程序和当前端口 <b id="autostartPort">—</b></li>
+            <li>随时可以在这里一键关闭，不影响正在运行的服务</li>
+          </ul>
+          <p class="hint autostart-detail" id="autostartDetail"></p>
+        </div>
+        <div class="autostart-actions">
+          <button class="btn primary big" id="autostartOn" type="button">开启开机自启</button>
+          <button class="btn small ghost" id="autostartOff" type="button" hidden>关闭开机自启</button>
+        </div>
+      </div>
+    </section>
+
     <section class="cards" id="hwCards"></section>
 
     <section class="panel">
@@ -1587,14 +1611,14 @@
         </div>
         <div class="form-grid">
           <input id="clusterNodeName" placeholder="机器名，例如 书房-4090" autocomplete="off">
-          <input id="clusterNodeBase" placeholder="http://192.168.1.40:11434/v1" autocomplete="off">
+          <input id="clusterNodeBase" placeholder="http://192.168.5.40:11434/v1" autocomplete="off">
           <input id="clusterNodeKey" type="password" placeholder="API Key（本机服务通常留空）" autocomplete="new-password">
           <input id="clusterNodeWeight" type="number" min="1" max="100" value="1" title="权重越大，分到的请求越多">
           <input id="clusterNodeMax" type="number" min="1" max="100" value="4" title="这台机器同时处理几个请求">
           <input id="clusterNodeNote" placeholder="备注，例如 24G 显存 / 只跑 q4" autocomplete="off">
           <label class="checkline"><input type="checkbox" id="clusterNodeEnabled" checked> 启用这台机器</label>
           <div class="form-note">
-            地址示例：Ollama <code>http://192.168.1.40:11434/v1</code>；LM Studio <code>http://192.168.1.41:1234/v1</code>；vLLM <code>http://192.168.1.42:8000/v1</code>。
+            地址示例：Ollama <code>http://192.168.5.40:11434/v1</code>；LM Studio <code>http://192.168.5.41:1234/v1</code>；vLLM <code>http://192.168.5.42:8000/v1</code>。
             先在浏览器直接打开 <code>地址/models</code>，能看到模型列表再保存。
           </div>
         </div>
@@ -2211,7 +2235,7 @@
       <div class="panel-head"><h2>使用说明 · 迁移到新机</h2><span class="hint">给不熟悉命令行的使用者</span></div>
       <ol class="migrate-steps">
         <li><b>生成迁移包</b><span>点上面的“生成到默认文件夹”，zip 会保存在工作台的 <code>data/migrations</code>；也可以点“下载到浏览器”。</span></li>
-        <li><b>复制到新电脑</b><span>解压到普通目录，例如 <code>D:\LocalAI\workbench</code>，不要放 Program Files。</span></li>
+        <li><b>复制到新电脑</b><span>解压到普通目录，例如 <code>D:\AI\workbench</code>，不要放 Program Files。</span></li>
         <li><b>双击一键迁移</b><span>运行“一键迁移-双击我.bat”，首次会自动装依赖并启动。</span></li>
         <li><b>检查模型目录</b><span>新机没有模型时，进「部署 / 模型」页复制模型或重新下载。</span></li>
       </ol>

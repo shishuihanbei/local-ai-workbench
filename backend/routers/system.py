@@ -16,7 +16,8 @@ from starlette.concurrency import run_in_threadpool
 from ..config import DATA_DIR, LOG_DIR, load_config, model_file_path, save_config
 from ..db import audit, fetch_all, fetch_one
 from ..security import admin_user, any_user_or_none, current_user, user_from_any_token
-from ..services import backup, hardware, installer, llama, netinfo, platform_deploy, platforms, retention, websearch
+from ..services import (autostart, backup, hardware, installer, llama, netinfo, platform_deploy, platforms,
+                            retention, websearch)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -402,6 +403,32 @@ async def restore_backup(
 async def restart_hint(user: dict = Depends(admin_user)):
     """前端提示用：某些设置需要重启服务生效。"""
     return {"ok": True, "msg": "部分设置（端口、目录）需要重启服务后生效"}
+
+
+@router.get("/autostart")
+async def get_autostart(user: dict = Depends(admin_user)):
+    """开机自启状态：是否已开启、用哪种机制、具体文件路径。"""
+    return autostart.status()
+
+
+@router.post("/autostart")
+async def post_autostart(user: dict = Depends(admin_user)):
+    """一键开启开机自启（Windows 启动项 / systemd / launchd / crontab）。"""
+    res = await run_in_threadpool(autostart.enable)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("message") or "开启失败")
+    await audit(user, "system.autostart.on", res.get("mechanism", ""), res.get("path", ""))
+    return res
+
+
+@router.delete("/autostart")
+async def delete_autostart(user: dict = Depends(admin_user)):
+    """关闭开机自启，只删注册项，不影响当前运行的服务。"""
+    res = await run_in_threadpool(autostart.disable)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("message") or "关闭失败")
+    await audit(user, "system.autostart.off", res.get("mechanism", ""), res.get("path", ""))
+    return res
 # ------------------------------------------------------------------ 部署检测 / 一键安装
 @router.get("/hardware")
 async def hardware_profile(user: dict = Depends(admin_user)):

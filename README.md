@@ -27,6 +27,7 @@
 | 内容安全 | 本地规则 + 可选模型复核，命中后拦截并记录 |
 | 外观 | 品牌名、Logo、登录页文案、备案信息，控制台实时预览 |
 | 运维 | 数据库迁移、备份/恢复、日志、健康检查、内网穿透入口 |
+| 开机自启 | 控制台「部署」页一键注册（Windows 启动项 / systemd / launchd / crontab），登录后自动后台启动 |
 | API | `/v1/chat/completions`、`/v1/models`，可直接给第三方客户端用 |
 
 更细的说明见 [功能介绍](docs/features.md)。
@@ -66,7 +67,7 @@ chmod +x start.sh
 ./start.sh
 ```
 
-要开机自启，用 [systemd 安装说明](docs/install-linux.md)。
+开机自启不用手动配置：打开控制台「部署」页，点「开启开机自启」即可；需要手工方式时见各平台安装说明。
 
 ### Docker / NAS
 

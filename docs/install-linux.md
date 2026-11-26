@@ -51,7 +51,9 @@ PORT=9200 ./start.sh
 
 ## 4. systemd 常驻
 
-仓库带 `deploy/local-ai-workbench.service` 模板和安装脚本。
+最省事：打开管理控制台 →「部署」页 → 点 **开启开机自启**。以 root 运行时写系统级 unit，普通用户运行时写用户级 unit 并尝试 `enable-linger`；没有 systemd 时自动退回 `crontab @reboot`。
+
+手动方式：仓库带 `deploy/local-ai-workbench.service` 模板和安装脚本。
 
 ```bash
 sudo bash scripts/install-systemd.sh /opt/local-ai-workbench

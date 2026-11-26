@@ -64,7 +64,9 @@ PORT=9200 ./start.sh
 
 ## 5. 开机自启（launchd）
 
-仓库自带模板 `deploy/com.local-ai-workbench.plist`。先生成并安装：
+最简单：打开管理控制台 →「部署」页 → 点 **开启开机自启**，会自动写好并加载 ~/Library/LaunchAgents/com.local-ai-workbench.plist；再点一次即可卸载删除。
+
+也可以手动安装。仓库自带模板 `deploy/com.local-ai-workbench.plist`。先生成并安装：
 
 ```bash
 bash scripts/install-launchd.sh

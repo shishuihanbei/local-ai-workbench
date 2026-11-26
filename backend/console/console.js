@@ -641,6 +641,51 @@ async function loadDeployment() {
   renderDeployment(hw, models, deploy);
 }
 
+/* ---------------------------------------------------------------- 开机自启 */
+function renderAutostart(st) {
+  const badge = $("autostartBadge");
+  if (!badge || !st) return;
+  const enabled = !!st.enabled;
+  const supported = !!st.supported;
+  badge.className = "badge " + (!supported ? "warn" : enabled ? "good" : "ok");
+  badge.textContent = !supported ? (st.platform === "docker" ? "容器内无需设置" : "当前系统不支持")
+    : enabled ? (st.stale ? "有旧启动项" : "已开启") : "未开启";
+  const portEl = $("autostartPort");
+  if (portEl) portEl.textContent = st.port ? String(st.port) : "—";
+  const on = $("autostartOn");
+  const off = $("autostartOff");
+  if (on) on.hidden = !supported || (enabled && !st.stale);
+  if (off) off.hidden = !enabled;
+  if (on && !on.hidden) on.textContent = st.stale ? "重新写入当前目录" : "开启开机自启";
+  const detail = $("autostartDetail");
+  if (detail) {
+    let text = st.message || "";
+    if (st.path && supported && (enabled || st.stale)) text += ` 位置：${st.path}`;
+    detail.textContent = text;
+  }
+}
+
+async function loadAutostart() {
+  try {
+    renderAutostart(await api("/api/system/autostart"));
+  } catch (e) { /* 接口异常不影响部署页其他内容 */ }
+}
+
+async function toggleAutostart(on) {
+  const btn = $(on ? "autostartOn" : "autostartOff");
+  const label = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = on ? "正在写入…" : "正在关闭…"; }
+  try {
+    const st = await api("/api/system/autostart", { method: on ? "POST" : "DELETE" });
+    renderAutostart(st);
+    uiToast(st.message || (on ? "已开启开机自启" : "已关闭开机自启"), "good");
+  } catch (e) {
+    uiToast(e.message || "操作失败", "bad");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
 async function loadModelsTab() {
   const models = await api("/api/models");
   renderModels(models);
@@ -649,6 +694,7 @@ async function loadModelsTab() {
 
 async function loadAll() {
   await loadDeployment();
+  await loadAutostart();
   renderModels(S.deployModels);
   clearInterval(S.timer);
   S.timer = setInterval(refreshLight, 3000);
@@ -801,6 +847,8 @@ document.addEventListener("click", async (ev) => {
       setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 1800);
       return;
     }
+    else if (t.id === "autostartOn") { await toggleAutostart(true); return; }
+    else if (t.id === "autostartOff") { await toggleAutostart(false); return; }
     else if (t.id === "refreshPlatforms") {
       const btn = t;
       const old = btn.textContent;

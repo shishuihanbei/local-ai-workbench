@@ -1904,3 +1904,18 @@ body.guide-open { overflow: hidden; }
   .front-icon-edit { opacity: 1; transform: none; }
 }
 
+
+/* ---------------------------------------------------------------- 开机自启 */
+.autostart-panel { border: 1px solid #dfe6f6; background: linear-gradient(180deg, #f7f9ff 0%, #ffffff 62%); }
+.autostart-body { display: flex; gap: 24px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.autostart-copy { flex: 1 1 380px; min-width: 260px; }
+.autostart-lead { margin: 0 0 10px; font-size: 14px; color: #2b3648; }
+.autostart-points { margin: 0; padding-left: 18px; color: #5b687d; font-size: 13px; line-height: 1.9; }
+.autostart-points b { color: #1f2a3d; }
+.autostart-detail { display: block; margin: 10px 0 0; color: #6b7788; }
+.autostart-actions { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.autostart-actions .btn { white-space: nowrap; }
+@media (max-width: 720px) {
+  .autostart-actions { width: 100%; }
+  .autostart-actions .btn { width: 100%; }
+}
