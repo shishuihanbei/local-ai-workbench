@@ -5,7 +5,7 @@
 > 2. 按既有流程改代码、跑测试、发版本；
 > 3. 按第 10–11 章做重构，而不破坏现网。
 >
-> 文档基准：`main` 分支，提交 `9f96f3e`，测试 **192 passed**，API 版本 `0.8.3.0`。凡是数字（端点数、表数、行数）都是实测值，改动后请同步更新本文。
+> 文档基准：`main` 分支最新提交（2026-11-26），测试 **195 passed**，API 版本 `0.8.3.0`。凡是数字（端点数、表数、行数）都是实测值，改动后请同步更新本文。
 
 ---
 
@@ -80,7 +80,7 @@ workbench/
 │   ├── services/          46 个模块，见附录 B
 │   └── console/           管理控制台（index.html + console.js + console.css，静态挂载）
 ├── frontend/              用户端（index.html + app.js + app.css + app.ui.css + 共享页）
-├── tests/                 26 个 pytest 文件，192 条用例
+├── tests/                 27 个 pytest 文件，195 条用例
 ├── docs/                  本文档与后续设计说明
 ├── data/                  运行期数据（见 2.5）
 ├── models/                本地 GGUF
@@ -388,7 +388,7 @@ Set-Location D:\AI\workbench
 .\.venv\Scripts\python.exe -m pip install pytest   # 仓库里的 requirements-dev.txt 只有 pytest
 # 跑测试（必须给 secret，且不要指到线上 data 目录）
 $env:WORKBENCH_SECRET="pytest-secret-key-do-not-use-in-production"
-.\.venv\Scripts\python.exe -m pytest -q          # 期望 192 passed
+.\.venv\Scripts\python.exe -m pytest -q          # 期望 195 passed
 ```
 
 测试的 `conftest.py` 自己 `mkdtemp` 并固定 `WORKBENCH_DATA`，但**shell 里残留的 `WORKBENCH_DATA` 会污染它**——曾出现 `no such table: auth_identities` 的假失败，根因就是环境变量指到了别的临时目录。跑测试前 `Remove-Item Env:WORKBENCH_DATA`。
@@ -489,7 +489,7 @@ stop.ps1 → git pull → start.ps1 -NoBrowser → /api/health → 打开控制�
 1. 需求卡：目标一句话 + 验收标准（可勾选）+ 不做什么；
 2. 设计：改哪些表/端点/页面，是否影响权限与配额；
 3. 实现：后端 → 测试 → 前端 → 联调；
-4. 验收：接口 + 页面 + 截图 + 回归（`pytest -q` 192 全绿）；
+4. 验收：接口 + 页面 + 截图 + 回归（`pytest -q` 195 全绿）；
 5. 交付：提交 → CI 绿 → 重启 → 现网抽查 → README/本文档同步。
 
 ---
@@ -518,21 +518,22 @@ stop.ps1 → git pull → start.ps1 -NoBrowser → /api/health → 打开控制�
 
 | 编号 | 问题 | 证据 | 影响 | 建议 |
 |---|---|---|---|---|
-| T1 | 控制台单文件巨石 | `console.js` 8982 行、`index.html` 2980 行 | 改一个按钮要通读大文件；合并冲突高发 | 按 tab 拆成 `console/<tab>.js`，保留全局分发入口 |
-| T2 | 用户端同样巨石 | `app.js` 5190 行 | 同上 | 按域拆 ES Module，先拆"设置""协作"两个低耦合域 |
+| T1 | 控制台单文件巨石 | `console.js` 8527 行 / 403 个顶层函数，`index.html` 2768 行 | 改一个按钮要通读大文件；合并冲突高发 | 按 tab 拆成 `console/<tab>.js`，保留全局分发入口 |
+| T2 | 用户端同样巨石 | `app.js` 4889 行，`index.html` 755 行 | 同上 | 按域拆 ES Module，先拆"设置""协作"两个低耦合域 |
 | T3 | 单写者数据层 | 共享连接 + `asyncio.Lock`，SQLite WAL | 无法多实例；长事务会阻塞所有请求 | 抽 repository，迁移 PG 后去掉全局锁 |
 | T4 | 业务规则下沉到路由 | `chat.py` 770 行内直接拼 SQL、判配额 | 换库/换表结构要改 HTTP 层 | 引入 `application/` 用例层 |
 | T5 | 权限语义分散 | `role` + `admin_roles.permissions` + `allowed_models` + 4 个 kb/library 开关 | 新增权限容易漏配，行为难预测 | 收敛成单一 `Permission` 枚举 + 一张 `user_permissions` |
 | T6 | 错误契约不统一 | 部分返回 `{code}` 事件，部分抛 `HTTPException(detail=str)` | 前端只能靠文案判断 | **已解决（0.8.3.0）**：`backend/errors.py` + 全局处理器补齐 `code`（见 4.4 / 附录 F）；剩余是把 333 处 `HTTPException` 逐步换成 `APIError` 以细化业务码 |
 | T7 | 无 API 版本化 | 333 个操作平铺在 266 条路径 | 破坏性变更无法灰度、第三方接入会断 | 新能力走 `/api/v2`，旧端点加兼容层 |
 | T8 | 本地模型串行 | `services/llama.py` 单进程托管 | 100 人并发时队列化严重 | 短期靠准入限流；中期接算力池/外部 vLLM |
-| T9 | 前端零自动化测试 | `tests/` 全为后端用例 | 回归靠人工截图 | 引入 Playwright 冒烟 5 条（登录/发消息/建知识库/控制台改配置/分享页） |
+| T9 | 前端零自动化测试 | `tests/` 全为后端用例 | 回归靠人工截图 | **部分缓解（0.8.3.0+）**：`tests/test_pages_smoke.py` 解析每个入口页引用的 js/css 并逐个请求断言可达；CI 增加 `node --check` 与「每个脚本仍被某个页面引用」两项；仍缺浏览器级交互冒烟（Playwright 5 条：登录/发消息/建知识库/控制台改配置/分享页） |
 | T10 | 版本号三处不一 | `main.py` 0.8.1、`/api/health` 0.8.1、资源 `0.8.2.2` | 无法判断线上跑的是哪版 | **已解决（0.8.3.0）**：`backend/version.py` 单源，资源版本由 `render_page()` 注入（见 4.3） |
 | T11 | 重活混在线程池 | OCR/docgen/迁移用默认 executor（32 线程） | 并发上传时挤占事件循环调度 | 独立 `ThreadPoolExecutor(max_workers=4)` 或任务队列 |
 | T12 | 三套备份逻辑 | `backup.py`、`database_admin`、`system` 分享 | 语义重叠，恢复路径易混 | 统一 `SnapshotService`，明确三种语义 |
 | T13 | 可观测双轨 | `logbus`（requests/spans）与 `audit_logs` 各写一套 | trace_id 无法串起"谁点的、花了多少" | 审计里记录 `request_id`，概览页按 trace 聚合 |
 | T14 | 测试共享全局状态 | `conftest` 单库 + 模块级缓存单例 | 偶发顺序依赖失败 | 每模块独立 tmp 库；单例提供 `reset_for_tests()`（`admission` 已有） |
 | T15 | ~~容器开关未接线~~（原诊断有误） | `docker.yml` 传 `WORKBENCH_SERVE_FRONTEND=1`；实测 `config.load_config()` 对 DEFAULTS 全部键做 `WORKBENCH_<KEY>` 覆盖，bool 键按 `1/true/yes/on` 解析 | 容器首页其实正常：`WORKBENCH_SERVE_FRONTEND=1` 时 `GET /` 返回 200 且是注入后的 `index.html`（0.8.3.0 实测）；真正的缺口是 `docker.yml` 冒烟用 `curl -f` 且不跟随 307，断言偏弱 | 冒烟改为断言 `GET /` 为 200 且正文含 `<title>`，避免「重定向也算过」 |
+| T16 | `/console` 不带尾斜杠时资源 404 | `backend/console/index.html` 原写 `<link href="console.css?v=…">` / `<script src="console.js?v=…">`（相对路径），而 0.8.3.0 起 `GET /console` 也直出 200 | 浏览器把相对路径解析成 `/console.css`、`/console.js` → 404，控制台**无样式且脚本不执行**，看起来像白屏；只有带尾斜杠访问才正常 | **已解决（0.8.3.0+）**：两处改为 `/console/console.css` / `/console/console.js`；`tests/test_pages_smoke.py` 逐个请求页面声明的资源，同类问题在 CI 直接失败 |
 
 风险（非代码）：`GTX 650 1GB`、`gpu_usable=false`，本机只能跑小模型 CPU 推理；千兆内网做张量并行不现实；所以"多机"只应做成"多副本 + 调度"，不做"单模型跨机切分"。
 
@@ -619,16 +620,16 @@ app/
 原则：**每一阶段都要能独立上线、独立回滚，且不改变用户可见行为**（除非该阶段目标就是改行为）。
 
 ### 阶段 0：冻结基线（0.5 天）
-- 打 tag `v0.8.1-baseline`（**尚未打**，`git tag -l` 为空；main 已到 0.8.3.0，建议改打 `v0.8.3.0`）；记录 192 测试基线、CI 两个工作流绿、现网健康检查截图。
-- 把本文档提交进仓库（`docs/`），README 增加入口链接。
-- 验收：任何人 clone 后能按 6.1 跑出 192 passed。
+- 打 tag 并发布 Release：**已完成**，`v0.8.3.0` 已推送、Release 已发布（含 Docker 多架构镜像 `:v0.8.3.0` / `:latest`），记录 195 测试基线、CI 与 Docker 两个工作流绿。
+- 把本文档提交进仓库（`docs/`），README 增加入口链接：**已完成**（README「## 文档」）。
+- 验收：任何人 clone 后能按 6.1 跑出 195 passed。
 
 ### 阶段 1：低风险治理（2–3 天）—— ✅ 已完成（0.8.3.0）
 - T10 版本单源：新增 `backend/version.py`，`main.py` / `health` / `meta` / 备份清单 / 导库元数据全部改读常量。
 - T6 错误码表：新增 `backend/errors.py` + 三个全局异常处理器；`/api/meta` 与错误体都带 `code`；控制台 `api()` 与用户端 `errorText()` 同步支持结构化错误。
 - 资源版本注入：HTML 写 `?v=__ASSET_VERSION__`，`render_page()` 返回时替换；`/api/meta` 增加 `asset_version`。
 - 顺手修：`/api/system/migration` 与 `/api/system/share` 的 `api_route` 导致 OpenAPI `operationId` 重复（客户端生成会互相覆盖），已拆成 `@router.get` + `@router.post`。
-- 验收：`pytest -q` 192 passed；控制台与用户端实测资源为 `?v=0.8.3.0`、无 JS 报错；CI + Docker 绿。
+- 验收：`pytest -q` 195 passed；控制台与用户端实测资源为 `?v=0.8.3.0`、无 JS 报错；CI + Docker 绿。
 - 仍未做：T14 测试隔离（`conftest` 单库仍是共享状态），留到阶段 2 一起处理。
 - 回滚：`git revert` 单个 commit。
 
@@ -641,7 +642,7 @@ app/
 ### 阶段 3：后端分层（7–10 天）
 - 建 `application/` 与 `infra/db/repository`，**先搬 `chat.py` 的读写**（风险最高、收益最大），再搬 `kb`、`workbench`；
 - 路由瘦身到"解析 → 调用例 → 返回"，SQL 只出现在 repository；
-- 验收：端点路径与响应结构零变化（用 `/api/docs` 快照 diff）；192 测试 + 新增 repository 单测全绿；`chat.py` < 300 行。
+- 验收：端点路径与响应结构零变化（用 `/api/docs` 快照 diff）；195 测试 + 新增 repository 单测全绿；`chat.py` < 300 行。
 - 回滚：新旧实现并存，配置 `use_legacy_chat=1` 切回。
 
 ### 阶段 4：可扩展（按需）
