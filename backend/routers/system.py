@@ -16,12 +16,12 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from ..config import DATA_DIR, LOG_DIR, load_config, model_file_path, save_config
+from ..config import BASE_DIR, DATA_DIR, LOG_DIR, load_config, model_file_path, save_config
 from ..db import audit, fetch_all, fetch_one
 from .. import ollama_tags
 from ..security import admin_user, any_user_or_none, current_user, user_from_any_token
 from ..services import (autostart, backup, hardware, installer, llama, netinfo, platform_deploy,
-                        platform_models, platforms, retention, shortcuts, storage, websearch)
+                        platform_models, platform_store, platforms, retention, shortcuts, storage, websearch)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -534,6 +534,24 @@ async def hardware_profile(user: dict = Depends(admin_user)):
 @router.get("/install-status")
 async def install_status(user: dict = Depends(admin_user)):
     return installer.status()
+
+
+@router.get("/engine-home")
+async def engine_home(user: dict = Depends(admin_user)):
+    """所有下载/安装产物落在哪：给控制台“文件都在哪”面板用的目录清单。"""
+    cfg = load_config()
+    rows = platform_store.summary(cfg)
+    bat = BASE_DIR / "uninstall.bat"
+    ps1 = BASE_DIR / "uninstall.ps1"
+    return {"ok": True, "root": str(BASE_DIR), "dirs": rows,
+            "platforms_dir": str(platform_store.platforms_root(cfg)),
+            "limits": {
+                "downloads": str(platform_store.downloads(cfg)),
+                "tmp": str(platform_store.tmp_root(cfg)),
+                "cache": str(platform_store.cache_root()),
+            },
+            "uninstall": {"bat": str(bat), "ps1": str(ps1),
+                          "exists": bat.exists() or ps1.exists()}}
 
 
 @router.post("/install-llama")

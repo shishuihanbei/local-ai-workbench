@@ -276,10 +276,30 @@ function renderPlatforms(data) {
       ? `<button class="btn small" data-pdeploy="${esc(p.key)}">${esc(label)}</button>
          <button class="btn small ghost" data-custom-guide>接入说明</button>`
       : `<button class="btn small ${p.action === "install" ? "primary" : ""}" data-pdeploy="${esc(p.key)}" ${disabled ? "disabled" : ""}>${esc(label)}</button>${manage}${adopt}${uninstall}`;
+    const u = p.usage || {};
+    const frontBadge = u.frontend_ready
+      ? `<span class="badge good" title="服务健康时，这些模型会自动出现在用户端模型下拉">已接入用户端 · ${u.frontend_count} 个模型</span>`
+      : (p.healthy ? `<span class="badge warn">服务在跑，还没加载模型</span>` : "");
+    // 装了/在跑之后，卡片里直接给“怎么用”：接口地址、模型名、curl、步骤
+    const usage = (p.installed || p.healthy) ? `
+      <details class="platform-usage" ${p.healthy ? "open" : ""}>
+        <summary>接入与使用<span>${esc(u.api_base || "服务健康后自动接入用户端")}</span></summary>
+        <div class="platform-usage-body">
+          ${u.api_base ? `<div class="platform-path"><span>API</span><code title="${esc(u.api_base)}">${esc(u.api_base)}</code><button class="link" data-copy-path="${esc(u.api_base)}">复制</button></div>` : ""}
+          ${u.sample_model ? `<div class="platform-path"><span>模型</span><code>${esc(u.sample_model)}</code><button class="link" data-copy-path="${esc(u.sample_model)}">复制</button></div>` : ""}
+          <ol class="usage-steps">${(u.steps || []).map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
+          ${u.curl ? `<pre class="usage-code">${esc(u.curl)}</pre>` : ""}
+          <div class="usage-actions">
+            <a class="btn small" href="/" target="_blank" rel="noreferrer">打开用户端试用</a>
+            ${u.chat_url ? `<button class="link" data-copy-path="${esc(u.chat_url)}">复制接口地址</button>` : ""}
+            ${u.curl ? `<button class="link" data-copy-path="${esc(u.curl)}">复制 curl</button>` : ""}
+          </div>
+        </div>
+      </details>` : "";
     return `<div class="platform-card ${on ? "on" : ""}">
       <div class="platform-head">
         <label><input type="checkbox" data-platform="${esc(p.key)}" ${on ? "checked" : ""}><b>${esc(p.name)}</b>${mm}</label>
-        ${state}
+        ${state}${frontBadge}
       </div>
       <div class="platform-note">${esc(p.note || "")}</div>
       <div class="platform-detail">${esc(p.detail || "")} ${link}</div>
@@ -288,6 +308,7 @@ function renderPlatforms(data) {
       <div class="platform-suit"><span class="badge ${esc(fit.level || "unknown")}">${esc(fit.label || "需确认")}</span><span>${esc(fit.text || "")}</span></div>
       <div class="platform-types">${types || `<span class="chip">未标注</span>`}</div>
       ${url}
+      ${usage}
       <div class="platform-actions">${action}</div>
       <div class="platform-progress" data-platform-progress="${esc(p.key)}" hidden>
         <div class="bar"><i data-platform-bar="${esc(p.key)}"></i></div>
@@ -675,14 +696,39 @@ async function saveStorage() {
 }
 
 async function loadDeployment() {
-  const [hw, models, deploy, storage] = await Promise.all([
+  const [hw, models, deploy, storage, home] = await Promise.all([
     api("/api/system/hardware"),
     api("/api/models"),
     api("/api/system/local-deploy"),
     api("/api/system/storage"),
+    api("/api/system/engine-home").catch(() => null),
   ]);
   renderDeployment(hw, models, deploy);
   renderStorage(storage);
+  if (home) renderEngineHome(home);
+}
+
+/* 所有下载与安装产物落在哪：和“整机卸载”配套，用户能自己核对目录 */
+function renderEngineHome(data) {
+  S.engineHome = data;
+  const box = $("engineHomeRows");
+  if (box) {
+    box.innerHTML = (data.dirs || []).map((d) => `
+      <div class="platform-path">
+        <span>${esc(d.label)}</span>
+        <code title="${esc(d.path)}">${esc(d.path)}</code>
+        <em>${esc(d.human || "")}</em>
+        <button class="link" data-copy-path="${esc(d.path)}">复制</button>
+      </div>`).join("");
+  }
+  const hint = $("engineHomeHint");
+  if (hint) {
+    hint.textContent = `根目录 ${data.root}；安装包在 platforms\\.downloads，临时解压在 platforms\\.tmp，pip / HF 缓存在 data\\cache。整个目录可以直接拷走或删掉，不牵连系统目录。`;
+  }
+  const up = $("uninstallPath");
+  if (up && data.uninstall) {
+    up.textContent = data.uninstall.bat || data.uninstall.ps1 || `${data.root}\\uninstall.bat`;
+  }
 }
 
 /* ---------------------------------------------------------------- 开机自启 */

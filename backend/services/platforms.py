@@ -43,7 +43,7 @@ PLATFORMS: dict[str, dict[str, Any]] = {
         "multimodal": "多模态",
         "model_types": ["文字 / 对话", "代码 / 编程", "多模态 / 视觉", "向量 / 检索（部分）"],
         "homepage": "https://docs.vllm.ai/",
-        "note": "GPU 高吞吐推理；Linux + NVIDIA 可一键 pip 安装，Windows 请用 WSL2",
+        "note": "Linux 上装进 platforms\\vllm\\.venv（独立环境，不污染工作台依赖）；Windows 官方不支持，卡片给 WSL2 / Docker 命令",
     },
     "lmstudio": {
         "name": "LM Studio",
@@ -54,7 +54,7 @@ PLATFORMS: dict[str, dict[str, Any]] = {
         "multimodal": "多模态（部分）",
         "model_types": ["文字 / 对话", "代码 / 编程", "多模态 / 视觉（部分）"],
         "homepage": "https://lmstudio.ai/",
-        "note": "Windows/macOS 可一键安装；装好后要在 Developer 页开启 Local Server",
+        "note": "一键装的是无界面版 llmster：程序和模型都在 platforms\\lmstudio，不用开桌面客户端；已装的桌面版也能识别",
     },
     "custom": {
         "name": "自定义 OpenAI 兼容",

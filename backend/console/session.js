@@ -206,6 +206,15 @@ document.addEventListener("click", async (ev) => {
       setTimeout(() => { t.textContent = "部署已选平台"; t.disabled = false; }, 1800);
       return;
     }
+    else if (t.id === "copyUninstallBtn") {
+      const home = S.engineHome || {};
+      const bat = (home.uninstall && home.uninstall.bat) || `${home.root || ""}\\uninstall.bat`;
+      try {
+        await navigator.clipboard.writeText(`"${bat}"`);
+        uiToast("已复制 uninstall.bat 路径，粘贴到 PowerShell 里回车即可");
+      } catch (e) { uiToast(bat); }
+      return;
+    }
     else if (t.dataset.copyPath) {
       const text = t.dataset.copyPath;
       try {

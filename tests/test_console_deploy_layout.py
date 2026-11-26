@@ -31,3 +31,33 @@ def test_switch_and_service_talk_about_real_engines():
     assert "本机还没有部署任何本地引擎" in js
     assert "renderService(hw, models, (deploy || {}).platforms)" in js
     assert "本机还没有部署任何本地引擎</p>" in js
+
+
+def test_deploy_page_shows_one_storage_root():
+    html = _read("backend/console/index.html")
+    assert 'id="engineHomePanel"' in html
+    assert "下载与安装目录" in html
+    assert "不写系统目录" in html
+    js = _read("backend/console/models.js")
+    assert "function renderEngineHome(" in js
+    assert "/api/system/engine-home" in js
+    assert 'id="engineHomeRows"' in html
+
+
+def test_deploy_page_has_whole_machine_uninstall_panel():
+    html = _read("backend/console/index.html")
+    assert 'id="uninstallPanel"' in html
+    assert "uninstall.bat" in html
+    assert "-KeepModels" in html and "-KeepData" in html and "-DryRun" in html
+    js = _read("backend/console/session.js")
+    assert "copyUninstallBtn" in js
+
+
+def test_platform_card_explains_how_to_use_after_deploy():
+    js = _read("backend/console/models.js")
+    assert "platform-usage" in js
+    assert "接入与使用" in js
+    assert "p.usage" in js and "u.curl" in js and "u.api_base" in js
+    assert "已接入用户端" in js
+    css = _read("backend/console/console.css")
+    assert ".platform-usage" in css and ".usage-code" in css

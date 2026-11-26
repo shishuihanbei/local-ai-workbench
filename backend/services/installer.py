@@ -6,7 +6,6 @@ import hashlib
 import importlib.util
 import platform
 import shutil
-import tempfile
 import time
 import zipfile
 from pathlib import Path
@@ -15,7 +14,7 @@ from typing import Callable
 import httpx
 
 from ..config import CREATE_NO_WINDOW, DATA_DIR, IS_WINDOWS, llama_executable, load_config, save_config
-from . import hardware
+from . import hardware, platform_store
 
 GITHUB_API = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
 GITHUB_PROXIES = (
@@ -203,7 +202,8 @@ def _check_archive(path: Path) -> None:
 def _extract(zip_path: Path, target: Path) -> Path:
     _set(pct=62, step="解压", msg="正在解压安装包")
     _check_archive(zip_path)
-    tmp = Path(tempfile.mkdtemp(prefix="llama-install-"))
+    # 解压目录也放在 platforms\.tmp 下，不往系统 %TEMP% 写
+    tmp = platform_store.workbench_tmp(load_config(), "llama-extract")
     if str(zip_path).endswith(".tar.gz"):
         import tarfile
         with tarfile.open(zip_path) as tf:
@@ -268,11 +268,11 @@ async def install_llama() -> dict:
     try:
         rel, asset = await _find_release(system)
         _set(pct=3, step="下载", msg=f"{rel.get('tag_name','')} {asset['name']}")
-        tmpzip = Path(tempfile.mkdtemp(prefix="llama-zip-")) / asset["name"]
-        digest = await _download(asset["browser_download_url"], tmpzip)
         cfg = load_config()
-        exe = _extract(tmpzip, Path(cfg["llama_dir"]))
-        shutil.rmtree(tmpzip.parent, ignore_errors=True)
+        # 安装包统一落在 platforms\.downloads\llama.cpp，下次可直接复用
+        archive = platform_store.download_dir(cfg, "llama.cpp") / asset["name"]
+        digest = await _download(asset["browser_download_url"], archive)
+        exe = _extract(archive, Path(cfg["llama_dir"]))
         cfg["llama_bin"] = str(exe)
         save_config({**cfg, "llama_bin": str(exe)})
         _set(running=False, ok=True, pct=100, step="完成",

@@ -150,14 +150,26 @@ data/
 
 ```
 platforms/
-├── llama.cpp/                   llama.cpp 程序（llama-server）
+├── llama.cpp/                   llama.cpp 程序（llama-server），安装包缓存在 .downloads/llama.cpp
 ├── ollama/                      Ollama 便携版（ollama.exe + lib/），模型在 ollama/models
-└── .downloads/                  平台安装包缓存（ollama-windows-amd64.zip 等）
+├── lmstudio/                    LM Studio 无界面版 llmster；home/ 是它的 HOME，lms 在 home/.lmstudio/bin
+│   └── models/                  LM Studio 自己的模型
+├── vllm/                        仅 Linux：.venv/ 是 vLLM 的独立虚拟环境
+├── .downloads/<引擎>/           各引擎的安装包 / 压缩包缓存（可随时删）
+└── .tmp/                        解压与安装期临时目录（替掉系统 %TEMP%）
+
+data/cache/
+├── pip/                         pip 缓存（PIP_CACHE_DIR）
+└── huggingface/                 HF 缓存（HF_HOME）
 ```
 
+- 统一落脚点由 `backend/services/platform_store.py` 提供：`platforms_root()` / `target()` / `models_dir()` / `downloads()` / `tmp_root()` / `workbench_tmp()` / `cache_root()` / `child_env()` / `summary()`。四个可管理引擎写在 `MANAGED_ENGINES`，新引擎接入时只需在这里加 key 并在 `platform_deploy.deploy()` 加分支。
+- `child_env()` 把子进程的 `TMP` / `TEMP` / `TMPDIR` / `PIP_CACHE_DIR` / `HF_HOME` / `XDG_CACHE_HOME` 全部改指到上面这些目录（LM Studio 额外把 `HOME` / `USERPROFILE` 指到 `platforms/lmstudio/home`），安装过程不写 `%TEMP%`、`%LOCALAPPDATA%`、`~/.cache`、`~/.ollama`、`~/.lmstudio`。
+- `installer.py` 的 llama.cpp 安装包落地 `platforms/.downloads/llama.cpp/`，解压临时目录用 `platform_store.workbench_tmp(cfg, "llama-extract")`；Ollama / LM Studio 同理走 `platform_store.download_dir(cfg, key)`。
+- 部署卡片上的 `usage` 由 `platform_deploy.engine_usage()` 生成（API 地址、示例模型、curl、步骤、`frontend_ready`/`frontend_count`），随 `/api/system/local-deploy` 一起返回；`GET /api/system/engine-home` 返回目录清单与体积给控制台「下载与安装目录」面板。
 - `platforms_dir` 可从控制台「部署 · 存储位置」改；`ollama_dir` 不落配置，始终 = `<platforms_dir>/ollama`，只有 `WORKBENCH_OLLAMA_DIR` 能覆盖。
 - Ollama 启动时显式传 `OLLAMA_MODELS=<ollama_dir>/models`，所以 `ollama pull` 的模型不会跑去 `%USERPROFILE%\.ollama`。
-- - 系统目录里已装 Ollama 的机器：`detect()` 返回 `managed=false`，卡片显示系统程序目录与它真实的模型目录，并提供「装到工作台目录」（`deploy?force=1` 走便携版）和「迁移旧模型」（`/api/system/local-platforms/ollama/adopt-models`）。
+- 系统目录里已装 Ollama 的机器：`detect()` 返回 `managed=false`，卡片显示系统程序目录与它真实的模型目录，并提供「装到工作台目录」（`deploy?force=1` 走便携版）和「迁移旧模型」（`/api/system/local-platforms/ollama/adopt-models`）。
 
 ---
 
@@ -228,7 +240,10 @@ platforms/
 - 硬件探测、llama.cpp / 平台一键部署、独立引擎 pip 安装与进度。平台程序与模型统一落在 `platforms/`：llama.cpp → `platforms/llama.cpp`；Ollama 便携版 → `platforms/ollama`（模型 `platforms/ollama/models`，下载缓存 `platforms/.downloads`）；已系统安装的 Ollama 可一键接管或迁移模型。部署卡上的「卸载」只删工作台自己装进去的程序与缓存，留着用户 pull 的模型和 `data/installers` 的安装包。
 - 开机自启、桌面快捷方式、内网穿透（cloudflared）、网络诊断。
 - 备份/恢复/整机迁移/网站分享包、日志查看、系统设置。
-- 实现：`services/installer.py`、`platform_deploy.py`、`engine_install.py`、`autostart.py`、`shortcuts.py`、`tunnel.py`、`backup.py`、`netinfo.py`，路由 `system.py`（43 个端点，最大的运维入口）。
+- 四个可管理引擎同一套管线：`deploy()` 按 key 分发到 `_deploy_llama/_deploy_ollama/_deploy_lmstudio/_deploy_vllm`，都一样是“检测 → 下载 → 校验 → 解压/安装 → 启动 → 探测 `/v1/models`”，按钮与状态一致。LM Studio 装官方无界面版 llmster（`platforms/lmstudio`，`HOME` 指到 `platforms/lmstudio/home`；`lms server start --port 1234`）；vLLM 只在 Linux 一键装（`platforms/vllm/.venv`），Windows 给 WSL2 / Docker / 社区轮子三条路线。
+- 整机卸载：根目录 `uninstall.bat` / `uninstall.sh`（与 `start.bat` / `stop.bat` 同级），`uninstall.ps1` 负责实际动作——停服务、按可执行文件路径结束工作台拉起的引擎进程、撤开机自启（Windows 启动文件夹 `LocalAI-Workbench.cmd` / Linux systemd+crontab / macOS LaunchAgent）、删指向本目录的桌面图标、删目录；支持 `-KeepModels` / `-KeepData` / `-DryRun`，默认手输 `UNINSTALL` 确认。控制台「整机卸载」面板给出本机 `uninstall.bat` 路径。
+- 部署卡「接入与使用」：`engine_usage()` 给 API 地址、示例模型、curl、步骤与 `frontend_ready`；平台健康时模型自动进用户端下拉（`platform_models`）。目录清单接口 `GET /api/system/engine-home` 供「下载与安装目录」面板。
+- 实现：`services/installer.py`、`platform_deploy.py`、`platform_store.py`、`engine_install.py`、`autostart.py`、`shortcuts.py`、`tunnel.py`、`backup.py`、`netinfo.py`，路由 `system.py`（43 个端点，最大的运维入口）。
 
 ### 3.10 数据库中心
 

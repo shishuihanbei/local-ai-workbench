@@ -276,6 +276,16 @@ input, select, textarea { color: var(--text); }
 .platform-path .link { flex: none; border: 0; background: transparent; color: var(--brand); font-size: 10.5px;
   padding: 0 2px; cursor: pointer; }
 .platform-path .link:hover { text-decoration: underline; }
+.platform-path em { flex: none; font-style: normal; color: #98a2b3; }
+.platform-usage { margin-top: 9px; border: 1px dashed #dbe1f0; border-radius: 10px; padding: 0 10px 8px; background: #fcfdff; }
+.platform-usage summary { cursor: pointer; padding: 8px 0 6px; font-size: 11.5px; color: #33415c; display: flex; justify-content: space-between; gap: 8px; }
+.platform-usage summary span { color: #7b879e; font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.platform-usage-body { display: flex; flex-direction: column; gap: 5px; }
+.usage-steps { margin: 3px 0 2px; padding-left: 18px; color: #4b5563; font-size: 11px; line-height: 1.65; }
+.usage-code { margin: 2px 0 4px; padding: 7px 9px; border-radius: 8px; background: #f4f6fb; color: #33415c;
+  font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-all; }
+.usage-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.usage-actions .link { border: 0; background: transparent; color: var(--brand); font-size: 10.5px; padding: 0; cursor: pointer; }
 .platform-actions { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
 .platform-actions .btn { flex: none; }
 .platform-progress { margin-top: 8px; }

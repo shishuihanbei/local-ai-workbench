@@ -1621,6 +1621,31 @@ ollama pull qwen2.5:7b
       <div class="svc-row" id="svcRow"></div>
     </section>
 
+    <section class="panel" id="engineHomePanel">
+      <div class="panel-head">
+        <h2>下载与安装目录</h2>
+        <span class="hint">引擎程序、安装包、临时解压、pip / HF 缓存都在工作台目录里，不写系统目录</span>
+      </div>
+      <div class="platform-paths" id="engineHomeRows"></div>
+      <p class="hint" id="engineHomeHint">正在读取目录…</p>
+    </section>
+
+    <section class="panel" id="uninstallPanel">
+      <div class="panel-head">
+        <h2>整机卸载</h2>
+        <span class="hint">和 start.bat / stop.bat 并列：双击 uninstall.bat 停服务并删掉整个工作台（含控制台）</span>
+      </div>
+      <ol class="migrate-steps">
+        <li><b>先关掉正在用的页面</b><span>卸载会先停服务，浏览器里的页面随后会断开，属正常。</span></li>
+        <li><b>双击根目录的 uninstall.bat</b><span>默认要输入 UNINSTALL 确认；会把服务、各引擎进程、开机自启项、桌面图标一起清掉。</span></li>
+        <li><b>要不要留东西自己选</b><span>加 -KeepModels 保留 models 与各引擎的模型目录；加 -KeepData 连账号、知识库、日志一起留；只想看会删什么就加 -DryRun。</span></li>
+      </ol>
+      <div class="install-row">
+        <div class="install-info"><div class="mono" id="uninstallPath">正在定位 uninstall.bat…</div></div>
+        <div class="install-act"><button class="btn small" id="copyUninstallBtn">复制命令</button></div>
+      </div>
+    </section>
+
     <section class="panel usage-guide">
       <div class="panel-head"><h2>使用说明</h2><span class="hint">先评估，再单平台部署，最后开开关</span></div>
       <ol class="migrate-steps">

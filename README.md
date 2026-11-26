@@ -1,6 +1,6 @@
 # 本地 AI 工作台
 
-> 当前版本 **0.8.6.0** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
+> 当前版本 **0.9.0.0** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
 
 单进程部署：FastAPI 后端 + 用户前端 + 管理控制台 + OpenAI 兼容 API。模型在本机运行，对话记录存本机 SQLite，不经过云端。
 
@@ -55,14 +55,14 @@ workbench/
 │   ├── secret.key           供应商 Key 加密主密钥（务必随库备份）
 │   └── logs/  audio/  uploads/
 ├── run.py                   uvicorn 启动入口
-├── start.ps1 / stop.ps1 / restart.ps1
-├── start.bat / stop.bat / restart.bat
-├── start.sh / stop.sh / restart.sh
+├── start.ps1 / stop.ps1 / restart.ps1 / uninstall.ps1
+├── start.bat / stop.bat / restart.bat / uninstall.bat
+├── start.sh / stop.sh / restart.sh / uninstall.sh
 ├── requirements.txt / requirements-ocr.txt
 └── README.md
 ```
 
-模型放在程序根目录的 `models`，下载的部署平台统一放在 `platforms`：`platforms/llama.cpp`、`platforms/ollama`（Ollama 的模型也在 `platforms/ollama/models`），下载的安装包缓存在 `platforms/.downloads`；安装后自动创建，可在控制台「部署 · 存储位置」改成别的目录，不写死绝对路径。整个 `platforms` 文件夹可以整体搬走。
+模型放在程序根目录的 `models`，四个可管理的本地引擎（llama.cpp / Ollama / LM Studio / vLLM）全部落在 `platforms` 一个根目录下：程序本体在 `platforms/<引擎>`（Ollama、LM Studio 的模型也在 `platforms/<引擎>/models`），下载的安装包缓存在 `platforms/.downloads/<引擎>`，解压与临时文件在 `platforms/.tmp`，pip / Hugging Face 缓存统一在 `data/cache`。子进程的 `TMP` / `TEMP` / `PIP_CACHE_DIR` / `HF_HOME` 都被指回这些目录，安装过程不会往 `%TEMP%`、`%LOCALAPPDATA%`、`~/.cache`、`~/.ollama`、`~/.lmstudio` 里丢东西。路径在控制台「部署 · 下载与安装目录」里可以直接看到（含体积），可在配置里改 `platforms_dir`，不写死绝对路径；整个 `platforms` 文件夹可以整体搬走。
 
 ## 快速开始
 
@@ -303,6 +303,42 @@ docker run -d --name local-ai-workbench -p 9100:9100 \
 - **保留**：你自己 pull 的模型（`platforms/ollama/models`）和 `data/installers` 里的安装包都不动，重装后直接能用。
 - **拒绝的情况**：系统安装的 Ollama / LM Studio（工作台没装东西，去 Windows「设置 → 应用」卸）；Ollama 端口被托盘里的另一个进程占着（先在托盘右键 Quit，再点卸载）。
 - 接口：`POST /api/system/local-platforms/{key}/uninstall`；Ollama 拉模型是 `POST /api/system/local-platforms/ollama/pull`（`{"tag": "qwen2.5:7b"}`）+ `GET` 同路径查进度。
+
+### 四个引擎一套安装方式
+
+llama.cpp、Ollama、LM Studio、vLLM 在部署页是**同一套按钮、同一套状态**：每张卡都是「一键部署 → 启动 → 已运行」，后端统一走“检测 → 下载 → 校验 → 解压/安装 → 启动 → 探测 `/v1/models`”这一条管线（`backend/services/platform_deploy.py` 的 `deploy()` 按 key 分发，四个引擎的 `detect()` / 状态 / 进度 / 卸载口径一致），不再出现“这个引擎走 winget、那个 pip 装进主环境”的差别：
+
+| 引擎 | 装到哪 | 装法 | 模型放哪 | 起服务 |
+| --- | --- | --- | --- | --- |
+| llama.cpp | `platforms/llama.cpp` | GitHub 发布包（多线路回退 + SHA-256） | `models/`（GGUF） | 工作台拉起 `llama-server` |
+| Ollama | `platforms/ollama` | 官方便携 zip 解压即用 | `platforms/ollama/models` | 工作台拉起 `ollama serve` |
+| LM Studio | `platforms/lmstudio` | 官方无界面版 llmster zip（sha512 校验）→ `llmster bootstrap` | `platforms/lmstudio/models` | `lms server start --port 1234` |
+| vLLM | `platforms/vllm/.venv` | 独立虚拟环境 `pip install vllm`（仅 Linux） | 公共 `models/` 里的 HF 仓库 | `vllm serve <模型> --port 8000` |
+
+- **LM Studio 装的是无界面版**：下载 `llmster` 官方 zip 解压到 `platforms/lmstudio`，把它的家目录（`HOME` / `USERPROFILE`）指到 `platforms/lmstudio/home` 再跑一次 `bootstrap`，程序、模型、缓存都留在工作台里，不用打开桌面客户端，也不会写 `%LOCALAPPDATA%\lm-studio` 或 `~/.lmstudio`；`lms` 落在 `platforms/lmstudio/home/.lmstudio/bin`。
+- **vLLM 官方不发 Windows 包**（文档明确写了 not support Windows natively），所以 Windows 上这张卡只给三条路线：WSL2 里 `pip install vllm`、Docker 的 `vllm/vllm-openai` 镜像（`-p 8000:8000`）、社区轮子 `SystemPanic/vllm-windows`；Linux 上一键部署会建 `platforms/vllm/.venv` 装 vLLM，不污染工作台自己的依赖，服务起来后把卡片地址填成 `http://IP:8000` 即可。
+- **目录不散落**：安装包在 `platforms/.downloads/<引擎>`、解压临时目录在 `platforms/.tmp`、pip / HF 缓存在 `data/cache`；子进程的 `TMP` / `TEMP` / `PIP_CACHE_DIR` / `HF_HOME` 都由 `platform_store.child_env()` 改指到这些目录，安装全过程不往 `%TEMP%`、`%LOCALAPPDATA%`、`~/.cache`、`~/.ollama`、`~/.lmstudio` 写东西。控制台「下载与安装目录」面板逐项列出路径与体积，接口 `GET /api/system/engine-home`。
+
+### 部署好之后怎么用：卡片里直接给，前端自动接
+
+引擎一旦健康（`/v1/models` 能返回），卡片上会多一个**「接入与使用」**折叠区和 `已接入用户端 · N 个模型` 徽章，里面是：
+
+- API 地址（`http://127.0.0.1:<端口>/v1`）与示例模型名，各带一键复制；
+- 三条落地步骤（拉模型 → 启动 → 在用户端选中）；
+- 一条能直接粘进终端的 `curl .../chat/completions` 示例；
+- 「打开用户端试用」按钮。
+
+不需要手动登记模型：平台健康时 `platform_models` 会把它的模型 id 自动并入用户端「模型」下拉，选中后聊天请求直接路由到该平台（不会启动 llama.cpp）。这些内容由 `engine_usage()` 生成，随 `GET /api/system/local-deploy` 返回，字段是 `usage.api_base` / `usage.sample_model` / `usage.curl` / `usage.steps` / `usage.frontend_ready` / `usage.frontend_count`。
+
+### 整机卸载：和 start.bat / stop.bat 一样双击
+
+根目录新增 `uninstall.bat`（Windows）/ `uninstall.sh`（Linux、macOS），用法与 `start.bat`、`stop.bat` 一致——双击或 `./uninstall.sh`，停服务、关引擎、撤自启、删图标、删目录一次做完，连控制台前端和 `.venv` 一起清掉：
+
+- 默认要手输 `UNINSTALL` 确认，防误双击；`-DryRun` 只列出会删什么；
+- `-KeepModels` 保留 `models/` 与各引擎自己的 `models`，`-KeepData` 保留 `data/`（账号、知识库、日志、配置），两个都加就是“只删程序”；
+- 只结束可执行文件位于工作台目录里的进程，**不碰**系统里单独安装的 Ollama / LM Studio；开机自启项（Windows 启动文件夹的 `LocalAI-Workbench.cmd`、Linux 的 `local-ai-workbench.service` / crontab、macOS 的 LaunchAgent）与桌面图标一并撤掉；
+- 控制台「整机卸载」面板显示本机 `uninstall.bat` 的完整路径，可一键复制；
+- 这是**整机**卸载；只想换某个引擎时用卡片上的「卸载」，它只删 `platforms/<引擎>` 并保留你自己下载的模型。
 
 部署页只描述**本机实际装了的引擎**：没装 llama.cpp 就不会出现“llama.cpp 状态”这一块，装了 Ollama 就在“本地部署开关”和“服务”里显示 Ollama 的地址与运行状态——部署几个写几个，不拿 llama.cpp 当默认前提。
 
