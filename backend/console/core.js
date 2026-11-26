@@ -21,7 +21,7 @@ function saveConsoleUser(name) {
     else localStorage.removeItem(REMEMBER_USER_KEY);
   } catch (e) { /* 隐私模式忽略 */ }
 }
-const S = { hw: null, models: null, install: null, timer: null, installing: false, localBusy: false, localEnabled: true, modelCategory: "all", cluster: null, clusterEditNode: 0, clusterEditPool: 0, clusterMembers: [] };
+const S = { hw: null, models: null, install: null, timer: null, installing: false, localBusy: false, localEnabled: true, modelCategory: "all", cluster: null, clusterEditNode: 0, clusterEditPool: 0, clusterMembers: [], cookieSession: false };
 const MODEL_CATEGORY_ORDER = [
   ["text", "文字 / 对话"], ["code", "代码 / 编程"], ["vision", "多模态 / 视觉"],
   ["ocr", "OCR / 文档"], ["image", "绘画 / 图像"], ["video", "视频生成"],
@@ -29,6 +29,19 @@ const MODEL_CATEGORY_ORDER = [
 ];
 
 function token() { return localStorage.getItem(TOKEN_KEY) || ""; }
+
+/** 读 cookie（用户端登录后浏览器自带 wb_session / wb_csrf，控制台复用同一个会话，不再要求二次登录） */
+function cookieValue(name) {
+  try {
+    const hit = document.cookie.split(";").map((s) => s.trim())
+      .find((s) => s.startsWith(name + "="));
+    return hit ? decodeURIComponent(hit.slice(name.length + 1)) : "";
+  } catch (e) { return ""; }
+}
+
+/** 是否已登录：Bearer 令牌（旧版登录态）或同源 cookie 会话（用户端登录后直接进控制台） */
+function signedIn() { return !!(token() || S.cookieSession); }
+
 
 /** 把后端错误体转成一句可读文案：字符串、校验数组、结构化 detail 都支持。 */
 function errorMessage(d, fallback = "请求失败") {
@@ -42,12 +55,21 @@ function errorMessage(d, fallback = "请求失败") {
 }
 
 async function api(path, opts = {}) {
-  const o = { ...opts, headers: { ...(opts.headers || {}) } };
+  const o = { ...opts, headers: { ...(opts.headers || {}) }, credentials: "same-origin" };
   if (o.body && typeof o.body === "string") o.headers["Content-Type"] = "application/json";
   const tk = token();
   if (tk) o.headers["Authorization"] = "Bearer " + tk;
+  else {
+    const csrf = cookieValue("wb_csrf");
+    if (csrf && (o.method || "GET").toUpperCase() !== "GET") o.headers["X-CSRF-Token"] = csrf;
+  }
   const r = await fetch(path, o);
-  if (r.status === 401) { localStorage.removeItem(TOKEN_KEY); showLogin(); throw new Error("未登录"); }
+  if (r.status === 401) {
+    localStorage.removeItem(TOKEN_KEY);
+    S.cookieSession = false;
+    showLogin();
+    throw new Error("未登录");
+  }
   const ct = r.headers.get("content-type") || "";
   const d = ct.includes("json") ? await r.json() : await r.text();
   if (!r.ok) {

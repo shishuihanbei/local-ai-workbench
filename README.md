@@ -1,6 +1,6 @@
 # 本地 AI 工作台
 
-> 当前版本 **0.8.3.0** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
+> 当前版本 **0.8.5.0** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
 
 单进程部署：FastAPI 后端 + 用户前端 + 管理控制台 + OpenAI 兼容 API。模型在本机运行，对话记录存本机 SQLite，不经过云端。
 
@@ -288,6 +288,10 @@ docker run -d --name local-ai-workbench -p 9100:9100 \
 ### 登录页记住账号
 
 用户端和控制台登录页都有“记住账号/记住用户名”勾选框，默认勾上，只把用户名存在浏览器 `localStorage`（`wb_last_username`、`wb_console_username`），不存密码；取消勾选会清掉本机记录。控制台只有在**首次初始化**（数据库里还没有管理员）时才预填 `admin` 并明确提示“这就是即将创建的第一个管理员，可以改名”，初始化之后再打开登录页输入框是空的、只回填上次登录的用户名。
+
+### 从用户端点进管理控制台不用再登录
+
+`/` 和 `/console/` 是同一个站点、同一份会话 cookie，所以用户端右上角那个「控制台」按钮（在侧栏底部、和用户名同一行，只有管理员可见）点进去是**直接进后台**，不会再弹一次登录页。控制台启动时先问 `/api/auth/me` 判定身份：cookie 有效且角色是管理员就进主界面；会话失效或当前账号不是管理员才显示登录页，后者会明说“当前账号「xxx」不是管理员，请用管理员账号登录”。登出会同时结束 cookie 会话，用户端也会一起退出。
 
 最常见的错误是 Base URL 少写或多写 `/v1`：部署页填根地址，供应商页填带 `/v1` 的 Base URL。远程服务器还要把 `127.0.0.1` 换成对方 IP，并让服务监听 `0.0.0.0`、放行防火墙端口。控制台部署页内已提供完整的六步接入、四种安装方案和错误排查表。
 

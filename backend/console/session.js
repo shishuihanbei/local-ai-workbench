@@ -105,11 +105,17 @@ document.addEventListener("click", async (ev) => {
     }
     else if (t.id === "logoutBtn") {
       const tk = token();
-      localStorage.removeItem(TOKEN_KEY);
-      showLogin();
-      if (tk) {
-        fetch("/api/auth/logout", { method: "POST", headers: { Authorization: "Bearer " + tk } }).catch(() => {});
+      const headers = {};
+      if (tk) headers.Authorization = "Bearer " + tk;
+      else {
+        const csrf = cookieValue("wb_csrf");
+        if (csrf) headers["X-CSRF-Token"] = csrf;
       }
+      localStorage.removeItem(TOKEN_KEY);
+      S.cookieSession = false;
+      showLogin();
+      // 一并结束 cookie 会话：控制台与用户端共用同一个登录态
+      fetch("/api/auth/logout", { method: "POST", headers, credentials: "same-origin" }).catch(() => {});
     }
     else if (t.id === "installBtn") {
       t.disabled = true;
@@ -406,6 +412,7 @@ $("loginForm").addEventListener("submit", async (ev) => {
     const d = await r.json();
     if (!r.ok) throw new Error(errorMessage(d, S.setupMode ? "初始化失败" : "登录失败"));
     if (d.access_token) localStorage.setItem(TOKEN_KEY, d.access_token);
+    S.cookieSession = true;
     saveConsoleUser($("u").value.trim());
     S.setupMode = false;
     const me = await api("/api/auth/me");

@@ -192,20 +192,16 @@
     <nav class="conv-list" id="convList"></nav>
 
     <div class="sidebar-foot">
-      <div class="local-card" id="localModeCard">
-        <span class="local-icon"><svg><use href="#i-shield"/></svg></span>
-        <span class="local-copy"><b>本地模式</b><small>对话与文件不离开这台电脑</small></span>
+      <div class="user-row">
+        <button class="user-chip" id="userChip" type="button" title="账号与设置">
+          <span class="avatar" id="userAvatar">A</span>
+          <span class="user-meta"><b id="userName">admin</b><small id="userRole">管理员</small></span>
+          <svg><use href="#i-settings"/></svg>
+        </button>
+        <button class="console-entry" id="consoleEntry" type="button" hidden title="进入管理控制台">
+          <svg><use href="#i-grid"/></svg><span>控制台</span>
+        </button>
       </div>
-      <button class="user-chip console-chip" id="consoleEntry" type="button" hidden title="进入管理控制台">
-        <span class="avatar" id="consoleAvatar">管</span>
-        <span class="user-meta"><b>管理控制台</b><small>用户 · 模型 · 部署 · 日志</small></span>
-        <svg><use href="#i-settings"/></svg>
-      </button>
-      <button class="user-chip" id="userChip">
-        <span class="avatar" id="userAvatar">A</span>
-        <span class="user-meta"><b id="userName">admin</b><small id="userRole">管理员</small></span>
-        <svg><use href="#i-settings"/></svg>
-      </button>
     </div>
   </aside>
   <div class="scrim" id="scrim" hidden></div>

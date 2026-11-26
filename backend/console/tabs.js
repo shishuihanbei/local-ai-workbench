@@ -1174,7 +1174,7 @@ function fmtCost(n) { n = Number(n || 0); return n === 0 ? "—" : "$" + n.toFix
 function fmtMs(n) { n = Number(n || 0); return n ? (n >= 1000 ? (n / 1000).toFixed(1) + "s" : n + "ms") : "—"; }
 
 async function switchTab(name) {
-  if (!token()) { showLogin(); return; }
+  if (!signedIn()) { showLogin(); return; }
   if (!TITLES[name]) name = "overview";
   if (!tabAllowed(name)) name = firstAllowedTab();
   if (!name) {
@@ -1215,7 +1215,7 @@ async function switchTab(name) {
 }
 
 async function refreshCurrent() {
-  if (!token()) { showLogin(); return { ok: false, error: "未登录" }; }
+  if (!signedIn()) { showLogin(); return { ok: false, error: "未登录" }; }
   try {
     if (S.tab === "overview") await loadOverview();
     else if (S.tab === "requests") await loadRequests();

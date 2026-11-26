@@ -359,7 +359,7 @@ html[data-theme="dark"] .avatar { background: linear-gradient(145deg, #253157, #
 @media (hover: none) { .conv-item.active .conv-tools { display: flex; } }
 .sidebar-foot { padding: 10px 12px 13px; border-top: 1px solid var(--line); }
 .user-chip {
-  display: flex; align-items: center; gap: 9px; width: 100%;
+  display: flex; align-items: center; gap: 9px; flex: 1 1 auto; min-width: 0;
   padding: 8px 9px; border: 1px solid transparent; border-radius: 11px;
   background: transparent; text-align: left;
 }
@@ -1434,7 +1434,16 @@ html[data-theme="dark"] .composer { background: var(--panel); }
   .drawer-body { flex: 1; padding: 18px 16px 28px; }
 }
 
-/* 管理控制台入口（管理员可见） */
-.console-chip { margin-bottom: 8px; }
-.console-chip .avatar { background: rgba(79, 110, 247, .14); color: #3b57df; font-weight: 600; }
+/* 侧栏底部：账号与「控制台」入口并排一行 */
+.user-row { display: flex; align-items: center; gap: 8px; }
+.console-entry {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto;
+  height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 11px;
+  background: var(--panel); color: var(--text-2);
+  font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: color .16s, border-color .16s, background .16s;
+}
+.console-entry svg { width: 15px; height: 15px; }
+.console-entry:hover { color: var(--brand); border-color: color-mix(in srgb, var(--brand) 35%, var(--line)); background: var(--brand-soft); }
+@media (max-width: 900px) { .console-entry span { display: none; } .console-entry { padding: 0 9px; } }
 
