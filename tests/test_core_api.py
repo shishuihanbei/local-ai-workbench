@@ -51,6 +51,28 @@ def test_models_catalog_has_categories(client, admin_token):
     assert {"text", "code", "image", "video", "audio", "embedding", "rerank"}.issubset(categories)
     assert any(m["installable"] for m in data["items"])
     assert any(not m["installable"] for m in data["items"])
+    vision = [m for m in data["items"] if m["key"] == "qwen25-vl-7b"][0]
+    assert vision["engine_repo"] == "Qwen/Qwen2.5-VL-7B-Instruct"
+    assert vision["engine_recommend"]
+    assert "engines" in data
+
+
+def test_independent_model_download_needs_engine(client, admin_token, monkeypatch):
+    from backend.routers import models as models_router
+    monkeypatch.setattr(models_router.engines, "ready_for", lambda engine, state=None: False)
+    r = client.post("/api/models/qwen25-vl-7b/download", headers=auth(admin_token))
+    assert r.status_code == 400
+    assert "没安装" in r.json()["detail"]
+
+
+def test_independent_model_download_starts_when_engine_ready(client, admin_token, monkeypatch):
+    from backend.routers import models as models_router
+    monkeypatch.setattr(models_router.engines, "ready_for", lambda engine, state=None: True)
+    monkeypatch.setattr(models_router.hf_models, "start",
+                        lambda key, repo: {"ok": True, "msg": "已开始下载", "state": {"key": key}})
+    r = client.post("/api/models/qwen25-vl-7b/download", headers=auth(admin_token))
+    assert r.status_code == 200, r.text
+    assert r.json()["msg"] == "已开始下载"
 
 
 def test_backup_requires_login(client):

@@ -47,6 +47,8 @@ DEFAULTS: dict[str, Any] = {
     "platforms_dir": str(Path(os.getenv("WORKBENCH_PLATFORMS") or default_platforms_dir())),
     "llama_dir": str(Path(os.getenv("WORKBENCH_LLAMA") or default_llama_dir())),
     "llama_bin": "",                 # 空 = 自动探测 <llama_dir>/llama-server(.exe)
+    "hf_endpoint": os.getenv("WORKBENCH_HF_ENDPOINT") or "https://hf-mirror.com",
+    "hf_token": os.getenv("HF_TOKEN") or "",   # 下载 gated 模型时可选
     "upstream_base": "http://127.0.0.1:8080/v1",
     "upstream_key": "sk-deepseek-local",
     "upstream_port": 8080,

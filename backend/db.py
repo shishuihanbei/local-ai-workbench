@@ -621,6 +621,51 @@ ENGINE_REQUIREMENTS = {
     "jina-reranker-v2": "SentenceTransformers",
 }
 
+# 需独立引擎、且权重托管在 Hugging Face 的模型：整仓库下载用。
+# 代码仓库型项目（PaddleOCR、Surya、MinerU、ComfyUI）不在这里，避免下错东西。
+HF_MODEL_REPOS = {
+    "qwen25-vl-7b": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "llava-v16-7b": "liuhaotian/llava-v1.6-mistral-7b",
+    "minicpm-v-26": "openbmb/MiniCPM-V-2_6",
+    "internvl2-8b": "OpenGVLab/InternVL2-8B",
+    "pixtral-12b": "mistralai/Pixtral-12B-2409",
+    "got-ocr2": "stepfun-ai/GOT-OCR2_0",
+    "flux1-dev": "black-forest-labs/FLUX.1-dev",
+    "sdxl-base": "stabilityai/stable-diffusion-xl-base-1.0",
+    "sd15": "stable-diffusion-v1-5/stable-diffusion-v1-5",
+    "sd35-large": "stabilityai/stable-diffusion-3.5-large",
+    "kolors": "Kwai-Kolors/Kolors",
+    "hunyuan-dit": "Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers",
+    "playground-v25": "playgroundai/playground-v2.5-1024px-aesthetic",
+    "wan21-t2v-14b": "Wan-AI/Wan2.1-T2V-14B",
+    "wan21-i2v-14b": "Wan-AI/Wan2.1-I2V-14B-720P",
+    "hunyuanvideo": "tencent/HunyuanVideo",
+    "ltx-video": "Lightricks/LTX-Video",
+    "cogvideox-5b": "THUDM/CogVideoX-5b",
+    "mochi-1": "genmo/mochi-1-preview",
+    "svd-xt": "stabilityai/stable-video-diffusion-img2vid-xt",
+    "whisper-large-v3": "openai/whisper-large-v3",
+    "sensevoice-small": "FunAudioLLM/SenseVoiceSmall",
+    "cosyvoice2": "FunAudioLLM/CosyVoice2-0.5B",
+    "fish-speech-15": "fishaudio/fish-speech-1.5",
+    "kokoro-82m": "hexgrad/Kokoro-82M",
+    "f5-tts": "SWivid/F5-TTS",
+    "bge-m3": "BAAI/bge-m3",
+    "bge-large-zh": "BAAI/bge-large-zh-v1.5",
+    "nomic-embed": "nomic-ai/nomic-embed-text-v1.5",
+    "jina-embeddings-v3": "jinaai/jina-embeddings-v3",
+    "multilingual-e5-large": "intfloat/multilingual-e5-large",
+    "bge-reranker-v2-m3": "BAAI/bge-reranker-v2-m3",
+    "bge-reranker-large": "BAAI/bge-reranker-large",
+    "jina-reranker-v2": "jinaai/jina-reranker-v2-base-multilingual",
+}
+
+
+def model_repo(key: str, repo: str = "") -> str:
+    """数据库老版本 repo 为空时，用内置映射补上。"""
+    return repo or HF_MODEL_REPOS.get(key, "")
+
+
 MS_BASE = "https://modelscope.cn/api/v1/models/%s/repo?Revision=master&FilePath=%s"
 
 

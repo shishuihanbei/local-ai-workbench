@@ -310,9 +310,29 @@ async function pollInstall() {
   }
 }
 
+async function pollModelDownload(key) {
+  for (let i = 0; i < 720; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    let p;
+    try { p = await api(`/api/models/${encodeURIComponent(key)}/progress`); }
+    catch (e) { continue; }
+    await loadAll();
+    if (!p || p.running) continue;
+    if (p.error) uiToast(`下载失败：${p.error}`);
+    else if (p.ok) uiToast(p.msg || "下载完成");
+    return;
+  }
+}
+
 /* ---------------------------------------------------------------- 模型 */
 function statusBadge(m) {
-  if (m.installable === false) return `<span class="badge">需独立引擎</span>`;
+  if (m.installable === false) {
+    if (m.downloaded) return `<span class="badge good">已下载</span>`;
+    if (m.partial) return `<span class="badge warn">未完成${m.pct ? " " + m.pct + "%" : ""}</span>`;
+    return m.engine_ready
+      ? `<span class="badge ok">引擎就绪</span>`
+      : `<span class="badge warn">需独立引擎</span>`;
+  }
   if (m.available === false) return `<span class="badge off">本地已关闭</span>`;
   if (m.downloaded) return `<span class="badge good">已下载</span>`;
   if (m.partial) return `<span class="badge warn">未完成 ${m.pct}%</span>`;
@@ -369,8 +389,14 @@ function renderModelRows() {
     for (const m of list) {
       const act = [];
       if (m.installable === false) {
+        if (m.engine_repo) {
+          const tip = m.engine_ready
+            ? `用 ${m.engine_recommend || "独立引擎"} 下载整仓库到模型目录`
+            : `先在「部署」页安装 ${m.engine_recommend || "独立引擎"}，装好后才能下载`;
+          act.push(`<button class="btn small" data-dl="${esc(m.key)}" ${m.engine_ready ? "" : "disabled"} title="${esc(tip)}">${m.downloaded ? "重新下载" : (m.partial ? "继续下载" : "下载")}</button>`);
+        }
         if (m.homepage) act.push(`<a class="btn small" href="${esc(m.homepage)}" target="_blank" rel="noreferrer">查看项目</a>`);
-        else act.push(`<span class="badge off">未接入</span>`);
+        else if (!m.engine_repo) act.push(`<span class="badge off">未接入</span>`);
       } else {
         if (!m.downloaded) act.push(`<button class="btn small" data-dl="${esc(m.key)}">下载</button>`);
         if (m.downloaded && !m.loaded) act.push(`<button class="btn small" data-load="${esc(m.key)}" title="${m.available === false ? "加载模型会重新开启本地部署" : ""}">${m.available === false ? "加载并开启" : "加载"}</button>`);
@@ -379,7 +405,7 @@ function renderModelRows() {
       html.push(`<tr>
         <td><div class="name">${esc(m.label || m.key)}</div><div class="sub">${esc(m.key)}${m.filename ? " · " + esc(m.filename) : ""}</div></td>
         <td><span class="badge cat">${esc(m.category_label || modelCategoryLabel(m.category))}</span></td>
-        <td>${esc(m.engine || "—")}</td>
+        <td><div>${esc(m.engine || "—")}</div>${m.installable === false ? `<div class="sub">推荐 ${esc(m.engine_recommend || "独立引擎")} · ${m.engine_ready ? "已安装" : "未安装"}</div>` : ""}</td>
         <td>${m.bytes ? mb(m.bytes) : (m.total_bytes ? "约 " + mb(m.total_bytes) : "—")}</td>
         <td>${statusBadge(m)}</td>
         <td>${adviceBadge(m.advice)}</td>
@@ -598,11 +624,18 @@ function renderEngineSummary(items) {
     groups.get(engine).push(m);
   }
   const rows = [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "zh-CN"));
-  box.innerHTML = rows.map(([engine, list]) => `
+  box.innerHTML = rows.map(([engine, list]) => {
+    const rec = list.find((m) => m.engine_recommend) || {};
+    const ready = list.some((m) => m.engine_ready);
+    const hint = rec.engine_text || `需要 ${engine} 独立引擎`;
+    return `
     <div class="engine-item">
       <div class="engine-head"><b>${esc(engine)}</b><span>${list.length} 个模型</span></div>
+      <div class="engine-rec ${ready ? "ok" : "warn"}">推荐：${esc(rec.engine_recommend || engine)} · ${ready ? "已安装" : "未安装，下载按钮不可用"}</div>
       <div class="engine-models">${list.map((m) => esc(m.label || m.key)).join(" · ")}</div>
-    </div>`).join("");
+      <div class="advice-text">${esc(hint)}</div>
+    </div>`;
+  }).join("");
 }
 
 function renderService(hw, data) {
@@ -1214,8 +1247,11 @@ document.addEventListener("click", async (ev) => {
     }
     else if (t.dataset.dl) {
       t.disabled = true;
-      await api(`/api/models/${t.dataset.dl}/download`, { method: "POST" });
+      const dlKey = t.dataset.dl;
+      const r = await api(`/api/models/${dlKey}/download`, { method: "POST" });
+      if (r && r.msg) uiToast(r.msg);
       await loadAll();
+      pollModelDownload(dlKey);
     }
     else if (t.dataset.load) {
       t.disabled = true;

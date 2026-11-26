@@ -11,9 +11,9 @@ from pydantic import BaseModel
 
 from ..config import load_config, model_file_path, save_config
 from ..db import (MODEL_CATALOG_EXTRAS, MODEL_SEED, audit, execute, executemany,
-                  fetch_all, fetch_one, model_url)
+                  fetch_all, fetch_one, model_repo, model_url)
 from ..security import admin_user, current_user
-from ..services import access, hardware, llama
+from ..services import access, engines, hardware, hf_models, llama
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -55,11 +55,14 @@ async def catalog(user: dict = Depends(current_user)):
     rows = await fetch_all("SELECT * FROM models ORDER BY sort, key")
     status = await llama.server.status()
     prof = hardware.profile()
+    engine_state = engines.status(prof)
     items = []
     for r in rows:
         installable = bool(r.get("installable", 1))
         category = r.get("category") or "text"
         engine = r.get("engine") or "llama.cpp"
+        repo = model_repo(r["key"], r.get("repo") or "")
+        engine_info = None
         if installable:
             path = model_file_path(cfg, r["filename"])
             part = path.with_suffix(path.suffix + ".part")
@@ -70,15 +73,30 @@ async def catalog(user: dict = Depends(current_user)):
             partial = bool(part.exists() or (exists and not complete))
             advice = hardware.advise(expected or size, prof, int(cfg.get("ctx", 8192)))
         else:
-            size, expected, complete, partial = 0, 0, False, False
-            advice = {"level": "unknown", "label": "未接入",
-                      "text": f"需要 {engine} 独立引擎，当前只做清单收录，不能一键下载或加载"}
+            engine_info = engines.describe(engine, engine_state)
+            expected = 0
+            if repo:
+                hf = hf_models.status(r["key"])
+                size = int(hf.get("bytes") or 0)
+                complete = bool(hf.get("marker"))
+                partial = bool(hf_models.partial(cfg, r["key"]))
+            else:
+                size, complete, partial = 0, False, False
+            label = f"推荐 {engine_info['recommend']}" if engine_info["ready"] else "需先装引擎"
+            advice = {"level": "good" if engine_info["ready"] else "warn",
+                      "label": label, "text": engine_info["text"]}
         items.append({
             **r,
             "installable": installable,
             "category": category,
             "category_label": CATEGORY_LABELS.get(category, category),
             "engine": engine,
+            "engine_repo": repo,
+            "engine_ready": bool(engine_info and engine_info["ready"]),
+            "engine_recommend": engine_info["recommend"] if engine_info else "",
+            "engine_package": engine_info.get("package", "") if engine_info else "",
+            "engine_gpu": bool(engine_info and engine_info["gpu"]),
+            "engine_text": engine_info["text"] if engine_info else "",
             "homepage": r.get("homepage") or "",
             "downloaded": complete,
             "partial": partial,
@@ -87,7 +105,7 @@ async def catalog(user: dict = Depends(current_user)):
             "available": local_enabled,
             "loaded": bool(installable and local_enabled and status["model"] in (r["key"], r.get("alias") or "")),
             "owned_by": "local",
-            "download_url": model_url(r["repo"] or "", r["filename"]) if installable else "",
+            "download_url": model_url(repo, r["filename"]) if installable else "",
             "advice": advice,
         })
     for pool in await fetch_all("SELECT name,note FROM cluster_pools WHERE enabled=1 ORDER BY id"):
@@ -113,6 +131,10 @@ async def catalog(user: dict = Depends(current_user)):
             "cpu": prof["cpu"], "cores": prof["cores"],
             "ram_total_gb": prof["ram_total_gb"], "ram_free_gb": prof["ram_free_gb"],
             "gpus": prof["gpus"], "llama_installed": prof["llama"]["installed"],
+        },
+        "engines": {
+            "installed": engine_state["installed"],
+            "gpu": engine_state["gpu"], "gpu_names": engine_state["gpu_names"],
         },
     }
 
@@ -179,7 +201,19 @@ async def download(key: str, user: dict = Depends(admin_user)):
     if not row:
         raise HTTPException(404, "模型不存在")
     if not int(row.get("installable", 1)):
-        raise HTTPException(400, f"该模型需要独立引擎（{row.get('engine') or '未接入'}），当前不能通过 llama.cpp 一键下载")
+        repo = model_repo(row["key"], row.get("repo") or "")
+        if not repo:
+            raise HTTPException(400, "这个模型还没有配置一键下载源，请点「查看项目」到项目页手动下载")
+        engine = row.get("engine") or ""
+        state = engines.status()
+        if not engines.ready_for(engine, state):
+            rec = engines.recommend(engine, state)
+            raise HTTPException(400, f"本机还没安装 {rec['name']}，下载按钮暂不可用。{rec['text']}")
+        res = hf_models.start(key, repo)
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("msg", "下载失败"))
+        await audit(user, "model.download.hf", key, repo)
+        return res
     res = await llama.download_model(key)
     if not res.get("ok"):
         raise HTTPException(400, res.get("msg", "下载失败"))
@@ -189,6 +223,9 @@ async def download(key: str, user: dict = Depends(admin_user)):
 
 @router.get("/{key}/progress")
 async def progress(key: str, user: dict = Depends(current_user)):
+    row = await fetch_one("SELECT installable FROM models WHERE key=?", (key,))
+    if row and not int(row.get("installable", 1)):
+        return hf_models.status(key)
     return await llama.download_progress(key)
 
 
