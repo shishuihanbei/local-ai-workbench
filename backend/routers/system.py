@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 import psutil
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from ..errors import NOT_LOCAL, APIError
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
@@ -302,7 +303,8 @@ async def cleanup_file_retention(user: dict = Depends(admin_user)):
     return {"ok": True, "result": result, **await retention.stats()}
 
 
-@router.api_route("/migration", methods=["GET", "POST"])
+@router.get("/migration")
+@router.post("/migration")
 async def migration_download(request: Request, token: str | None = None, save: bool = False):
     # GET 兼容旧版控制台缓存；新版控制台统一用 POST。
     user = await _admin_from_request(request, token)
@@ -328,7 +330,7 @@ async def migration_download(request: Request, token: str | None = None, save: b
 async def open_migration_folder(request: Request, token: str | None = None):
     await _admin_from_request(request, token)
     if not netinfo.is_local_request(request):
-        raise HTTPException(403, "只能在运行工作台的电脑上打开这个文件夹（本机用局域网地址访问也可以）")
+        raise APIError(403, "只能在运行工作台的电脑上打开这个文件夹（本机用局域网地址访问也可以）", NOT_LOCAL)
     try:
         path = await run_in_threadpool(backup.open_migration_folder)
     except backup.BackupError as exc:
@@ -344,7 +346,8 @@ async def share_list(request: Request, user: dict = Depends(admin_user)):
     }
 
 
-@router.api_route("/share", methods=["GET", "POST"])
+@router.get("/share")
+@router.post("/share")
 async def share_download(request: Request, token: str | None = None, save: bool = False):
     user = await _admin_from_request(request, token)
     try:
@@ -370,7 +373,7 @@ async def share_download(request: Request, token: str | None = None, save: bool 
 async def open_share_folder(request: Request, token: str | None = None):
     await _admin_from_request(request, token)
     if not netinfo.is_local_request(request):
-        raise HTTPException(403, "只能在运行工作台的电脑上打开这个文件夹（本机用局域网地址访问也可以）")
+        raise APIError(403, "只能在运行工作台的电脑上打开这个文件夹（本机用局域网地址访问也可以）", NOT_LOCAL)
     try:
         path = await run_in_threadpool(backup.open_share_folder)
     except backup.BackupError as exc:

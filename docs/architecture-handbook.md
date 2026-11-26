@@ -269,7 +269,25 @@ data/
 
 ### 4.3 版本与缓存
 
-静态资源用 query 版本号避缓存，当前值：`console.js?v=0.8.2.2`、`console.css?v=0.8.2.2`、`app.js?v=0.8.2.1`、`app.ui.css?v=0.8.2.1`、`app.css?v=0.8.1.2`。改前端必须同步改版本号，否则用户看到的还是旧文件（这是历史上"改了没生效"的高频原因）。
+版本只有一个来源：`backend/version.py` 的 `VERSION` 与 `ASSET_VERSION`。
+
+- `/api/health`、`/api/meta`、`X-API-Version` 响应头、OpenAPI `info.version`、备份/迁移/分享包清单、导库元数据 `_wb_migration_state` 全部读这个常量。
+- 资源版本不写死在 HTML：`backend/console/index.html` 与 `frontend/*.html` 里写 `?v=__ASSET_VERSION__` 占位，后端返回 HTML 时替换（`main.py: render_page()`）。`/console/`、`/console`、`/`、`/index.html`、`/chat/<id>`、`/share/<token>`、`/wb/<token>` 都走注入。
+- 升级只改 `version.py` 一处：后端版本、页面资源缓存键、`/api/meta.asset_version` 同步变化。只改前端资源、不动后端时，把 `ASSET_VERSION` 写成比 `VERSION` 更细的值（如 `0.8.3.0.1`）。
+- 静态资源本身仍由 `StaticFiles` mount 提供，注入只影响入口 HTML。
+
+历史坑：之前 `main.py` 0.8.1、资源 0.8.2.x、备份清单 0.7.73 三套数字并存，用户报"改了没生效"多半是 HTML 与资源版本错位。
+
+### 4.4 错误码与前端提示
+
+所有错误响应都带 `code`，前端按码分支，不比对中文文案。
+
+- 机制：`backend/errors.py` 提供 `APIError` 与 `DEFAULT_CODE_BY_STATUS`；`main.py` 注册 `StarletteHTTPException`、`RequestValidationError`、`Exception` 三个处理器，统一输出 `{detail, code, ...extra}`。
+- 兼容：333 处已有的 `raise HTTPException(status, "中文")` 不用改，自动拿到状态码对应的默认码；前端读 `detail` 的旧写法继续有效。
+- 结构化错误（如模型占用 409）保持 `detail` 为对象，顶层再补一份 `code`，前端既能读 `detail.code` 也能读顶层 `code`。
+- 需要前端特殊处理的错误用 `raise APIError(429, "…", RATE_LIMITED, extra={"retry_after": 60})`，`extra` 平铺进响应体。
+- 控制台 `api()` 与用户端 `errorText()` 都能解析字符串、校验数组、结构化对象；`Error` 上带 `status` 与 `code`。
+- `/v1/*` 保持 OpenAI 错误外壳 `{"error": {"message", "type", "code"}}`，不套本项目的 `{detail, code}`。
 
 ---
 
@@ -498,11 +516,11 @@ stop.ps1 → git pull → start.ps1 -NoBrowser → /api/health → 打开控制�
 | T3 | 单写者数据层 | 共享连接 + `asyncio.Lock`，SQLite WAL | 无法多实例；长事务会阻塞所有请求 | 抽 repository，迁移 PG 后去掉全局锁 |
 | T4 | 业务规则下沉到路由 | `chat.py` 770 行内直接拼 SQL、判配额 | 换库/换表结构要改 HTTP 层 | 引入 `application/` 用例层 |
 | T5 | 权限语义分散 | `role` + `admin_roles.permissions` + `allowed_models` + 4 个 kb/library 开关 | 新增权限容易漏配，行为难预测 | 收敛成单一 `Permission` 枚举 + 一张 `user_permissions` |
-| T6 | 错误契约不统一 | 部分返回 `{code}` 事件，部分抛 `HTTPException(detail=str)` | 前端只能靠文案判断 | 定义错误码表（附录 D），统一 `{code,message,detail}` |
+| T6 | 错误契约不统一 | 部分返回 `{code}` 事件，部分抛 `HTTPException(detail=str)` | 前端只能靠文案判断 | **已解决（0.8.3.0）**：`backend/errors.py` + 全局处理器补齐 `code`（见 4.4 / 附录 D）；剩余是把 333 处 `HTTPException` 逐步换成 `APIError` 以细化业务码 |
 | T7 | 无 API 版本化 | 283 个端点平铺在 `/api` | 破坏性变更无法灰度、第三方接入会断 | 新能力走 `/api/v2`，旧端点加兼容层 |
 | T8 | 本地模型串行 | `services/llama.py` 单进程托管 | 100 人并发时队列化严重 | 短期靠准入限流；中期接算力池/外部 vLLM |
 | T9 | 前端零自动化测试 | `tests/` 全为后端用例 | 回归靠人工截图 | 引入 Playwright 冒烟 5 条（登录/发消息/建知识库/控制台改配置/分享页） |
-| T10 | 版本号三处不一 | `main.py` 0.8.1、`/api/health` 0.8.1、资源 `0.8.2.2` | 无法判断线上跑的是哪版 | 单一 `VERSION` 常量 + 构建时注入资源版本 |
+| T10 | 版本号三处不一 | `main.py` 0.8.1、`/api/health` 0.8.1、资源 `0.8.2.2` | 无法判断线上跑的是哪版 | **已解决（0.8.3.0）**：`backend/version.py` 单源，资源版本由 `render_page()` 注入（见 4.3） |
 | T11 | 重活混在线程池 | OCR/docgen/迁移用默认 executor（32 线程） | 并发上传时挤占事件循环调度 | 独立 `ThreadPoolExecutor(max_workers=4)` 或任务队列 |
 | T12 | 三套备份逻辑 | `backup.py`、`database_admin`、`system` 分享 | 语义重叠，恢复路径易混 | 统一 `SnapshotService`，明确三种语义 |
 | T13 | 可观测双轨 | `logbus`（requests/spans）与 `audit_logs` 各写一套 | trace_id 无法串起"谁点的、花了多少" | 审计里记录 `request_id`，概览页按 trace 聚合 |
@@ -598,11 +616,14 @@ app/
 - 把本文档提交进仓库（`docs/`），README 增加入口链接。
 - 验收：任何人 clone 后能按 6.1 跑出 156 passed。
 
-### 阶段 1：低风险治理（2–3 天）
-- T10 版本单源；T6 错误码表（先定义、先只在新端点用）；T14 测试隔离。
-- 控制台资源版本号改由后端注入（`/api/meta` 返回 `assetsVersion`）。
-- 验收：`pytest -q` 全绿；控制台 31 个 tab 逐页可打开；CI 绿。
-- 回滚：单 commit revert。
+### 阶段 1：低风险治理（2–3 天）—— ✅ 已完成（0.8.3.0）
+- T10 版本单源：新增 `backend/version.py`，`main.py` / `health` / `meta` / 备份清单 / 导库元数据全部改读常量。
+- T6 错误码表：新增 `backend/errors.py` + 三个全局异常处理器；`/api/meta` 与错误体都带 `code`；控制台 `api()` 与用户端 `errorText()` 同步支持结构化错误。
+- 资源版本注入：HTML 写 `?v=__ASSET_VERSION__`，`render_page()` 返回时替换；`/api/meta` 增加 `asset_version`。
+- 顺手修：`/api/system/migration` 与 `/api/system/share` 的 `api_route` 导致 OpenAPI `operationId` 重复（客户端生成会互相覆盖），已拆成 `@router.get` + `@router.post`。
+- 验收：`pytest -q` 192 passed；控制台与用户端实测资源为 `?v=0.8.3.0`、无 JS 报错；CI + Docker 绿。
+- 仍未做：T14 测试隔离（`conftest` 单库仍是共享状态），留到阶段 2 一起处理。
+- 回滚：`git revert` 单个 commit。
 
 ### 阶段 2：前端拆分（5–7 天，可与阶段 3 并行）
 - T1 控制台按 tab 拆文件，先拆 4 个纯展示页（概览、审计、公告、工单），验证 registry 机制；
@@ -808,3 +829,42 @@ app/
 
 （文档结束）
 
+### 附录 D：错误码表
+
+响应体统一为 `{detail, code, ...extra}`；`detail` 是人类可读中文，`code` 是稳定契约。
+
+状态码默认码（`DEFAULT_CODE_BY_STATUS`）：
+
+| 状态码 | code | 含义 |
+| --- | --- | --- |
+| 400 | `bad_request` | 参数不合法 |
+| 401 | `unauthorized` | 未登录 / 令牌无效 |
+| 403 | `forbidden` | 已登录但无权限 |
+| 404 | `not_found` | 资源不存在 |
+| 405 | `method_not_allowed` | 方法不对 |
+| 409 | `conflict` | 状态冲突（如模型被占用） |
+| 413 | `payload_too_large` | 上传过大 |
+| 422 | `validation_error` | 请求体校验失败（`detail` 为数组） |
+| 429 | `rate_limited` | 限流 / 配额（看 `retry_after`） |
+| 500 | `internal_error` | 未处理异常 |
+| 501 | `not_implemented` | 功能预留未启用 |
+| 502 | `upstream_error` | 上游模型/引擎失败 |
+| 503 | `service_unavailable` | 依赖不可用 |
+
+业务码（`backend/errors.py` 顶部常量）：
+
+| code | 状态码 | 触发点 | 前端建议处理 |
+| --- | --- | --- | --- |
+| `invalid_credentials` | 401 | 用户名或密码错误 | 提示重试，不清空账号 |
+| `account_disabled` | 403 | 账号被管理员禁用 | 提示联系管理员 |
+| `account_locked` | 429 | 连续失败被锁 | 按 `retry_after` 倒计时 |
+| `register_closed` | 403 | 未开放自助注册 | 隐藏注册入口 |
+| `rate_limited` | 429 | 登录/注册/发送过频 | 按 `retry_after` 倒计时 |
+| `quota_exceeded` | 429 | 用量配额用完 | 展示套餐与重置时间 |
+| `model_busy` | 409 | 本地模型正被其他会话占用 | 弹"等待/强制"选择 |
+| `model_not_allowed` | 403 | 模型未对该用户开放 | 下拉里不显示该模型 |
+| `invalid_api_key` | 401 | `/v1/*` Key 无效 | 提示检查 Key |
+| `not_local` | 403 | 远程访问"打开文件夹" | 隐藏该按钮 |
+| `confirm_required` | 409 | 破坏性操作需二次确认 | 弹确认条 |
+
+新增错误时优先 `raise APIError(status, message, code, extra={...})`；不确定就用普通 `HTTPException`，默认码仍然可用。

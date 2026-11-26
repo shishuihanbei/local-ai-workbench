@@ -11,6 +11,7 @@ from typing import Any, AsyncIterator
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
+from ..errors import QUOTA_EXCEEDED, APIError
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -357,7 +358,7 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
         raise HTTPException(400, "一条消息最多带 5 个附件")
     ok, reason = await quota.check(user)
     if not ok:
-        raise HTTPException(429, reason)
+        raise APIError(429, reason, QUOTA_EXCEEDED)
     cfg = load_config()
     body.model = (body.model or "").strip() or None
     agent: dict[str, Any] | None = None

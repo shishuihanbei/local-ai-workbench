@@ -12,12 +12,17 @@ from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import BASE_DIR, FRONTEND_DIR, LOG_DIR, load_config
+from .errors import DEFAULT_CODE_BY_STATUS, error_body
+from .version import ASSET_VERSION, VERSION
 from . import logbus
 from .db import init_db, close_shared
 from .routers import (admin, apikeys, auth, auth_admin, branding, chat, cluster, collab, database, engines,
@@ -145,7 +150,7 @@ async def lifespan(app: FastAPI):
         pass
 
 
-app = FastAPI(title="本地 AI 工作台 API", version="0.8.1", docs_url=None,
+app = FastAPI(title="本地 AI 工作台 API", version=VERSION, docs_url=None,
               redoc_url=None, openapi_url="/api/openapi.json", lifespan=lifespan)
 
 DOCS_DIR = Path(__file__).resolve().parent / "static" / "swagger"
@@ -191,7 +196,7 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "same-origin")
     response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
-    response.headers.setdefault("X-API-Version", "0.8.1")
+    response.headers.setdefault("X-API-Version", VERSION)
     if request.url.path.startswith("/console") or request.url.path == "/api/docs":
         response.headers["Cache-Control"] = "no-store, max-age=0"
     if request.url.path == "/api/docs":
@@ -215,7 +220,32 @@ async def security_headers(request: Request, call_next):
 @app.exception_handler(Exception)
 async def on_error(request: Request, exc: Exception):
     log.exception("未处理异常 %s: %s", request.url.path, exc)
-    return JSONResponse({"detail": "服务器内部错误"}, status_code=500)
+    return JSONResponse({"detail": "服务器内部错误", "code": "internal_error"}, status_code=500)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def on_http_error(request: Request, exc: StarletteHTTPException):
+    """所有 HTTPException 统一补齐 `code`，前端可按码分支，不依赖中文文案。"""
+    if request.url.path.startswith("/v1/"):
+        # OpenAI 兼容端点保持自己的错误格式，只补 code 不改外壳。
+        detail = exc.detail
+        message = detail.get("message") if isinstance(detail, dict) else detail
+        code = getattr(exc, "code", None) or DEFAULT_CODE_BY_STATUS.get(exc.status_code, "error")
+        payload = {"error": {"message": message, "type": "api_error", "code": code}}
+        return JSONResponse(payload, status_code=exc.status_code, headers=getattr(exc, "headers", None))
+    return JSONResponse(
+        error_body(exc, exc.status_code),
+        status_code=exc.status_code,
+        headers=getattr(exc, "headers", None),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def on_validation_error(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        {"detail": jsonable_encoder(exc.errors()), "code": "validation_error"},
+        status_code=422,
+    )
 
 
 for r in (auth.router, auth_admin.router, branding.router, users.router, chat.router, files.router, files.exports_router,
@@ -232,7 +262,7 @@ for r in (auth.router, auth_admin.router, branding.router, users.router, chat.ro
 @app.get("/api/health")
 async def health():
     """免登录健康检查，供探针与前端探测后端。"""
-    return {"status": "ok", "ts": time.time(), "service": "workbench-api", "version": "0.8.1"}
+    return {"status": "ok", "ts": time.time(), "service": "workbench-api", "version": VERSION}
 
 
 @app.get("/api/meta")
@@ -240,7 +270,8 @@ async def meta():
     cfg = load_config()
     return {
         "name": "本地 AI 工作台",
-        "version": "0.8.1",
+        "version": VERSION,
+        "asset_version": ASSET_VERSION,
         "mode": "single-process" if cfg.get("serve_frontend") else "api-only",
         "features": ["chat", "models", "kb", "memory", "tts", "tunnel", "users", "audit",
                      "api_keys", "openai_api", "cluster", "workbench", "scheduled_tasks",
@@ -249,8 +280,29 @@ async def meta():
     }
 
 
+def render_page(path: Path) -> HTMLResponse:
+    """返回 HTML 时把 `?v=__ASSET_VERSION__` 换成真实资源版本。
+
+    这样前端不用手写版本号，升级只改 `backend/version.py`，也不会出现
+    HTML 与 JS/CSS 版本错位导致的缓存旧代码问题。
+    """
+    html = path.read_text(encoding="utf-8").replace("__ASSET_VERSION__", ASSET_VERSION)
+    return HTMLResponse(html, headers={"Cache-Control": "no-store, max-age=0"})
+
+
 CONSOLE_DIR = BASE_DIR / "backend" / "console"
 if CONSOLE_DIR.exists():
+    @app.get("/console", include_in_schema=False)
+    @app.get("/console/", include_in_schema=False)
+    @app.get("/console/index.html", include_in_schema=False)
+    async def console_index():
+        page = CONSOLE_DIR / "index.html"
+        if not page.exists():
+            return RedirectResponse("/")
+        return render_page(page)
+
+    # 静态资源（console.js / console.css / favicon）继续由 mount 提供，
+    # 只有入口 HTML 经过上面的路由，以便注入资源版本。
     app.mount("/console", StaticFiles(directory=str(CONSOLE_DIR), html=True), name="console")
 
 
@@ -262,15 +314,16 @@ async def frontend_chat(conversation_id: int):
     index = FRONTEND_DIR / "index.html"
     if not index.exists():
         return RedirectResponse("/console")
-    return FileResponse(index, media_type="text/html")
+    return render_page(index)
 
 
 @app.get("/share/{token}")
 async def shared_conversation_page(token: str):
     """只读分享页：/share/<token> 可直接在浏览器打开。"""
-    if not (BASE_DIR / "frontend" / "share.html").exists():
+    page = BASE_DIR / "frontend" / "share.html"
+    if not page.exists():
         return RedirectResponse("/console")
-    return FileResponse(BASE_DIR / "frontend" / "share.html", media_type="text/html")
+    return render_page(page)
 
 
 @app.get("/wb/{token}")
@@ -279,11 +332,19 @@ async def shared_workbench_page(token: str):
     page = BASE_DIR / "frontend" / "workbench-share.html"
     if not page.exists():
         return RedirectResponse("/console")
-    return FileResponse(page, media_type="text/html")
+    return render_page(page)
 
 
 if str(load_config().get("serve_frontend", False)).lower() in ("1", "true", "yes", "on") and FRONTEND_DIR.exists():
-    # 单进程模式：前端文件直接挂在根路径（index.html 自动接管 /）
+    @app.get("/", include_in_schema=False)
+    @app.get("/index.html", include_in_schema=False)
+    async def frontend_home():
+        index = FRONTEND_DIR / "index.html"
+        if not index.exists():
+            return RedirectResponse("/console")
+        return render_page(index)
+
+    # 单进程模式：其余前端文件直接挂在根路径
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 else:
     @app.get("/")

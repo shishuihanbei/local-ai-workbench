@@ -10,6 +10,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
+from ..errors import (
+    ACCOUNT_DISABLED,
+    INVALID_CREDENTIALS,
+    RATE_LIMITED,
+    REGISTER_CLOSED,
+    APIError,
+)
+
 from ..db import audit, execute, fetch_all, fetch_one
 from ..security import (CSRF_COOKIE, SESSION_COOKIE, admin_permissions, admin_user, check_csrf,
                         clear_login_fail, client_ip, create_access_token, create_session,
@@ -148,7 +156,7 @@ def _oauth_username(provider: str, nickname: str, provider_uid: str) -> str:
 
 async def _oauth_create_user(provider: str, identity: dict) -> int:
     if not load_config().get("allow_register"):
-        raise HTTPException(403, "管理员未开放自助注册，第三方账号无法自动创建")
+        raise APIError(403, "管理员未开放自助注册，第三方账号无法自动创建", REGISTER_CLOSED)
     if not await fetch_one("SELECT id FROM users WHERE role='admin' AND disabled=0"):
         raise HTTPException(409, "系统还没有管理员")
     base = _oauth_username(provider, identity["display_name"], identity["provider_uid"])
@@ -269,7 +277,7 @@ async def login_with_otp(body: OtpLoginBody, request: Request, response: Respons
     if not row:
         raise HTTPException(404, f"该{item['label']}还没有绑定账号，请先注册或让管理员绑定")
     if row["disabled"]:
-        raise HTTPException(403, "账号已被禁用")
+        raise APIError(403, "账号已被禁用", ACCOUNT_DISABLED)
     await auth_identity.touch_identity(int(row["id"]))
     token, sid = await create_session(int(row["user_id"]), client_ip(request),
                                       request.headers.get("user-agent", ""))
@@ -401,7 +409,7 @@ async def register(body: RegisterBody, request: Request, response: Response):
     ip = client_ip(request)
     wait = _register_gate(ip)
     if wait:
-        raise HTTPException(429, f"注册太频繁，请 {wait} 秒后再试")
+        raise APIError(429, f"注册太频繁，请 {wait} 秒后再试", RATE_LIMITED, extra={"retry_after": wait})
     username = body.username.strip()
     if await fetch_one("SELECT id FROM users WHERE lower(username)=lower(?)", (username,)):
         raise HTTPException(409, "用户名已被占用")
@@ -436,14 +444,14 @@ async def login(body: LoginBody, request: Request, response: Response):
     if wait:
         await audit({"username": body.username}, "auth.login", status="locked",
                     detail=f"锁定 {wait}s", ip=ip)
-        raise HTTPException(429, f"尝试次数过多，请 {wait} 秒后再试")
+        raise APIError(429, f"尝试次数过多，请 {wait} 秒后再试", RATE_LIMITED, extra={"retry_after": wait})
     row = await fetch_one("SELECT * FROM users WHERE username=?", (body.username.strip(),))
     if not row or not verify_password(body.password, row["password_hash"]):
         note_login_fail(key)
         await audit({"username": body.username}, "auth.login", status="fail", detail="用户名或密码错误", ip=ip)
-        raise HTTPException(401, "用户名或密码错误")
+        raise APIError(401, "用户名或密码错误", INVALID_CREDENTIALS)
     if row["disabled"]:
-        raise HTTPException(403, "账号已被禁用")
+        raise APIError(403, "账号已被禁用", ACCOUNT_DISABLED)
     clear_login_fail(key)
     token, sid = await create_session(row["id"], ip, request.headers.get("user-agent", ""))
     csrf = new_csrf()

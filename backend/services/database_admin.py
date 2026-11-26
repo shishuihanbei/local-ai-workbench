@@ -25,6 +25,7 @@ from typing import Any, Callable, Iterator
 from urllib.parse import parse_qs, unquote, urlparse
 
 from ..config import DATA_DIR, DB_PATH
+from ..version import VERSION
 from . import secrets_store
 
 CONNECTIONS_PATH = DATA_DIR / "database_connections.json"
@@ -1671,7 +1672,7 @@ def migrate_to(connection_id: str, create_database: bool = False, overwrite: boo
             try:
                 meta = {
                     "schema_version": 1, "source": "workbench-sqlite",
-                    "migrated_at": time.time(), "app_version": "0.7.73",
+                    "migrated_at": time.time(), "app_version": VERSION,
                     "tables": len(schemas), "rows": copied_rows,
                 }
                 cols = [("schema_version", "BIGINT"), ("source", "VARCHAR(64)"),

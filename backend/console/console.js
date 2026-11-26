@@ -10,6 +10,17 @@ const MODEL_CATEGORY_ORDER = [
 
 function token() { return localStorage.getItem(TOKEN_KEY) || ""; }
 
+/** 把后端错误体转成一句可读文案：字符串、校验数组、结构化 detail 都支持。 */
+function errorMessage(d, fallback = "请求失败") {
+  if (!d) return fallback;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d.detail)) return d.detail.map((x) => x.msg || String(x)).join("；");
+  if (d.detail && typeof d.detail === "object") return String(d.detail.message || d.detail.code || fallback);
+  if (d.detail) return String(d.detail);
+  if (d.message) return String(d.message);
+  return fallback;
+}
+
 async function api(path, opts = {}) {
   const o = { ...opts, headers: { ...(opts.headers || {}) } };
   if (o.body && typeof o.body === "string") o.headers["Content-Type"] = "application/json";
@@ -19,7 +30,13 @@ async function api(path, opts = {}) {
   if (r.status === 401) { localStorage.removeItem(TOKEN_KEY); showLogin(); throw new Error("未登录"); }
   const ct = r.headers.get("content-type") || "";
   const d = ct.includes("json") ? await r.json() : await r.text();
-  if (!r.ok) throw new Error((d && d.detail) || "请求失败");
+  if (!r.ok) {
+    const e = new Error(errorMessage(d));
+    e.status = r.status;
+    e.code = (d && d.code) || "";
+    e.data = d;
+    throw e;
+  }
   return d;
 }
 
@@ -1369,7 +1386,7 @@ $("loginForm").addEventListener("submit", async (ev) => {
       body: JSON.stringify({ username: $("u").value.trim(), password: $("p").value }),
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.detail || (S.setupMode ? "初始化失败" : "登录失败"));
+    if (!r.ok) throw new Error(errorMessage(d, S.setupMode ? "初始化失败" : "登录失败"));
     if (d.access_token) localStorage.setItem(TOKEN_KEY, d.access_token);
     S.setupMode = false;
     const me = await api("/api/auth/me");

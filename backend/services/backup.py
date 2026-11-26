@@ -15,12 +15,12 @@ from pathlib import Path
 from typing import Any
 
 from ..config import BASE_DIR, DATA_DIR, DB_PATH, DEFAULTS, load_config, secret_key
+from ..version import FORMAT_VERSION, VERSION
 
 BACKUP_FORMAT = "workbench-backup"
 MIGRATION_FORMAT = "workbench-migration"
 SHARE_FORMAT = "workbench-share"
-FORMAT_VERSION = 1
-APP_VERSION = "0.7.73"
+APP_VERSION = VERSION
 BACKUP_DIR = DATA_DIR / "backups"
 MIGRATION_DIR = DATA_DIR / "migrations"
 SHARE_DIR = DATA_DIR / "shares"
