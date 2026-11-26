@@ -27,3 +27,30 @@ jobs:
         env:
           WORKBENCH_DATA: ${{ runner.temp }}/workbench-data
         run: pytest -q
+
+  frontend:
+    # 前端脚本没有构建步骤，靠浏览器现解析；这里只做语法与引用检查，
+    # 挡的是「改了一行、少个括号，整块控制台白屏」这类在 pytest 里看不出来的问题。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Syntax-check scripts
+        run: |
+          set -e
+          for f in backend/console/*.js frontend/*.js; do
+            echo "checking $f"
+            node --check "$f"
+          done
+      - name: Every script is reachable from a page
+        run: |
+          set -e
+          for f in backend/console/*.js frontend/*.js; do
+            base=$(basename "$f")
+            if ! grep -rq "$base" --include=*.html backend frontend; then
+              echo "::error file=$f::没有被任何页面引用，改名或删除后忘了更新 HTML"
+              exit 1
+            fi
+          done
