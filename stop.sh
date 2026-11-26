@@ -10,13 +10,21 @@ fi
 
 PID=$(cat "$PID_FILE" 2>/dev/null || true)
 if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
-  kill "$PID" 2>/dev/null || true
-  for i in $(seq 1 10); do
-    kill -0 "$PID" 2>/dev/null || break
-    sleep 0.3
-  done
-  kill -9 "$PID" 2>/dev/null || true
-  echo "已停止 (PID $PID)"
+  CMD=$(ps -p "$PID" -o command= 2>/dev/null || true)
+  case "$CMD" in
+    *run.py*|*backend.main*)
+      kill "$PID" 2>/dev/null || true
+      for i in $(seq 1 10); do
+        kill -0 "$PID" 2>/dev/null || break
+        sleep 0.3
+      done
+      kill -9 "$PID" 2>/dev/null || true
+      echo "已停止 (PID $PID)"
+      ;;
+    *)
+      echo "PID $PID 已被其它进程占用（$CMD），不做处理，只清理 PID 文件。"
+      ;;
+  esac
 else
   echo "进程不存在（PID $PID）"
 fi

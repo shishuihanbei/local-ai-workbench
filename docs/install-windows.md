@@ -4,7 +4,7 @@
 
 ## 1. 准备 Python
 
-需要 **Python 3.10–3.12**，推荐 3.12。
+需要 **Python 3.10 及以上**，推荐 3.12（图片 OCR 组件只支持 3.10–3.12）。
 
 - 从 [python.org](https://www.python.org/downloads/windows/) 下载 3.12 安装包。
 - 安装时勾选 **Add python.exe to PATH**。
@@ -14,7 +14,7 @@
 python --version
 ```
 
-如果系统里有多个 Python，启动脚本会优先找 3.12、3.11、3.10。
+如果系统里有多个 Python，启动脚本会优先找 3.12、3.11、3.10；只剩 3.13 也能启动，但 OCR 组件不可用。
 
 ## 2. 解压
 

@@ -20,7 +20,7 @@ sudo dnf install -y python3 python3-virtualenv
 确认 Python 版本：
 
 ```bash
-python3 --version   # 需要 3.10–3.12
+python3 --version   # 需要 3.10 及以上（3.13 可运行，但 OCR 组件只支持 3.10–3.12）
 ```
 
 ## 2. 放置目录

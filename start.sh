@@ -77,7 +77,18 @@ if [ -f data/workbench.pid ]; then
   fi
 fi
 
-if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":$PORT "; then
+port_in_use() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | grep -q ":$PORT "
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1
+  elif command -v netstat >/dev/null 2>&1; then
+    netstat -an 2>/dev/null | grep -q ":$PORT .*LISTEN"
+  else
+    return 1
+  fi
+}
+if port_in_use; then
   echo "[失败] 端口 $PORT 已被占用，可换端口：PORT=9200 ./start.sh"
   exit 1
 fi

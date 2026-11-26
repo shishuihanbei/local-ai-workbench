@@ -12,13 +12,24 @@ if [ ! -f "$APP_DIR/run.py" ]; then
 fi
 
 PY=""
-for cand in python3.12 python3.11 python3.10 python3; do
-  if command -v "$cand" >/dev/null 2>&1; then PY="$cand"; break; fi
+for cand in python3.13 python3.12 python3.11 python3.10 python3; do
+  if command -v "$cand" >/dev/null 2>&1; then
+    if "$cand" - <<'PY' >/dev/null 2>&1
+import sys
+raise SystemExit(0 if sys.version_info[:2] >= (3, 10) else 1)
+PY
+    then PY="$cand"; break; fi
+  fi
 done
 if [ -z "$PY" ]; then
   echo "[失败] 没找到 Python 3.10+，先 brew install python@3.12"
   exit 1
 fi
+PYVER="$("$PY" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+case "$PYVER" in
+  3.10|3.11|3.12) ;;
+  *) echo "[提示] Python $PYVER 可用，但图片 OCR 组件只支持 3.10–3.12。" ;;
+esac
 
 mkdir -p "$APP_DIR/data/logs" "$APP_DIR/data/uploads" "$APP_DIR/models" "$APP_DIR/llama"
 if [ ! -x "$APP_DIR/.venv/bin/python" ]; then

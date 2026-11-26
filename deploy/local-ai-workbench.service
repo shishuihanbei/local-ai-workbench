@@ -10,6 +10,7 @@ Group=__APP_USER__
 WorkingDirectory=__APP_DIR__
 Environment=PYTHONUTF8=1
 Environment=WORKBENCH_DATA=__APP_DIR__/data
+Environment=WORKBENCH_SERVE_FRONTEND=1
 ExecStart=__APP_DIR__/.venv/bin/python __APP_DIR__/run.py --host 0.0.0.0 --port 9100
 Restart=on-failure
 RestartSec=5
@@ -20,7 +21,6 @@ KillSignal=SIGINT
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ProtectHome=true
 ReadWritePaths=__APP_DIR__/data __APP_DIR__/models __APP_DIR__/llama
 
 [Install]

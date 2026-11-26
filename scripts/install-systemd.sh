@@ -18,19 +18,24 @@ if [ ! -f "$APP_DIR/run.py" ]; then
 fi
 
 PY=""
-for cand in python3.12 python3.11 python3.10 python3; do
+for cand in python3.13 python3.12 python3.11 python3.10 python3; do
   if command -v "$cand" >/dev/null 2>&1; then
     if "$cand" - <<'PY' >/dev/null 2>&1
 import sys
-raise SystemExit(0 if (3, 10) <= sys.version_info[:2] <= (3, 12) else 1)
+raise SystemExit(0 if sys.version_info[:2] >= (3, 10) else 1)
 PY
     then PY="$cand"; break; fi
   fi
 done
 if [ -z "$PY" ]; then
-  echo "[失败] 需要 Python 3.10–3.12。"
+  echo "[失败] 需要 Python 3.10 或更高。"
   exit 1
 fi
+PYVER="$("$PY" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+case "$PYVER" in
+  3.10|3.11|3.12) ;;
+  *) echo "[提示] Python $PYVER 可用，但图片/扫描件 OCR 组件只支持 3.10–3.12，需要 OCR 请换 3.12。" ;;
+esac
 
 if ! id "$APP_USER" >/dev/null 2>&1; then
   echo "==> 创建用户 $APP_USER"

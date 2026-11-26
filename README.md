@@ -35,7 +35,7 @@
 
 ### Windows
 
-要求：Windows 10/11，Python 3.10–3.12（推荐 3.12）。
+要求：Windows 10/11，Python 3.10 及以上（推荐 3.12；图片 OCR 组件需要 3.10–3.12）。
 
 1. 解压到一个普通目录，例如 `D:\LocalAI\workbench`，不要放 `Program Files`。
 2. 双击 `start.bat`。首次会自动建 `.venv`、装依赖、后台启动并打开浏览器。
@@ -46,7 +46,7 @@
 
 ### macOS
 
-要求：macOS 12+，Python 3.10–3.12（`brew install python@3.12`）。
+要求：macOS 12+，Python 3.10 及以上（`brew install python@3.12`；图片 OCR 组件需要 3.10–3.12）。
 
 ```bash
 cd local-ai-workbench
@@ -58,7 +58,7 @@ chmod +x start.sh
 
 ### Linux
 
-要求：Python 3.10–3.12、`python3-venv`。
+要求：Python 3.10 及以上、`python3-venv`（图片 OCR 组件需要 3.10–3.12）。
 
 ```bash
 cd local-ai-workbench

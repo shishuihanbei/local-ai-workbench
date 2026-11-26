@@ -24,6 +24,8 @@
         <string>1</string>
         <key>WORKBENCH_DATA</key>
         <string>__APP_DIR__/data</string>
+        <key>WORKBENCH_SERVE_FRONTEND</key>
+        <string>1</string>
     </dict>
 
     <key>RunAtLoad</key>
