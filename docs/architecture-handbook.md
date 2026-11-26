@@ -80,7 +80,7 @@ workbench/
 │   ├── services/          46 个模块，见附录 B
 │   └── console/           管理控制台（index.html + core/models/session/tabs/boot + panels/*.js + console.css，静态挂载）
 ├── frontend/              用户端（index.html + 12 个域脚本 + app.css + app.ui.css + 共享页）
-├── tests/                 28 个 pytest 文件：195 条用例 + test_e2e_smoke.py（5 条浏览器冒烟，默认跳过）
+├── tests/                 29 个文件（含 conftest）：28 个测试模块，195 条用例 + 5 条浏览器冒烟（默认跳过）
 ├── docs/                  本文档与后续设计说明
 ├── data/                  运行期数据（见 2.5）
 ├── models/                本地 GGUF
