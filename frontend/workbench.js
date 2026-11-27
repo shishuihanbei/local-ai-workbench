@@ -1036,7 +1036,22 @@
     try {
       await api(`/api/workbench/tasks/${id}/run`, { method: "POST", body: {} });
       toast("任务已开始执行，完成后会进入最近对话");
-      setTimeout(() => loadWbTasks().catch(() => {}), 10000);
+      const deadline = Date.now() + 10 * 60 * 1000;
+      const tick = async () => {
+        try { await loadWbTasks(); } catch {}
+        const task = (S.wbTasks || []).find((t) => Number(t.id) === Number(id));
+        if (!task || task.last_status !== "running") {
+          if (btn.isConnected) btn.disabled = false;
+          if (task) toast(task.last_status === "ok"
+            ? `任务完成：${task.last_result || "已生成结果"}`
+            : `任务失败：${task.last_result || "请查看运行记录"}`);
+          loadConversations().catch(() => {});
+          return;
+        }
+        if (Date.now() < deadline) setTimeout(tick, 3000);
+        else if (btn.isConnected) btn.disabled = false;
+      };
+      setTimeout(tick, 4000);
     } catch (e) {
       toast(e.message);
       btn.disabled = false;

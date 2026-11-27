@@ -60,6 +60,9 @@
     let fileDone = false;
     let timer = 0;
     let pending = false;
+    let waitTimer = 0;
+    let waitStarted = 0;
+    let gotDelta = false;
     const controller = new AbortController();
     S.abort = controller;
     S.stream = { assistant, controller };
@@ -94,6 +97,16 @@
     } else if (S.prefs.systemPrompt) {
       payload.system_prompt = S.prefs.systemPrompt;
     }
+
+    waitStarted = Date.now();
+    const showWait = () => {
+      if (!S.stream) return;
+      const sec = Math.floor((Date.now() - waitStarted) / 1000);
+      const meta = $("#currentMeta");
+      if (meta) meta.textContent = sec >= 5 ? `正在生成… 已等待 ${sec} 秒` : "正在生成…";
+    };
+    showWait();
+    waitTimer = setInterval(showWait, 1000);
 
     try {
       const res = await fetch("/api/chat/stream", {
@@ -155,6 +168,12 @@
           } else if (evt.type === "delta") {
             content += evt.text || "";
             pending = true;
+            if (!gotDelta) {
+              gotDelta = true;
+              if (waitTimer) { clearInterval(waitTimer); waitTimer = 0; }
+              const meta = $("#currentMeta");
+              if (meta) meta.textContent = "正在输出…";
+            }
             if (!timer) {
               timer = setTimeout(() => {
                 timer = 0;
@@ -174,6 +193,7 @@
           } else if (evt.type === "done") {
             done = true;
             stopped = !!evt.stopped;
+            if (waitTimer) { clearInterval(waitTimer); waitTimer = 0; }
             const files = Array.isArray(evt.files) ? evt.files : [];
             if (files.length) {
               fileDone = true;
@@ -209,6 +229,13 @@
       }
     } finally {
       if (timer) clearTimeout(timer);
+      if (waitTimer) { clearInterval(waitTimer); waitTimer = 0; }
+      const meta = $("#currentMeta");
+      if (meta && (meta.textContent.startsWith("正在生成") || meta.textContent.startsWith("正在输出"))) {
+        meta.textContent = done
+          ? `已完成 · 用时 ${Math.max(1, Math.round((Date.now() - waitStarted) / 1000))}s`
+          : (stopped ? "已停止" : "已中断");
+      }
       if (content) {
         if (!fileDone) setAssistantText(assistant, content, false);
         renderActions(assistant, content);

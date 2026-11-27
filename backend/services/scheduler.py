@@ -188,6 +188,45 @@ def _local_api_base() -> str:
     return f"http://127.0.0.1:{port}"
 
 
+async def _auto_model() -> str:
+    """给「自动选择」挑一个此刻真能跑的模型。
+
+    定时任务没有浏览器里那份模型下拉，必须先按可用性挑：算力池节点在线、
+    本地 llama.cpp 正在服务、或已有可达平台模型，避免把任务打到没启动的本地端口。
+    """
+    from . import cluster, llama, platform_models
+
+    pools = await fetch_all(
+        "SELECT DISTINCT p.name FROM cluster_pools p "
+        "JOIN cluster_members m ON m.pool_id=p.id AND m.enabled=1 "
+        "JOIN cluster_nodes n ON n.id=m.node_id AND n.enabled=1 "
+        "WHERE p.enabled=1 ORDER BY p.id")
+    for row in pools:
+        name = str(row.get("name") or "").strip()
+        if not name:
+            continue
+        _, nodes = await cluster.candidates(name)
+        if any(node.get("status") != "offline" for node in nodes):
+            return name
+
+    cfg = load_config()
+    try:
+        status = await llama.status()
+    except Exception:
+        status = {}
+    if status.get("running"):
+        return str(status.get("model") or cfg.get("model") or "").strip()
+
+    try:
+        for item in await platform_models.reachable(cfg):
+            key = str(item.get("key") or "").strip()
+            if key:
+                return key
+    except Exception:
+        pass
+    return ""
+
+
 async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
     user_id = int(task["user_id"])
     sid = 0
@@ -200,9 +239,12 @@ async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
         token, sid = await create_session(user_id, "127.0.0.1", "workbench-scheduler")
         access, _ = create_access_token(
             user_id, sid, f"task-{user_id}", "user", hours=2)
+        model = str(task.get("model") or "").strip() or await _auto_model()
+        if not model:
+            raise RuntimeError("没有可用模型：请先启动本机模型，或在控制台「算力」页准备一个在线节点")
         payload = {
             "message": task.get("prompt") or "",
-            "model": task.get("model") or None,
+            "model": model,
             "agent_id": task.get("agent_id") or None,
             "output_format": task.get("output_format") or None,
             "web": bool(task.get("web_enabled")),
@@ -254,6 +296,9 @@ async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
         log.warning("定时任务 %s 执行失败: %s", task.get("id"), error)
     finally:
         finished = time.time()
+        if status != "ok" and error:
+            # 失败时把真实原因带到任务列表，不要只显示“已生成回答（0 字）”。
+            summary = error[:800]
         if sid:
             try:
                 await revoke_session(sid)

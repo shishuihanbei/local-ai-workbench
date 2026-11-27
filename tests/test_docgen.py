@@ -42,6 +42,16 @@ def test_format_resolve():
     assert docgen.resolve_format(None, "今天天气怎么样") is None
 
 
+def test_title_from_uses_first_sentence():
+    from backend.services.docgen import title_from
+
+    assert title_from("# 二次方程教学计划\n\n正文") == "二次方程教学计划"
+    assert title_from("工作台是我们的在线协作工具，主要功能包括：1. 提供统一编辑平台。") == "工作台是我们的在线协作工具"
+    assert title_from("本地 AI 工作台的核心价值在于：数据不离开本机。") == "本地 AI 工作台的核心价值"
+    long = "这是一段没有标题也没有标点而且明显超过二十八个字的正文内容需要被安全截断而不是整段塞进文件名"
+    assert 0 < len(title_from(long)) <= 28
+
+
 def test_build_all_formats(client, admin_token):
     from docx import Document
     from openpyxl import load_workbook

@@ -228,6 +228,22 @@ def _split_row(line: str) -> list[str]:
     return [cell.strip() for cell in line.split("|")]
 
 
+def _short_title(text: str, limit: int = 28) -> str:
+    """用第一句做标题，避免把整段正文当成文件名。"""
+    text = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not text:
+        return ""
+    m = re.match(r"(.{2,}?)(?:[。！？；：，,;:]|$)", text)
+    title = (m.group(1) if m else text).strip(" -—·")
+    for suffix in ("在于", "包括", "如下", "分别为", "是"):
+        if title.endswith(suffix):
+            title = title[:-len(suffix)].rstrip(" -—·，,、;；:")
+            break
+    if len(title) > limit:
+        title = title[:limit].rstrip(" -—·，,、")
+    return title
+
+
 def title_from(markdown: str, fmt: str = "docx") -> str:
     for line in str(markdown or "").splitlines():
         m = re.match(r"^#{1,2}\s+(.+)$", line.strip())
@@ -237,7 +253,9 @@ def title_from(markdown: str, fmt: str = "docx") -> str:
                 return title[:80]
     for block in parse_markdown(markdown):
         if block.kind == "p" and block.text:
-            return block.text[:80]
+            title = _short_title(block.text)
+            if title:
+                return title
     return f"AI 生成{label(fmt)}"
 
 
