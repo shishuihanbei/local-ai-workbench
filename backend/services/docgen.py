@@ -26,9 +26,12 @@ FORMATS: dict[str, dict[str, str]] = {
     "txt": {"label": "纯文本", "ext": "txt", "mime": "text/plain; charset=utf-8", "short": "TXT"},
 }
 ALIASES = {
-    "word": "docx", "doc": "docx", "docx": "docx",
+    "word": "docx", "doc": "docx", "docx": "docx", "wps": "docx",
+    "wps文字": "docx", "wps文档": "docx",
     "excel": "xlsx", "xls": "xlsx", "xlsx": "xlsx", "csv": "xlsx",
+    "电子表格": "xlsx", "表格": "xlsx",
     "ppt": "pptx", "pptx": "pptx", "slides": "pptx",
+    "幻灯片": "pptx", "演示文稿": "pptx",
     "pdf": "pdf", "md": "md", "markdown": "md", "txt": "txt", "text": "txt",
 }
 DETECT_ACTION = re.compile(

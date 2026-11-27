@@ -36,6 +36,9 @@ print(b ** 2 - 4 * a * c)
 def test_format_resolve():
     from backend.services import docgen
     assert docgen.resolve_format("word", "") == "docx"
+    assert docgen.resolve_format("wps文字", "") == "docx"
+    assert docgen.resolve_format("电子表格", "") == "xlsx"
+    assert docgen.resolve_format("幻灯片", "") == "pptx"
     assert docgen.resolve_format(None, "帮我写一份教学计划，上传word格式") == "docx"
     assert docgen.resolve_format(None, "把数据整理成 excel 表格") == "xlsx"
     assert docgen.resolve_format(None, "初中二次方程生成一个ppt，内容要全") == "pptx"
