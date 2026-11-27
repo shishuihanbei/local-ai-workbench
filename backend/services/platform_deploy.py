@@ -1378,7 +1378,8 @@ def partial_state() -> dict[str, Any]:
                 continue
             # Ollama 0.40 会分多段写 -partial-0/-partial-1；模型拉完后完整 blob
             # 已经落盘，这些残片只是历史垃圾，不能再提示“未完成/可续传”。
-            if (blobs / p.name.split("-partial")[0]).is_file():
+            base = blobs / p.name.split("-partial")[0]
+            if base.is_file() and base.stat().st_size > 0:
                 continue
             paths.append(p)
     except Exception:
@@ -1387,6 +1388,54 @@ def partial_state() -> dict[str, Any]:
     return {"bytes": total, "count": len(paths),
             "msg": (f"有 {total / 2**20:.0f} MB 未完成分片，继续同一个 tag 会断点续传"
                     if total else "")}
+
+
+def cleanup_orphan_partials(include_resumable: bool = False, dry_run: bool = False) -> dict[str, Any]:
+    """清理 Ollama 下载留下的孤儿分片。
+
+    只动 ``blobs`` 里的 ``*-partial*``：
+    - 完整 blob 已经存在：分片是拉取成功后的残留，直接删；
+    - manifest 没有引用：旧版本/换 tag/中断后无人认领的垃圾，直接删；
+    - manifest 仍引用但完整 blob 缺失：是可断点续传的数据，默认保留。
+    正在拉取时一律跳过，避免把当前任务的临时文件删掉。
+    """
+    cfg = load_config()
+    blobs = Path(ollama_models_dir(cfg)) / "blobs"
+    if not blobs.is_dir():
+        return {"ok": True, "bytes": 0, "count": 0, "files": [], "msg": "没有 Ollama 模型目录"}
+    if PULL.get("running"):
+        return {"ok": False, "bytes": 0, "count": 0, "files": [],
+                "msg": "Ollama 正在拉取模型，等拉取结束再清理，避免误删当前分片"}
+    refs = ollama_tags.manifest_refs(ollama_models_dir(cfg))
+    removed: list[str] = []
+    total = 0
+    errors: list[str] = []
+    for path in blobs.iterdir():
+        try:
+            if not path.is_file() or "-partial" not in path.name:
+                continue
+            base = path.name.split("-partial", 1)[0]
+            complete = blobs / base
+            if base in refs and not (complete.is_file() and complete.stat().st_size > 0) and not include_resumable:
+                continue
+            size = path.stat().st_size
+            if not dry_run:
+                path.unlink()
+            removed.append(path.name)
+            total += size
+        except Exception as exc:
+            errors.append(f"{path.name}: {exc}")
+    if errors:
+        return {"ok": False, "bytes": total, "count": len(removed), "files": removed[:8],
+                "msg": f"{'发现' if dry_run else '清理了'} {len(removed)} 个分片"
+                       f"（{total / 2**20:.0f} MB），{len(errors)} 个删除失败：{errors[0]}"}
+    if dry_run:
+        return {"ok": True, "bytes": total, "count": len(removed), "files": removed[:8],
+                "msg": (f"有 {len(removed)} 个旧分片（{total / 2**20:.0f} MB）没有被任何模型引用，可以清理"
+                        if removed else "没有需要清理的孤儿分片")}
+    return {"ok": True, "bytes": total, "count": len(removed), "files": removed[:8],
+            "msg": (f"已清理 {len(removed)} 个孤儿分片，释放 {total / 2**20:.0f} MB"
+                    if removed else "没有需要清理的孤儿分片")}
 
 
 def pull_state(tag: str | None = None) -> dict[str, Any]:
@@ -1435,6 +1484,24 @@ async def _ollama_tag_list(base: str) -> list[str]:
         return [str(m.get("name") or "") for m in (data.get("models") or []) if m.get("name")]
     except Exception:
         return []
+
+
+async def _wait_tag_visible(base: str, tag: str, models_dir: Path, timeout: float = 15.0) -> tuple[bool, str]:
+    """pull 流结束后等索引落盘：先查 /api/tags，再以 manifests 兜底。
+
+    这样即使 Ollama 的 HTTP 列表偶发滞后，产品也能马上从磁盘 manifest
+    识别到新模型，不需要用户重启 Ollama。
+    """
+    deadline = time.time() + timeout
+    while True:
+        tags = await _ollama_tag_list(base)
+        if ollama_tags.tag_in(tag, tags):
+            return True, "api"
+        if ollama_tags.tag_in(tag, ollama_tags.local_tags(models_dir)):
+            return True, "disk"
+        if time.time() >= deadline:
+            return False, ""
+        await asyncio.sleep(0.5)
 
 
 async def ollama_pull(tag: str) -> dict[str, Any]:
@@ -1510,9 +1577,26 @@ async def _pull_task(base: str, tag: str) -> None:
                         _pull_set(tag=tag, step="处理", msg=status[:160],
                                   pct=max(PULL.get("pct", 0), 5), digest=digest or PULL.get("digest", ""))
         platform_models.invalidate()
-        _pull_set(tag=tag, running=False, ok=True, pct=100, step="完成",
-                  msg=f"{tag} 已拉取完成，可在“模型”页切换使用", finished_at=time.time(),
-                  resumable=False, error="")
+        models_dir = Path(ollama_models_dir(load_config()))
+        _pull_set(tag=tag, step="刷新索引", msg=f"{tag} 下载完成，正在等 Ollama 更新模型列表",
+                  pct=99, running=True)
+        visible, source = await _wait_tag_visible(base, tag, models_dir)
+        _pull_set(tag=tag, running=False, pct=99, step="清理旧分片",
+                  msg=f"{tag} 下载完成，正在清理旧分片")
+        cleaned = cleanup_orphan_partials()
+        platform_models.invalidate()
+        if visible:
+            extra = "（Ollama 索引稍慢，已按磁盘 manifest 识别）" if source == "disk" else ""
+            msg = f"{tag} 已拉取完成{extra}，可在“模型”页切换使用"
+            if cleaned.get("bytes"):
+                msg += f"；顺手清理了 {cleaned['count']} 个旧分片（{cleaned['bytes'] / 2**20:.0f} MB）"
+            _pull_set(tag=tag, running=False, ok=True, pct=100, step="完成",
+                      msg=msg, finished_at=time.time(), resumable=False, error="")
+        else:
+            _pull_set(tag=tag, running=False, ok=True, pct=100, step="完成",
+                      msg=(f"{tag} 下载完成，但 Ollama 暂时没刷新索引；"
+                           "模型页会直接读磁盘 manifest，通常几秒内就能看到，无需重启 Ollama"),
+                      finished_at=time.time(), resumable=False, error="")
         _save_pulls(force=True)
     except Exception as exc:
         _pull_set(tag=tag, running=False, ok=False, step="已中断", error=str(exc)[:300],

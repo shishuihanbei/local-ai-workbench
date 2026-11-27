@@ -354,6 +354,21 @@ document.addEventListener("click", async (ev) => {
       }
       return;
     }
+    else if (t.id === "ollamaCleanupBtn") {
+      const old = t.textContent;
+      t.disabled = true;
+      t.textContent = "清理中…";
+      try {
+        const r = await api("/api/system/local-platforms/ollama/cleanup", { method: "POST" });
+        uiToast(r.msg || "已清理", r.ok ? "good" : "bad");
+        await loadAll();
+      } catch (e) {
+        uiToast(e.message);
+        t.textContent = old;
+        t.disabled = false;
+      }
+      return;
+    }
     else if (t.dataset.pcancel) {
       const key = t.dataset.pcancel;
       t.disabled = true;

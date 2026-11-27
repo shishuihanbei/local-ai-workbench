@@ -647,12 +647,22 @@ function renderOllamaPull() {
   box.hidden = !have;
   const st = (S.models && S.models.ollama && S.models.ollama.pull) || S.ollamaPull || {};
   const partial = (S.models && S.models.ollama && S.models.ollama.partial) || {};
+  const orphan = (S.models && S.models.ollama && S.models.ollama.orphan) || {};
+  const cleanBtn = $("ollamaCleanupBtn");
+  if (cleanBtn) {
+    const mb = Number(orphan.bytes || 0) / 2 ** 20;
+    cleanBtn.textContent = mb > 0 ? `清理孤儿分片 ${mb >= 1024 ? (mb / 1024).toFixed(2) + " GB" : Math.round(mb) + " MB"}` : "清理孤儿分片";
+    cleanBtn.disabled = !(Number(orphan.count || 0) > 0) || !!st.running;
+    cleanBtn.title = cleanBtn.disabled
+      ? (st.running ? "拉取中不能清理，避免误删当前分片" : "没有需要清理的旧分片")
+      : (orphan.msg || "只删除没有被任何模型引用的旧分片");
+  }
   const note = $("ollamaPullNote");
   if (note && p) {
     const base = p.running
       ? `Ollama 服务在跑，模型目录 ${p.models_path || ""}`
       : (p.installed ? "Ollama 已安装但服务没在跑：先在「部署」页点“启动”，再来拉模型" : "");
-    const partText = (!st.running && partial.bytes) ? ` · ${partial.msg}` : "";
+    const partText = (!st.running && partial.bytes && !orphan.bytes) ? ` · ${partial.msg}` : "";
     note.textContent = base + partText;
     note.title = base + partText;
   }

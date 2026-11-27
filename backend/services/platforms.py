@@ -230,7 +230,10 @@ async def status(cfg: dict, selected: list[str] | None = None,
     tasks = {}
     for key, meta in PLATFORMS.items():
         if key != "llama.cpp" and (probe_all or key in selected):
-            tasks[key] = _probe_external(eps[key], str(meta["probe"]))
+            # Ollama 刚 pull 完可能短暂忙/慢，0.6 秒会把“已拉取”误判成未连接；
+            # 本机服务给 2.5 秒，其余外部平台保持快速失败。
+            timeout = 2.5 if key == "ollama" else 0.6
+            tasks[key] = _probe_external(eps[key], str(meta["probe"]), timeout=timeout)
     # llama.cpp 的端口探测和外部平台、硬件画像并行，整体只等最慢的一个
     llama_task = None if llama_status is not None else llama.server.status()
     gathered = await asyncio.gather(prof_task, *tasks.values(),

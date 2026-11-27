@@ -10,7 +10,8 @@ import time
 from typing import Any
 
 from ..config import load_config
-from . import platforms
+from .. import ollama_tags
+from . import platform_store, platforms
 
 _CACHE: dict[str, Any] = {"at": 0.0, "items": []}
 _TTL_SECONDS = 8.0
@@ -49,7 +50,14 @@ async def reachable(cfg: dict[str, Any] | None = None, ttl: float = _TTL_SECONDS
         if not base:
             continue
         platform_name = str(item.get("name") or item.get("key") or "外部平台")
-        for model_id in item.get("models") or []:
+        model_ids = list(item.get("models") or [])
+        # /api/tags 偶尔会落后磁盘：直接读 Ollama manifests 兜底，
+        # 刚 pull 完不用重启服务就能被前端看到。
+        if item.get("key") == "ollama":
+            for tag in ollama_tags.local_tags(platform_store.models_dir(cfg, "ollama")):
+                if tag not in model_ids:
+                    model_ids.append(tag)
+        for model_id in model_ids:
             mid = str(model_id or "").strip()
             if not mid or mid in seen:
                 continue

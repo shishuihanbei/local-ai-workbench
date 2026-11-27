@@ -1823,6 +1823,7 @@ ollama pull qwen2.5:7b
         <div class="ollama-pull-row">
           <input id="ollamaTag" placeholder="qwen2.5:7b" autocomplete="off" spellcheck="false">
           <button class="btn small primary" id="ollamaPullBtn">拉取</button>
+          <button class="btn small ghost" id="ollamaCleanupBtn" title="只删除没有被任何模型引用、也不是当前拉取任务的旧分片">清理孤儿分片</button>
           <span class="hint" id="ollamaPullNote">模型落到 Ollama 自己的模型目录；卸载 Ollama 时会保留这些模型</span>
         </div>
         <div class="ollama-pull-progress" id="ollamaPullProgress" hidden>

@@ -126,12 +126,18 @@ async def catalog(user: dict = Depends(current_user)):
         asyncio.to_thread(hardware.profile),
         asyncio.to_thread(lambda: engines.status(hardware.profile())),
         platform_models.reachable(cfg, llama_status={"running": False, "healthy": False}),
-        platforms._probe_external(ollama_ep, "/api/tags"),
+        platforms._probe_external(ollama_ep, "/api/tags", timeout=2.5),
         asyncio.to_thread(platform_deploy.detect, "ollama"),
     )
     # Ollama 是另一套模型体系（registry tag + blobs），这里只把“同名模型在 Ollama 里叫什么”
     # 和“Ollama 现在能不能用”带给前端，真正的下载仍然走各自的引擎。
-    ollama_ids = [str(m.get("key") or "") for m in reach if m.get("platform_key") == "ollama"]
+    disk_tags = ollama_tags.local_tags(platform_deploy.ollama_models_dir(cfg))
+    ollama_ids = sorted({
+        *[str(m.get("key") or "") for m in reach if m.get("platform_key") == "ollama"],
+        *[str(tag) for tag in (ollama_probe[1] or [])],
+        *disk_tags,
+    })
+    ollama_ids = [tag for tag in ollama_ids if tag]
     ollama_healthy = bool(ollama_probe[0])
     items = []
     for r in rows:
@@ -313,6 +319,7 @@ async def catalog(user: dict = Depends(current_user)):
             "pulled": ollama_ids,
             "pull": platform_deploy.pull_state(),
             "partial": platform_deploy.partial_state(),
+            "orphan": platform_deploy.cleanup_orphan_partials(dry_run=True),
         },
         "hardware": {
             "cpu": prof["cpu"], "cores": prof["cores"],

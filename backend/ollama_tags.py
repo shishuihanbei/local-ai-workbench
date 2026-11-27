@@ -6,7 +6,9 @@ Ollama 则用自己仓库里的 tag（``ollama pull <tag>``），落盘是一堆
 """
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 
 # key -> Ollama 仓库里同名/同权重的 tag（只收录官方 registry 里确实存在的）
 OLLAMA_TAGS: dict[str, str] = {
@@ -74,3 +76,91 @@ def tag_in(tag: str, tags) -> bool:
     """Ollama 的 ``/api/tags`` 与 ``/v1/models`` 命名可能带/不带 ``:latest``。"""
     key = tag_key(tag)
     return bool(key) and any(tag_key(t) == key for t in (tags or []))
+
+
+def _manifest_name(parts: tuple[str, ...]) -> str:
+    """把 manifests/registry/namespace/model/tag 还原成 Ollama 模型名。"""
+    if len(parts) < 4:
+        return ""
+    registry, namespace, model, tag = parts[0], parts[1], parts[2], parts[3]
+    if registry == "registry.ollama.ai":
+        name = model if namespace == "library" else f"{namespace}/{model}"
+    else:
+        name = f"{registry}/{namespace}/{model}"
+    return f"{name}:{tag}"
+
+
+def local_tags(models_dir: str | Path) -> list[str]:
+    """直接读 Ollama 的 manifests，得到本机已经完整落盘的 tag。
+
+    Ollama 偶发会让 /api/tags 短暂落后于磁盘（刚 pull 完还没刷新索引），
+    只靠 HTTP 列表就会出现“重启 Ollama 才认”的假象。这里以 manifest 为准，
+    并校验模型层 blob 存在且非空，避免把只下了一半的 manifest 当已完成。
+    """
+    root = Path(models_dir) / "manifests"
+    if not root.is_dir():
+        return []
+    tags: list[str] = []
+    seen: set[str] = set()
+    for path in root.rglob("*"):
+        try:
+            if not path.is_file():
+                continue
+            rel = path.relative_to(root)
+            name = _manifest_name(tuple(rel.parts))
+            if not name or name in seen:
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            blobs = root.parent / "blobs"
+            layers = list(data.get("layers") or [])
+            config = data.get("config") if isinstance(data.get("config"), dict) else {}
+            digest = str(config.get("digest") or "")
+            if digest:
+                layers.append({"digest": digest, "size": int(config.get("size") or 0),
+                               "mediaType": "config"})
+            ok = True
+            for layer in layers:
+                digest = str(layer.get("digest") or "")
+                if not digest:
+                    continue
+                blob = blobs / digest.replace(":", "-")
+                size = int(layer.get("size") or 0)
+                if not blob.is_file():
+                    ok = False
+                    break
+                # 模型层是权重，0 字节说明还没写完；配置/模板允许 0 字节占位
+                if "image.model" in str(layer.get("mediaType") or "") and blob.stat().st_size <= 0:
+                    ok = False
+                    break
+                if not size and blob.stat().st_size <= 0:
+                    ok = False
+                    break
+            if ok:
+                seen.add(name)
+                tags.append(name)
+        except Exception:
+            continue
+    tags.sort(key=tag_key)
+    return tags
+
+
+def manifest_refs(models_dir: str | Path) -> set[str]:
+    """所有 manifest 里引用的 blob digest（sha256-xxx 形式），用于安全清理。"""
+    root = Path(models_dir) / "manifests"
+    out: set[str] = set()
+    if not root.is_dir():
+        return out
+    for path in root.rglob("*"):
+        try:
+            if not path.is_file():
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            config = data.get("config") if isinstance(data.get("config"), dict) else {}
+            if config.get("digest"):
+                out.add(str(config["digest"]).replace(":", "-"))
+            for layer in data.get("layers") or []:
+                if isinstance(layer, dict) and layer.get("digest"):
+                    out.add(str(layer["digest"]).replace(":", "-"))
+        except Exception:
+            continue
+    return out

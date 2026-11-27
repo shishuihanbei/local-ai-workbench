@@ -768,6 +768,15 @@ async def pull_ollama_status(tag: str | None = None, user: dict = Depends(admin_
     return platform_deploy.pull_state(tag)
 
 
+@router.post("/local-platforms/ollama/cleanup")
+async def cleanup_ollama_partials(user: dict = Depends(admin_user)):
+    """清理没有被任何 manifest 引用的旧下载分片，给模型盘腾空间。"""
+    result = platform_deploy.cleanup_orphan_partials()
+    await audit(user, "system.platform.ollama.cleanup",
+                detail=f"{result.get('count', 0)} 个 / {result.get('bytes', 0)} bytes")
+    return result
+
+
 @router.get("/local-platforms/{key}/progress")
 async def platform_progress(key: str, user: dict = Depends(admin_user)):
     if key not in platforms.PLATFORMS:
