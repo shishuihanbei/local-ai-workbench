@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from .. import ollama_tags
+from .. import model_guides, ollama_tags
 from ..config import load_config, model_file_path, save_config
 from ..db import (MODEL_CATALOG_EXTRAS, MODEL_SEED, OLLAMA_MODEL_CATALOG, audit, execute, executemany,
                   fetch_all, fetch_one, model_repo, model_url)
@@ -34,6 +34,58 @@ CATEGORY_LABELS = {
     "embedding": "向量 / 检索",
     "rerank": "重排序",
 }
+
+
+def _size_gb(item: dict) -> float:
+    total = int(item.get("total_bytes") or item.get("bytes") or 0)
+    return total / 2 ** 30
+
+
+def _pick(items: list[dict], low: float, high: float, target: float, role: str) -> dict | None:
+    """在本机建议里挑一个最合适的；优先已下载/已拉取的。"""
+    cands = []
+    for m in items:
+        if (m.get("category") or "text") not in ("text", "code", "vision"):
+            continue
+        gb = _size_gb(m)
+        level = (m.get("advice") or {}).get("level")
+        if level not in ("good", "ok"):
+            continue
+        if not (low <= gb <= high):
+            continue
+        cands.append(m)
+    cands.sort(key=lambda m: (
+        0 if m.get("downloaded") else 1,
+        0 if m.get("engine_ready") else 1,
+        abs(_size_gb(m) - target),
+        int(m.get("sort") or 0),
+    ))
+    if not cands:
+        return None
+    m = cands[0]
+    return {
+        "key": m.get("key"), "label": m.get("label"), "role": role,
+        "level": (m.get("advice") or {}).get("level"),
+        "reason": (m.get("advice") or {}).get("text") or "",
+        "engine": m.get("engine") or "",
+        "downloaded": bool(m.get("downloaded")),
+    }
+
+
+def _recommendation(items: list[dict], prof: dict) -> dict:
+    picks = [p for p in (
+        _pick(items, 4.0, 8.0, 6.0, "日常首选"),
+        _pick(items, 0.6, 4.0, 2.5, "轻快备用"),
+        _pick(items, 9.0, 16.0, 13.0, "高质量备选"),
+    ) if p]
+    gpus = prof.get("gpus") or []
+    vram = max([int(g.get("vram_mb") or 0) for g in gpus], default=0) / 1024
+    if vram < 8:
+        note = ("本机显存不足 8GB，实际是纯 CPU 推理：4B–8B 日常最顺，14B 可当高质量备选；"
+                "27B / 30B / 32B 能装进 32GB 内存，但每秒约 1 字，不建议拿来日常对话。")
+    else:
+        note = "按显存和内存共同评估；优先选本机建议为「本机推荐」的模型。"
+    return {"machine": model_guides.recommendation_summary(prof), "picks": picks, "note": note}
 
 
 class LoadBody(BaseModel):
@@ -165,9 +217,16 @@ async def catalog(user: dict = Depends(current_user)):
             size, expected, pct_val = 0, 0, (100 if o_pulled else 0)
             complete, partial = o_pulled, False
             dl_state, dl_total, dl_error, dl_started = ("done" if o_pulled else "none"), 0, "", 0.0
-            advice = {"level": "good" if ready else "warn",
-                      "label": "Ollama 可拉取" if ready else "Ollama 未就绪",
-                      "text": engine_info["text"]}
+            # 优先给出“本机能不能跑得动”的建议，再补一句 Ollama 的可用状态
+            advice = hardware.advise(int(r["total_bytes"] or 0), prof, int(cfg.get("ctx", 8192)))
+            advice["text"] = f"{advice['text']}；{engine_info['text']}"
+            if not ready:
+                advice["level"], advice["label"] = "warn", "Ollama 未就绪"
+        guide = model_guides.guide_for(
+            r["key"], category, r.get("note") or "", engine,
+            expected or int(r["total_bytes"] or 0) or size,
+            (engine_info or {}).get("recommend", "") if engine_info else "",
+        )
         items.append({
             **r,
             "ollama_tag": o_tag,
@@ -198,6 +257,8 @@ async def catalog(user: dict = Depends(current_user)):
             "owned_by": "local",
             "download_url": model_url(repo, r["filename"]) if installable else "",
             "advice": advice,
+            "pros": guide["pros"],
+            "cons": guide["cons"],
         })
     for pool in await fetch_all("SELECT name,note FROM cluster_pools WHERE enabled=1 ORDER BY id"):
         pool_name = str(pool.get("name") or "").strip()
@@ -220,8 +281,17 @@ async def catalog(user: dict = Depends(current_user)):
             if any(m["key"] == platform_model["key"] for m in items):
                 continue
             items.append(platform_model)
+    for m in items:
+        if not m.get("pros") or not m.get("cons"):
+            g = model_guides.guide_for(
+                m.get("key") or "", m.get("category") or "text", m.get("note") or "",
+                m.get("engine") or "", int(m.get("total_bytes") or m.get("bytes") or 0),
+                m.get("engine_recommend") or "",
+            )
+            m["pros"], m["cons"] = g["pros"], g["cons"]
+    visible = await access.filter_catalog(items, user)
     return {
-        "items": await access.filter_catalog(items, user), "server": status,
+        "items": visible, "server": status,
         "models_dir": cfg["models_dir"], "local_enabled": local_enabled,
         # Ollama 是否可用跟着模型列表一起返回，模型页不用先切到「部署」页才有数据
         "ollama": {
@@ -246,6 +316,7 @@ async def catalog(user: dict = Depends(current_user)):
             {**item, "progress": engine_install.status(item["key"])}
             for item in engines.catalog(engine_state)
         ],
+        "recommendation": _recommendation(visible, prof),
     }
 
 

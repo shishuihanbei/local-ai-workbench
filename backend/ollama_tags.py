@@ -23,6 +23,12 @@ OLLAMA_TAGS: dict[str, str] = {
     "gemma2-9b": "gemma2:9b",
     "gemma2-2b": "gemma2:2b",
     # Ollama 官方 registry 里常用、但工作台内置清单单独收录的条目
+    "ollama-qwen36-27b": "qwen3.6:27b",
+    "ollama-qwen36-35b": "qwen3.6:35b-a3b",
+    "ollama-qwen3-14b": "qwen3:14b",
+    "ollama-qwen3-30b": "qwen3:30b-a3b",
+    "ollama-qwen3-32b": "qwen3:32b",
+    "ollama-qwen3-coder-30b": "qwen3-coder:30b",
     "ollama-qwen3-8b": "qwen3:8b",
     "ollama-qwen3-4b": "qwen3:4b",
     "ollama-llama32-3b": "llama3.2:3b",

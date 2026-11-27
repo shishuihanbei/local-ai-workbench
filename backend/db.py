@@ -602,6 +602,31 @@ MODEL_CATALOG_EXTRAS: list[dict[str, Any]] = [
 # `ollama pull <tag>`，前端按 engine=Ollama 给“用 Ollama 拉取”按钮。
 # 只补一次，用户删掉的条目不会每次启动又回来。
 OLLAMA_MODEL_CATALOG: list[dict[str, Any]] = [
+    # 2026 年主流：Qwen3.6 原生视觉 + 长上下文；先收录最常被问到的 27B 与 35B-A3B
+    dict(key="ollama-qwen36-27b", alias="qwen3.6-27b", label="Qwen3.6-27B", family="Qwen3.6",
+         note="Ollama tag · 27B Dense · 18GB · 256K 上下文 · 原生看图/视频", fit="tight", sort=45,
+         category="text", filename="", total_bytes=19327352832, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/qwen3.6"),
+    dict(key="ollama-qwen36-35b", alias="qwen3.6-35b-a3b", label="Qwen3.6-35B-A3B", family="Qwen3.6",
+         note="Ollama tag · 35B MoE / 3B 激活 · 23GB · 256K · 原生看图", fit="no", sort=46,
+         category="text", filename="", total_bytes=24696061952, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/qwen3.6"),
+    dict(key="ollama-qwen3-14b", alias="qwen3-14b", label="Qwen3-14B", family="Qwen3",
+         note="Ollama tag · 14B · 9GB · 40K 上下文 · 通用均衡", fit="good", sort=47,
+         category="text", filename="", total_bytes=9663676416, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/qwen3"),
+    dict(key="ollama-qwen3-30b", alias="qwen3-30b-a3b", label="Qwen3-30B-A3B", family="Qwen3",
+         note="Ollama tag · 30B MoE / 3B 激活 · 19GB · 40K · 多专家推理", fit="tight", sort=48,
+         category="text", filename="", total_bytes=20399123712, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/qwen3"),
+    dict(key="ollama-qwen3-32b", alias="qwen3-32b", label="Qwen3-32B", family="Qwen3",
+         note="Ollama tag · 32B Dense · 20GB · 40K · 高质量推理", fit="no", sort=49,
+         category="text", filename="", total_bytes=21474836480, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/qwen3"),
+    dict(key="ollama-qwen3-coder-30b", alias="qwen3-coder-30b", label="Qwen3-Coder-30B-A3B", family="Qwen Coder",
+         note="Ollama tag · 30B MoE / 3B 激活 · 19GB · 256K · 代码与 Agent", fit="tight", sort=62,
+         category="code", filename="", total_bytes=20399123712, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/qwen3-coder"),
     dict(key="ollama-qwen3-8b", alias="qwen3-8b", label="Qwen3-8B", family="Qwen3",
          note="Ollama 官方 tag · 中文对话与推理 · 约 5.2GB", fit="good", sort=55, category="text",
          filename="", total_bytes=5583457485, repo="", installable=0, engine="Ollama",
@@ -1354,7 +1379,7 @@ async def init_db() -> None:
         # Ollama 常用模型也补进内置清单；独立标记，老库升级时只补这一次
         flag_ollama = await (await db.execute(
             "SELECT value FROM settings WHERE key='model_catalog_ollama'")).fetchone()
-        if not flag_ollama:
+        if not flag_ollama or str(flag_ollama["value"]) != "v2":
             for m in OLLAMA_MODEL_CATALOG:
                 await db.execute(
                     "INSERT OR IGNORE INTO models(key,alias,label,family,note,filename,total_bytes,repo,fit,sort,"
@@ -1364,7 +1389,7 @@ async def init_db() -> None:
                      m.get("category", "text"), m.get("engine", "Ollama"),
                      m.get("homepage", ""), int(m.get("installable", 0))),
                 )
-            await db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('model_catalog_ollama','v1')")
+            await db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('model_catalog_ollama','v2')")
             await db.commit()
         # 修正独立引擎名称；每次启动都校正，兼容已升级的旧库
         for key, engine in ENGINE_REQUIREMENTS.items():

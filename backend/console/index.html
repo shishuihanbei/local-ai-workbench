@@ -1810,6 +1810,7 @@ ollama pull qwen2.5:7b
       <div class="panel-head">
         <h2>模型清单</h2>
         <div class="panel-tools">
+          <input class="model-search" id="modelSearch" placeholder="搜索模型、系列、用途或优缺点" autocomplete="off" spellcheck="false">
           <span class="hint" id="modelHint"></span>
           <button class="btn small" id="refreshModels" title="把内置清单里缺失的模型补回来，不覆盖已有模型">更新</button>
         </div>
@@ -1830,9 +1831,11 @@ ollama pull qwen2.5:7b
         </div>
       </div>
       <div class="model-filters" id="modelFilters"></div>
+      <div class="model-count" id="modelCount"></div>
+      <div class="model-reco" id="modelReco" hidden></div>
       <div class="model-note" id="modelNote">按用途分类展示。同一个模型在不同引擎里是不同格式，装几个平台就有几份：llama.cpp 用 GGUF 直链（下到模型目录）；Ollama 用 registry tag（上方输入框或行内「用 Ollama 拉取」）；vLLM / SGLang 等独立引擎下整个仓库到自己的目录，互不覆盖。</div>
       <div class="table-wrap">
-        <table class="tbl">
+        <table class="tbl model-tbl">
           <thead>
             <tr><th>模型</th><th>类别</th><th>独立引擎</th><th>体积</th><th>状态</th><th>本机建议</th><th class="right">操作</th></tr>
           </thead>

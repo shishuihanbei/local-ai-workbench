@@ -21,7 +21,7 @@ function saveConsoleUser(name) {
     else localStorage.removeItem(REMEMBER_USER_KEY);
   } catch (e) { /* 隐私模式忽略 */ }
 }
-const S = { hw: null, models: null, install: null, timer: null, installing: false, localBusy: false, localEnabled: true, modelCategory: "all", cluster: null, clusterEditNode: 0, clusterEditPool: 0, clusterMembers: [], cookieSession: false };
+const S = { hw: null, models: null, install: null, timer: null, installing: false, localBusy: false, localEnabled: true, modelCategory: "all", modelSearch: "", cluster: null, clusterEditNode: 0, clusterEditPool: 0, clusterMembers: [], cookieSession: false };
 const MODEL_CATEGORY_ORDER = [
   ["text", "文字 / 对话"], ["code", "代码 / 编程"], ["vision", "多模态 / 视觉"],
   ["ocr", "OCR / 文档"], ["image", "绘画 / 图像"], ["video", "视频生成"],

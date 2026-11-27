@@ -121,31 +121,46 @@ def profile(ttl: float = 8.0) -> dict:
 
 
 def advise(size_bytes: int, prof: dict, ctx: int = 8192) -> dict:
-    """根据模型体积与本机配置给出可用性建议。"""
+    """根据模型体积与本机配置给出可用性建议。
+
+    除了“内存够不够”，还要把纯 CPU 的实际体感说出来：18GB 以上的模型
+    32GB 内存能装下，但 i7 这类老四核每秒只有 1 字左右，不能标成“可用”。
+    """
     if not size_bytes:
-        return {"level": "unknown", "label": "未知", "text": "尚未获取模型体积，下载后可评估",
-                "need_ram_gb": 0}
+        return {"level": "unknown", "label": "需确认", "text": "尚未获取模型体积，下载后可评估",
+                "need_ram_gb": 0, "speed_tps": 0}
     size_gb = size_bytes / 2**30
     kv_gb = round(ctx / 8192 * 0.8, 1)          # 粗略 KV cache 估算
     need_ram = round(size_gb * 1.15 + kv_gb + 1.2, 1)
     vram = max([g["vram_mb"] for g in prof.get("gpus", [])], default=0) / 1024
     ram = prof.get("ram_total_gb", 0)
     free = prof.get("ram_free_gb", 0)
+    # 老 CPU 的内存带宽约 25GB/s；每生成 1 token 要读一遍权重，按 Q4 体积粗估
+    speed_tps = round(min(20.0, max(0.35, 25.0 / max(size_gb, 1.0))), 1)
 
     if vram and vram >= size_gb * 1.05:
-        level, label = "good", "流畅"
-        text = f"显存 {vram:.1f}GB 可全量放 GPU，推理速度快"
+        level, label = "good", "本机推荐"
+        text = f"显存 {vram:.1f}GB 可全量放 GPU，推理速度约 {speed_tps} tok/s 以上"
+    elif size_gb >= 16 and not (vram >= size_gb * 0.6):
+        level, label = "warn", "勉强"
+        text = (f"能装进 {ram}GB 内存，但纯 CPU 推理约 {speed_tps} tok/s，"
+                "长回答要等很久；日常对话建议 8B 级")
     elif free >= need_ram + 2:
-        level, label = "ok", "可用"
-        text = f"内存足够（约需 {need_ram}GB），CPU 推理，速度中等"
+        level = "good" if size_gb <= 8 else "ok"
+        label = "本机推荐" if level == "good" else "可用"
+        text = (f"内存足够（约需 {need_ram}GB），CPU 推理约 {speed_tps} tok/s"
+                + ("，日常首选" if level == "good" else "，适合当高质量备选"))
     elif free >= need_ram:
-        level, label = "ok", "可用"
-        text = f"内存刚好够（约需 {need_ram}GB），建议关掉其他程序"
+        level = "ok" if size_gb <= 8 else "warn"
+        label = "可用" if level == "ok" else "勉强"
+        text = (f"内存刚好够（约需 {need_ram}GB，空闲 {free}GB），CPU 推理约 {speed_tps} tok/s；"
+                "建议先关掉其他程序")
     elif ram >= need_ram:
         level, label = "warn", "勉强"
-        text = f"总内存够但空闲不足（需 {need_ram}GB），会频繁换页、很慢"
+        text = (f"总内存够但空闲不足（需 {need_ram}GB，当前空闲 {free}GB），会频繁换页、更慢；"
+                "先关程序再试")
     else:
         level, label = "bad", "不建议"
         text = f"本机内存 {ram}GB 不足以承载（约需 {need_ram}GB）"
     return {"level": level, "label": label, "text": text,
-            "need_ram_gb": need_ram, "size_gb": round(size_gb, 2)}
+            "need_ram_gb": need_ram, "size_gb": round(size_gb, 2), "speed_tps": speed_tps}

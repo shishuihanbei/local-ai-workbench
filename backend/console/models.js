@@ -169,6 +169,43 @@ function modelCategoryLabel(key) {
   return found ? found[1] : (key || "其他");
 }
 
+function modelHaystack(m) {
+  return [
+    m.label, m.key, m.family, m.note, m.category_label, m.engine,
+    ...(Array.isArray(m.pros) ? m.pros : []),
+    ...(Array.isArray(m.cons) ? m.cons : []),
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function modelPoints(m) {
+  const pros = (Array.isArray(m.pros) ? m.pros : []).filter(Boolean);
+  const cons = (Array.isArray(m.cons) ? m.cons : []).filter(Boolean);
+  if (!pros.length && !cons.length) return "";
+  return `<div class="model-pc">
+    ${pros.length ? `<div class="model-pro">＋ ${pros.map(esc).join("；")}</div>` : ""}
+    ${cons.length ? `<div class="model-con">－ ${cons.map(esc).join("；")}</div>` : ""}
+  </div>`;
+}
+
+function renderModelReco(reco) {
+  const box = $("modelReco");
+  if (!box) return;
+  const picks = (reco && reco.picks) || [];
+  if (!reco || !picks.length) {
+    box.hidden = true;
+    box.innerHTML = "";
+    return;
+  }
+  box.hidden = false;
+  box.innerHTML = `<div class="reco-head"><b>按这台机器推荐</b><span>${esc(reco.machine || "")}</span></div>
+    <div class="reco-picks">${picks.map((p) => `<div class="reco-pick">
+      <div class="reco-pick-top"><span class="badge ${esc(p.level || "ok")}">${esc(p.role || "推荐")}</span>${p.downloaded ? '<span class="badge good">已下载</span>' : ""}</div>
+      <b>${esc(p.label || p.key)}</b>
+      <div class="reco-reason">${esc(p.reason || "")}</div>
+    </div>`).join("")}</div>
+    <div class="reco-note">${esc(reco.note || "")}</div>`;
+}
+
 function renderModelFilters(items) {
   const box = $("modelFilters");
   if (!box) return;
@@ -183,15 +220,23 @@ function renderModelFilters(items) {
 function renderModelRows() {
   const data = S.models || { items: [] };
   const items = data.items || [];
+  const q = String(S.modelSearch || "").trim().toLowerCase();
+  const countEl = $("modelCount");
   if (!items.length) {
+    if (countEl) countEl.textContent = "共 0 个模型";
     $("modelRows").innerHTML = `<tr><td colspan="7" style="color:#6b7280">还没有模型清单</td></tr>`;
     return;
   }
-  const filtered = S.modelCategory === "all"
+  let filtered = S.modelCategory === "all"
     ? items
     : items.filter((m) => (m.category || "text") === S.modelCategory);
+  if (q) filtered = filtered.filter((m) => modelHaystack(m).includes(q));
+  if (countEl) {
+    countEl.textContent = `共 ${items.length} 个模型 · 当前显示 ${filtered.length} 个`
+      + (q ? ` · 搜索“${S.modelSearch.trim()}”` : "");
+  }
   if (!filtered.length) {
-    $("modelRows").innerHTML = `<tr><td colspan="7" style="color:#6b7280">这个分类下还没有模型</td></tr>`;
+    $("modelRows").innerHTML = `<tr><td colspan="7" style="color:#6b7280">没有匹配的模型，换个关键词，或点「全部」看完整清单</td></tr>`;
     return;
   }
   const groups = S.modelCategory === "all"
@@ -243,7 +288,12 @@ function renderModelRows() {
         ? `<div class="sub">${m.engine === "Ollama" ? "tag：" : "Ollama："}${esc(m.ollama_tag)}${m.ollama_pulled ? " · 已拉取" : (m.ollama_ready ? "" : " · 服务未启动")}</div>`
         : "";
       html.push(`<tr>
-        <td><div class="name">${esc(m.label || m.key)}</div><div class="sub">${esc(m.key)}${m.filename ? " · " + esc(m.filename) : ""}</div></td>
+        <td>
+          <div class="name">${esc(m.label || m.key)}</div>
+          <div class="sub">${esc(m.key)}${m.family && m.family !== m.label ? " · " + esc(m.family) : ""}${m.filename ? " · " + esc(m.filename) : ""}</div>
+          ${m.note ? `<div class="model-desc">${esc(m.note)}</div>` : ""}
+          ${modelPoints(m)}
+        </td>
         <td><span class="badge cat">${esc(m.category_label || modelCategoryLabel(m.category))}</span></td>
         <td><div>${esc(m.engine || "—")}</div>${m.installable === false && m.engine !== "Ollama" ? `<div class="sub">推荐 ${esc(m.engine_recommend || "独立引擎")} · ${m.engine_ready ? "已安装" : "未安装"}</div>` : ""}${oTag}</td>
         <td>${m.bytes ? mb(m.bytes) : (m.total_bytes ? "约 " + mb(m.total_bytes) : "—")}</td>
@@ -526,6 +576,7 @@ function renderModels(data) {
     : (ollama.running ? "Ollama 运行中" : "暂无运行中的引擎");
   $("modelHint").textContent = `本地${enabled ? "已开启" : "已关闭"} · ${engineText} · ${items.length} 个模型 · 已下载 ${ready} · 单模型运行，点“加载”会切换当前模型`;
   renderModelFilters(items);
+  renderModelReco(data.recommendation);
   renderModelRows();
   renderEngineSummary(items);
   renderOllamaPull();

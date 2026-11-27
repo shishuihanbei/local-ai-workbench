@@ -243,6 +243,36 @@ input, select, textarea { color: var(--text); }
 .model-filter.active { border-color: #4f6ef7; background: #eef2ff; color: #3450d4; font-weight: 600; }
 .model-filter b { font-weight: 600; font-size: 11px; opacity: .8; }
 .model-note { margin-bottom: 10px; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
+.panel-tools .model-search {
+  width: 260px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 9px;
+  background: #fff; font-size: 12.5px; outline: none;
+}
+.panel-tools .model-search:focus { border-color: #b9c6f7; box-shadow: 0 0 0 3px rgba(79, 110, 247, .1); }
+.model-count { margin: -2px 0 8px; color: var(--muted); font-size: 11.5px; }
+.model-reco {
+  margin: 4px 0 10px; padding: 12px 14px; border: 1px solid #dbe4ff; border-radius: 12px;
+  background: linear-gradient(180deg, #f8faff, #f3f7ff);
+}
+.reco-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.reco-head b { font-size: 13px; color: #26346b; }
+.reco-head span { color: var(--muted); font-size: 11.5px; }
+.reco-picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 9px; }
+.reco-pick { padding: 9px 11px; border: 1px solid #e3e9fa; border-radius: 10px; background: #fff; }
+.reco-pick-top { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; }
+.reco-pick b { display: block; font-size: 13px; color: var(--text); }
+.reco-reason { margin-top: 3px; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+.reco-note { margin-top: 8px; color: #7a5a18; font-size: 11.5px; line-height: 1.55; }
+@media (max-width: 900px) {
+  .reco-picks { grid-template-columns: 1fr; }
+  .panel-tools .model-search { width: 100%; }
+}
+.model-tbl { min-width: 1060px; }
+.model-tbl td:first-child { min-width: 360px; max-width: 520px; }
+.model-desc { margin-top: 4px; color: #6b7280; font-size: 11.5px; line-height: 1.5; }
+.model-pc { display: grid; gap: 2px; margin-top: 5px; }
+.model-pro, .model-con { font-size: 11.5px; line-height: 1.55; }
+.model-pro { color: #0f7b3f; }
+.model-con { color: #a15c07; }
 .ollama-pull { margin: 12px 0 4px; padding: 11px 12px; border: 1px solid #dfe6f5; border-radius: 10px; background: #f8faff; }
 .ollama-pull-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; margin-bottom: 8px; color: var(--muted); font-size: 11.5px; line-height: 1.6; }
 .ollama-pull-head b { color: var(--text); font-size: 12.5px; }

@@ -1,5 +1,12 @@
 /* 控制台 · loadAll / switchTab、全局事件入口、登录提交 | 原 console.js 第 1034–1404 行 */
 /* ---------------------------------------------------------------- 事件 */
+document.addEventListener("input", (ev) => {
+  const t = ev.target;
+  if (t && t.id === "modelSearch") {
+    S.modelSearch = t.value || "";
+    renderModelRows();
+  }
+});
 document.addEventListener("click", async (ev) => {
   const t = ev.target.closest("button");
   if (!t) return;
