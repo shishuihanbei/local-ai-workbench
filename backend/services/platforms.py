@@ -210,7 +210,7 @@ def suitability(key: str, prof: dict) -> dict:
             return {"level": "unknown", "label": "需确认", "text": "LM Studio 主要面向 Windows/macOS，当前系统请先确认支持"}
         if ram < 4:
             return {"level": "bad", "label": "不适合", "text": f"内存只有 {ram:.0f}GB，桌面端运行空间不足"}
-        if prof.get("avx2") is False:
+        if prof.get("avx2") is False and not any(x in os_name for x in ("arm64", "aarch64")):
             return {"level": "bad", "label": "不适合",
                     "text": "CPU 不支持 AVX2：LM Studio 0.0.27 的 lms 启动会直接非法指令退出"}
         if ram < 8:

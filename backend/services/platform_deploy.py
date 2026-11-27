@@ -201,6 +201,11 @@ def lmstudio_config_file(cfg: dict[str, Any] | None = None) -> Path:
     return lmstudio_home(cfg) / ".lmstudio" / "config.json"
 
 
+def lmstudio_needs_avx2() -> bool:
+    """Windows x64 的 LM Studio 才要求 AVX2；Windows ARM64 / macOS 不能按 AVX2 判死。"""
+    return IS_WINDOWS and platform.machine().lower() in ("amd64", "x86_64")
+
+
 def _same_dir(a: Path, b: Path) -> bool:
     try:
         return os.path.normcase(str(a.resolve())) == os.path.normcase(str(b.resolve()))
@@ -619,6 +624,13 @@ def enrich(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if key in ("lmstudio", "vllm"):
             item["target_path"] = str(platform_store.target(cfg, key))
         item["usage"] = engine_usage(key, item, cfg)
+        item["compatible"] = True
+        if key == "lmstudio" and not item.get("healthy") and lmstudio_needs_avx2() and not hardware.has_avx2():
+            item["compatible"] = False
+            item["block_reason"] = (
+                f"本机 CPU（{hardware.cpu_name()}）不支持 AVX2；LM Studio 官方的 Windows x64 版要求 AVX2，"
+                "安装/启动会在 llmster bootstrap 阶段弹窗并报 0xC000001D。"
+            )
         if key == "custom":
             item["action"] = "test"
             item["action_label"] = "测试连接"
@@ -627,6 +639,10 @@ def enrich(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             item["action"] = "guide"
             item["action_label"] = "仅 Linux · 说明"
             item["deployable"] = True
+        elif item.get("compatible") is False:
+            item["action"] = "unsupported"
+            item["action_label"] = "CPU 不支持 AVX2"
+            item["deployable"] = False
         elif item.get("healthy"):
             item["action"] = "running"
             item["action_label"] = "已运行"
@@ -978,6 +994,15 @@ async def _install_lmstudio(key: str, force: bool = False) -> tuple[bool, str, b
     不写 %LOCALAPPDATA% 也不写 ~\\.lmstudio。
     """
     cfg = load_config()
+    # LM Studio 官方 Windows x64 版要求 AVX2；i7-3770 这类只有 AVX 的 CPU 会在
+    # llmster bootstrap / lms 启动时直接 0xC000001D 弹窗退出。必须在下载前拦住。
+    if lmstudio_needs_avx2() and not hardware.has_avx2():
+        cpu = hardware.cpu_name()
+        msg = (f"本机 CPU（{cpu}）不支持 AVX2，LM Studio 官方要求 AVX2。"
+               "继续安装会在初始化/启动时弹窗并报 0xC000001D（非法指令），已停止下载。"
+               "这台机器请直接用 Ollama 或 llama.cpp，它们有 AVX 运行库，本机已经能跑。")
+        _set(key, pct=0, step="硬件不兼容", msg=msg)
+        return False, msg, False
     lms = managed_lms(cfg)
     if lms and not force:
         _set(key, step="跳过安装", msg=f"已使用工作台目录里的 LM Studio 无界面版：{lms}")
@@ -1030,6 +1055,10 @@ async def _start_lmstudio(key: str, endpoint: str = "", force: bool = False) -> 
     healthy, models, _ = await platforms._probe_external(base, "/v1/models")
     if healthy and not force:
         return True, f"LM Studio 服务已在运行（{len(models)} 个模型）" if models else "LM Studio 服务已在运行（还没加载模型）"
+    if lmstudio_needs_avx2() and not hardware.has_avx2():
+        return False, (f"本机 CPU（{hardware.cpu_name()}）不支持 AVX2，LM Studio 的 lms 无法启动；"
+                       "这不是配置问题，装任何版本的 LM Studio 0.0.27 都会 0xC000001D 退出。"
+                       "请改用 Ollama / llama.cpp，或把 LM Studio 放到支持 AVX2 的机器/算力池节点")
     info = detect(key)
     lms = str(info.get("lms") or "")
     llmster = str(info.get("llmster") or "")

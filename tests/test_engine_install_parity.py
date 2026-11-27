@@ -1,6 +1,7 @@
 """四个引擎走同一套“检测 → 下载 → 安装 → 启动 → 探测”流程，目录与缓存口径一致。"""
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from backend.services import platform_deploy as pd
@@ -84,3 +85,25 @@ def test_usage_marks_not_ready_when_no_models():
     assert usage["frontend_ready"] is False
     assert usage["frontend_count"] == 0
     assert "你的模型" in usage["curl"]
+
+
+def test_lmstudio_is_blocked_before_download_without_avx2(tmp_path, monkeypatch):
+    cfg = {"platforms_dir": str(tmp_path / "platforms"),
+           "models_dir": str(tmp_path / "models")}
+    monkeypatch.setattr(pd, "load_config", lambda: cfg)
+    monkeypatch.setattr(pd.hardware, "has_avx2", lambda: False)
+    ok, msg, skipped = asyncio.run(pd._install_lmstudio("lmstudio"))
+    assert ok is False and skipped is False
+    assert "AVX2" in msg and "0xC000001D" in msg
+    assert "已停止下载" in msg
+    state = pd.get_state("lmstudio")
+    assert state["step"] == "硬件不兼容"
+    # 必须判断硬件在前，不能先建下载目录或发网络请求
+    assert not (tmp_path / "platforms" / "lmstudio").exists()
+
+
+def test_windows_avx2_probe_uses_the_real_feature_id():
+    src = _src("backend/services/hardware.py")
+    assert "IsProcessorFeaturePresent(27)" in src
+    assert "IsProcessorFeaturePresent(40)" not in src
+

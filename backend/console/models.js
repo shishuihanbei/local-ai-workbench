@@ -370,13 +370,16 @@ function renderPlatforms(data) {
   const selected = new Set(S.platformSelected);
   box.innerHTML = items.map((p) => {
     const on = selected.has(p.key);
-    const state = p.healthy
-      ? `<span class="badge good">已连接</span>`
-      : p.installed
-        ? `<span class="badge warn">已安装</span>`
-        : p.installable
-          ? `<span class="badge off">可部署</span>`
-          : `<span class="badge off">未安装</span>`;
+    const blocked = p.compatible === false;
+    const state = blocked
+      ? `<span class="badge bad" title="${esc(p.block_reason || "")}">硬件不支持</span>`
+      : p.healthy
+        ? `<span class="badge good">已连接</span>`
+        : p.installed
+          ? `<span class="badge warn">已安装</span>`
+          : p.installable
+            ? `<span class="badge off">可部署</span>`
+            : `<span class="badge off">未安装</span>`;
     const urlValue = S.platformDirty
       ? (S.platformEndpoints[p.key] || p.base_url || "")
       : (p.base_url || "");
@@ -389,9 +392,11 @@ function renderPlatforms(data) {
     const fit = p.suitability || { level: "unknown", label: "需确认", text: "" };
     const mm = p.multimodal ? `<span class="badge mm">${esc(p.multimodal)}</span>` : "";
     const types = (p.model_types || []).map((x) => `<span class="chip">${esc(x)}</span>`).join("");
-    const installedText = p.installed
-      ? `已安装${p.version ? " · " + p.version : ""}`
-      : (p.installable ? "尚未安装，可一键部署" : "需要手动安装");
+    const installedText = blocked
+      ? (p.installed ? "已安装，但本机 CPU 无法运行" : "本机 CPU 不支持，不能安装")
+      : p.installed
+        ? `已安装${p.version ? " · " + p.version : ""}`
+        : (p.installable ? "尚未安装，可一键部署" : "需要手动安装");
     const paths = [];
     if (p.installed && p.install_path) paths.push(["程序", p.install_path]);
     if (p.installed && p.models_path) paths.push(["模型", p.models_path]);
@@ -399,8 +404,8 @@ function renderPlatforms(data) {
     if (p.legacy_models_path) paths.push(["旧模型", p.legacy_models_path]);
     const pathRows = paths.map(([k, v]) => `<div class="platform-path"><span>${esc(k)}</span><code title="${esc(v)}">${esc(v)}</code><button class="link" data-copy-path="${esc(v)}">复制</button></div>`).join("");
     const label = p.action_label || "一键部署";
-    const disabled = p.deployable === false || (p.install && p.install.running);
-    const manage = p.can_manage && !(p.install && p.install.running)
+    const disabled = blocked || p.deployable === false || (p.install && p.install.running);
+    const manage = p.can_manage && !blocked && !(p.install && p.install.running)
       ? `<button class="btn small ghost" data-pdeploy-manage="${esc(p.key)}">装到工作台目录</button>`
       : "";
     const adopt = (p.managed && p.legacy_models_path) && !(p.install && p.install.running)
@@ -418,13 +423,13 @@ function renderPlatforms(data) {
     const action = p.key === "custom"
       ? `<button class="btn small" data-pdeploy="${esc(p.key)}">${esc(label)}</button>
          <button class="btn small ghost" data-custom-guide>接入说明</button>`
-      : `<button class="btn small ${p.action === "install" ? "primary" : ""}" data-pdeploy="${esc(p.key)}" ${disabled ? "disabled" : ""}>${esc(label)}</button>${manage}${adopt}${stop}${uninstall}`;
+      : `<button class="btn small ${p.action === "install" ? "primary" : ""}" data-pdeploy="${esc(p.key)}" ${disabled ? "disabled" : ""} title="${esc(blocked ? (p.block_reason || label) : "")}">${esc(label)}</button>${manage}${adopt}${stop}${uninstall}`;
     const u = p.usage || {};
     const frontBadge = u.frontend_ready
       ? `<span class="badge good" title="服务健康时，这些模型会自动出现在用户端模型下拉">已接入用户端 · ${u.frontend_count} 个模型</span>`
       : (p.healthy ? `<span class="badge warn">服务在跑，还没加载模型</span>` : "");
     // 装了/在跑之后，卡片里直接给“怎么用”：接口地址、模型名、curl、步骤
-    const usage = (p.installed || p.healthy) ? `
+    const usage = !blocked && (p.installed || p.healthy) ? `
       <details class="platform-usage" ${p.healthy ? "open" : ""}>
         <summary>接入与使用<span>${esc(u.api_base || "服务健康后自动接入用户端")}</span></summary>
         <div class="platform-usage-body">

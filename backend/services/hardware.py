@@ -26,7 +26,8 @@ def has_avx2() -> bool:
     try:
         if IS_WINDOWS:
             import ctypes
-            ok = bool(ctypes.windll.kernel32.IsProcessorFeaturePresent(40))
+            # 27 = PF_AVX2_INSTRUCTIONS_AVAILABLE；40 不是 AVX2，旧写法会让所有机器都判成不支持
+            ok = bool(ctypes.windll.kernel32.IsProcessorFeaturePresent(27))
         elif platform.system().lower() == "darwin":
             ok = "AVX2" in _run(["sysctl", "-n", "machdep.cpu.features"]).upper()
         else:
