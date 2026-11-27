@@ -617,6 +617,9 @@ def enrich(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         item["install"] = get_state(key)
         item["can_manage"] = key in ("ollama", "lmstudio", "vllm") and bool(item["installed"]) and not item["managed"]
         if key == "llama.cpp":
+            # llama.cpp 一直是工作台自己拉起的，和 Ollama 一样给“停止”，
+            # 但不影响“卸载”仍按程序目录判断。
+            item["managed"] = True
             item["models_path"] = str(cfg.get("models_dir") or "")
             item["target_path"] = str(platform_store.target(cfg, key))
         if key == "ollama":

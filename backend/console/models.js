@@ -418,8 +418,8 @@ function renderPlatforms(data) {
     const uninstall = removable && !(p.install && p.install.running)
       ? `<button class="btn small danger" data-puninstall="${esc(p.key)}" title="停掉进程与端口，删掉工作台装的程序和下载缓存；保留你下载的模型和 data\\installers 里的安装包">卸载</button>`
       : "";
-    // 已经跑起来的工作台托管服务，给一个和 llama.cpp 一样的“停止”
-    const stop = p.healthy && p.managed && p.key !== "llama.cpp" && !(p.install && p.install.running)
+    // 已经跑起来的工作台托管服务，给一个“停止”；llama.cpp 也一样
+    const stop = p.healthy && p.managed && !(p.install && p.install.running)
       ? `<button class="btn small ghost" data-pstop="${esc(p.key)}">停止</button>`
       : "";
     const action = p.key === "custom"

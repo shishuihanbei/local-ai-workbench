@@ -86,6 +86,23 @@ def test_console_has_start_and_stop_buttons():
     assert "data-pstop" in js or "dataset.pstop" in js
     models = (root / "models.js").read_text(encoding="utf-8")
     assert "data-pstop" in models
+    # llama.cpp 也要像 Ollama 一样能停止；旧版在停止按钮条件里把它排除了
+    stop_block = models.split("const stop =", 1)[1].split(";", 1)[0]
+    assert "data-pstop" in stop_block
+    assert "llama.cpp" not in stop_block
+
+
+def test_llama_cpp_card_is_managed(tmp_path, monkeypatch):
+    from backend.services import platform_deploy
+
+    monkeypatch.setattr(platform_deploy, "load_config", lambda: _cfg(tmp_path))
+    monkeypatch.setattr(platform_deploy, "detect",
+                        lambda key: {"installed": True, "path": "x"} if key == "llama.cpp" else {"installed": True})
+    monkeypatch.setattr(platform_deploy, "STATE", {})
+    item = {"key": "llama.cpp", "healthy": True, "installed": True, "models": [],
+            "base_url": "http://127.0.0.1:8080", "detail": "运行中"}
+    out = platform_deploy.enrich([item])
+    assert out[0]["managed"] is True
 
 
 def test_closed_port_is_detected_quickly():
