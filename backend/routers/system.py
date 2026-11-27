@@ -688,6 +688,32 @@ async def cancel_platform(key: str, user: dict = Depends(admin_user)):
     return result
 
 
+@router.post("/local-platforms/{key}/start")
+async def start_platform(key: str, endpoint: str = Query(""), user: dict = Depends(admin_user)):
+    """已安装平台的一键启动：不重新安装、不下载，只拉起服务。"""
+    import asyncio
+    if key not in platforms.PLATFORMS:
+        raise HTTPException(404, "未知平台")
+    if platform_deploy.is_running(key):
+        return {"ok": False, "msg": "这个平台正在启动，请稍等", "state": platform_deploy.get_state(key)}
+    if not platform_deploy.detect(key).get("installed"):
+        return {"ok": False, "msg": "还没有安装，请先点“一键部署”", "state": platform_deploy.get_state(key)}
+    platform_models.invalidate()
+    asyncio.create_task(platform_deploy.start(key, endpoint=(endpoint or "").strip()[:300]))
+    await audit(user, "system.platform.start", key)
+    return {"ok": True, "msg": "已开始启动", "key": key}
+
+
+@router.post("/local-platforms/{key}/stop")
+async def stop_platform(key: str, user: dict = Depends(admin_user)):
+    """停掉工作台自己拉起的服务；系统托盘里启动的不动。"""
+    if key not in platforms.PLATFORMS:
+        raise HTTPException(404, "未知平台")
+    result = await platform_deploy.stop(key)
+    await audit(user, "system.platform.stop", key, detail=str(result.get("msg", ""))[:300])
+    return result
+
+
 @router.post("/local-platforms/{key}/deploy")
 async def deploy_platform(key: str, force: bool = Query(False), endpoint: str = Query(""),
                           user: dict = Depends(admin_user)):
@@ -873,7 +899,7 @@ async def set_local_deploy(body: LocalDeployBody, user: dict = Depends(admin_use
         if p["key"] in ("llama.cpp", "custom") or not p.get("selected"):
             continue
         if p.get("installed") and not p.get("healthy") and not platform_deploy.is_running(p["key"]):
-            asyncio.create_task(platform_deploy.deploy(p["key"]))
+            asyncio.create_task(platform_deploy.start(p["key"]))
             starting.append(p["name"])
     if starting:
         notes.append("正在启动：" + "、".join(starting) + "（进度见平台卡）")

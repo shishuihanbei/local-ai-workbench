@@ -1,6 +1,7 @@
 """模型管理：清单、下载、加载、上传、删除。"""
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import time
@@ -66,25 +67,20 @@ async def catalog(user: dict = Depends(current_user)):
         "FROM downloads d JOIN (SELECT model_key, MAX(id) AS mid FROM downloads GROUP BY model_key) x "
         "ON d.id = x.mid")
     dl_map = {r["model_key"]: r for r in dl_rows}
-    status = await llama.server.status()
-    prof = hardware.profile()
-    engine_state = engines.status(prof)
+    # 这些探测彼此独立，全部并行；本机端口没起时也不会串行等超时
+    ollama_ep = platforms.endpoints(cfg).get("ollama", "")
+    status, prof, engine_state, reach, ollama_probe, ollama_info = await asyncio.gather(
+        llama.server.status(),
+        asyncio.to_thread(hardware.profile),
+        asyncio.to_thread(lambda: engines.status(hardware.profile())),
+        platform_models.reachable(cfg, llama_status={"running": False, "healthy": False}),
+        platforms._probe_external(ollama_ep, "/api/tags"),
+        asyncio.to_thread(platform_deploy.detect, "ollama"),
+    )
     # Ollama 是另一套模型体系（registry tag + blobs），这里只把“同名模型在 Ollama 里叫什么”
     # 和“Ollama 现在能不能用”带给前端，真正的下载仍然走各自的引擎。
-    ollama_ids: list[str] = []
-    try:
-        reach = await platform_models.reachable(cfg)
-        ollama_ids = [str(m.get("key") or "") for m in reach if m.get("platform_key") == "ollama"]
-    except Exception:
-        ollama_ids = []
-    ollama_info = platform_deploy.detect("ollama")
-    # 服务在不在跑要看端口，不能靠“有没有拉到模型”判断：空模型目录时也要能点拉取
-    ollama_healthy = False
-    try:
-        probe = await platforms.status(cfg, ["ollama"], {"running": False, "healthy": False}, probe_all=True)
-        ollama_healthy = any(i.get("key") == "ollama" and i.get("healthy") for i in probe)
-    except Exception:
-        ollama_healthy = False
+    ollama_ids = [str(m.get("key") or "") for m in reach if m.get("platform_key") == "ollama"]
+    ollama_healthy = bool(ollama_probe[0])
     items = []
     for r in rows:
         installable = bool(r.get("installable", 1))

@@ -31,7 +31,7 @@ import httpx
 
 from ..config import CREATE_NO_WINDOW, DATA_DIR, IS_WINDOWS, load_config
 from ..db import fetch_all
-from . import hardware, installer, llama, platform_store, platforms
+from . import hardware, installer, llama, platform_models, platform_store, platforms
 
 STATE: dict[str, dict[str, Any]] = {}
 log = logging.getLogger("workbench.platform_deploy")
@@ -796,7 +796,7 @@ async def _start_ollama(key: str, endpoint: str = "", force: bool = False) -> tu
     base = endpoint or platforms.endpoints(cfg).get("ollama", "")
     healthy, _, _ = await platforms._probe_external(base, "/api/tags")
     if healthy and not force:
-        return True, "Ollama 已在运行，跳过启动"
+        return True, "Ollama 已在运行"
     if healthy and force:
         proc = PROCS.get(key)
         if proc and proc.poll() is None:
@@ -806,6 +806,10 @@ async def _start_ollama(key: str, endpoint: str = "", force: bool = False) -> tu
     exe = portable_ollama(cfg) or detect("ollama")["path"]
     if not exe:
         return False, "没有找到 ollama 程序"
+    gpid = _managed_pids(key)
+    if gpid:
+        return False, (f"Ollama 进程已经在跑（PID {gpid[0]}），只是端口暂时没响应；"
+                       "不要重复启动。先看 data/logs/ollama.log，或点“停止”后再启动")
     models = _migrate_ollama_models(cfg)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log = open(LOG_DIR / "ollama.log", "a", encoding="utf-8")
@@ -816,12 +820,107 @@ async def _start_ollama(key: str, endpoint: str = "", force: bool = False) -> tu
     PROC = subprocess.Popen([exe, "serve"], stdout=log, stderr=subprocess.STDOUT,
                             creationflags=flags, env=env)
     PROCS[key] = PROC
-    for _ in range(20):
-        await asyncio.sleep(1)
-        healthy, _, _ = await platforms._probe_external(base, "/api/tags")
+    for _ in range(30):
+        await asyncio.sleep(0.4)
+        healthy, _, _ = await platforms._probe_external(base, "/api/tags", timeout=0.5)
         if healthy:
             return True, f"Ollama 已启动（PID {PROC.pid}，模型目录 {models}）"
     return False, "Ollama 进程已启动，但端口还没响应，请查看 data/logs/ollama.log"
+
+
+def _managed_pids(key: str) -> list[int]:
+    """当前在跑的、属于工作台目录的进程。后端重启后 PROCS 会丢，按 exe 路径认回来。"""
+    proc = PROCS.get(key)
+    if proc and proc.poll() is None:
+        return [int(proc.pid)]
+    info = detect(key)
+    exe = str(info.get("path") or "").lower()
+    if not exe:
+        return []
+    pids: list[int] = []
+    try:
+        import psutil
+        for p in psutil.process_iter(["pid", "exe"]):
+            if str(p.info.get("exe") or "").lower() == exe:
+                pids.append(int(p.info["pid"]))
+    except Exception:
+        pass
+    return pids
+
+
+async def start(key: str, endpoint: str = "") -> dict:
+    """已安装平台的“启动”：只拉起服务，不重新走安装、不打印跳过安装的日志。"""
+    if key not in platforms.PLATFORMS:
+        return {"ok": False, "msg": "未知平台"}
+    if _state(key).get("running"):
+        return {"ok": False, "msg": "这个平台正在启动，请稍等"}
+    endpoint = str(endpoint or "").strip()[:300].rstrip("/")
+    if endpoint.endswith("/v1"):
+        endpoint = endpoint[:-3]
+    info = detect(key)
+    if not info.get("installed"):
+        return {"ok": False, "msg": "还没有安装，请先点“一键部署”"}
+    name = platforms.PLATFORMS[key]["name"]
+    STATE[key] = {**_blank(), "running": True, "pct": 5, "step": "启动",
+                  "msg": f"正在启动 {name}", "started_at": time.time(), "task": asyncio.current_task()}
+    try:
+        if key == "llama.cpp":
+            srv = await llama.server.status()
+            if srv.get("healthy"):
+                ok, msg = True, "llama.cpp 已在运行"
+            else:
+                row = await _pick_local_model(load_config())
+                if not row:
+                    ok, msg = False, "还没有可用的 GGUF 模型，请先到「模型」页下载"
+                else:
+                    _set(key, pct=35, step="加载模型", msg=f"正在加载 {row['key']}")
+                    ok, msg = await llama.server.start(row["key"])
+        elif key == "ollama":
+            ok, msg = await _start_ollama(key, endpoint)
+        elif key == "lmstudio":
+            ok, msg = await _start_lmstudio(key, endpoint)
+        elif key == "vllm":
+            ok, msg = await _start_vllm(key, endpoint)
+        else:
+            ok, msg = False, "这个平台只支持测试连接"
+        _set(key, running=False, ok=ok, skipped=False,
+             pct=100 if ok else get_state(key).get("pct", 5), step="运行中" if ok else "启动失败",
+             msg=msg, error="" if ok else msg, finished_at=time.time())
+        if ok:
+            try:
+                platform_models.invalidate()
+            except Exception:
+                pass
+        return {"ok": ok, "msg": msg, "state": get_state(key)}
+    except Exception as exc:
+        _set(key, running=False, ok=False, step="启动失败", msg=f"启动失败：{exc}",
+             error=str(exc), finished_at=time.time())
+        return {"ok": False, "msg": str(exc), "state": get_state(key)}
+
+
+async def stop(key: str, endpoint: str = "") -> dict:
+    """停掉工作台自己拉起的进程。系统/外部启动的服务不动，避免误杀用户的东西。"""
+    if key == "llama.cpp":
+        await llama.server.stop()
+        platform_models.invalidate()
+        return {"ok": True, "msg": "llama.cpp 已停止"}
+    pids = _managed_pids(key)
+    if not pids:
+        return {"ok": False, "msg": "这个服务不是工作台启动的，请到对应软件的托盘/服务里退出"}
+    try:
+        for pid in pids:
+            if IS_WINDOWS:
+                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                               capture_output=True, creationflags=CREATE_NO_WINDOW)
+            else:
+                os.kill(pid, 15)
+    except Exception as exc:
+        return {"ok": False, "msg": f"停止失败：{exc}"}
+    PROCS.pop(key, None)
+    _set(key, running=False, ok=True, skipped=False, pct=0, step="已停止",
+         msg="已停止", error="", finished_at=time.time())
+    platform_models.invalidate()
+    return {"ok": True, "msg": "已停止"}
 
 
 async def _deploy_ollama(key: str, endpoint: str = "", force: bool = False) -> tuple[bool, str, bool]:

@@ -6,6 +6,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import psutil
@@ -90,10 +91,18 @@ def llama_info() -> dict:
             "version": ver, "llama_dir": cfg["llama_dir"]}
 
 
-def profile() -> dict:
+_PROFILE_CACHE: tuple[float, dict] = (0.0, {})
+
+
+def profile(ttl: float = 8.0) -> dict:
+    """本机硬件画像。控制台多个接口会同时要它，短缓存避免每次阻塞半秒。"""
+    global _PROFILE_CACHE
+    now = time.time()
+    if _PROFILE_CACHE[1] and now - _PROFILE_CACHE[0] <= ttl:
+        return dict(_PROFILE_CACHE[1])
     vm = psutil.virtual_memory()
     cfg = load_config()
-    return {
+    data = {
         "os": f"{platform.system()} {platform.release()} ({platform.machine()})",
         "python": sys.version.split()[0],
         "cpu": cpu_name(),
@@ -107,6 +116,8 @@ def profile() -> dict:
         "llama": llama_info(),
         "platform": platform.system().lower(),
     }
+    _PROFILE_CACHE = (now, data)
+    return dict(data)
 
 
 def advise(size_bytes: int, prof: dict, ctx: int = 8192) -> dict:

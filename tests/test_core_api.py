@@ -101,7 +101,7 @@ def test_every_independent_model_maps_to_engine_catalog(client, admin_token):
 
 def test_platform_models_appear_in_catalog(client, admin_token, monkeypatch):
     from backend.services import platform_models
-    async def fake_reachable(cfg=None):
+    async def fake_reachable(cfg=None, **kw):
         return [{
             "key": "mock-platform-model", "label": "mock-platform-model",
             "family": "Mock Platform", "category": "text", "category_label": "文字 / 对话",
@@ -124,7 +124,7 @@ def test_platform_models_appear_in_catalog(client, admin_token, monkeypatch):
 
 def test_platform_model_routes_to_its_service(monkeypatch):
     from backend.services import platform_models, routing
-    async def fake_reachable(cfg=None):
+    async def fake_reachable(cfg=None, **kw):
         return [{
             "key": "mock-platform-model", "source_platform": "Mock Platform",
             "platform_key": "custom", "base_url": "http://127.0.0.1:18001/v1",
@@ -139,7 +139,7 @@ def test_platform_model_routes_to_its_service(monkeypatch):
 
 def test_platform_model_select_does_not_start_llama(client, admin_token, monkeypatch):
     from backend.services import platform_models
-    async def fake_reachable(cfg=None):
+    async def fake_reachable(cfg=None, **kw):
         return [{
             "key": "mock-platform-model", "source_platform": "Mock Platform",
             "platform_key": "custom", "base_url": "http://127.0.0.1:18001/v1",

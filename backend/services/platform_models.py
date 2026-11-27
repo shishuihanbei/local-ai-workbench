@@ -29,7 +29,8 @@ def _v1_base(root: str) -> str:
     return base if base.endswith("/v1") else f"{base}/v1"
 
 
-async def reachable(cfg: dict[str, Any] | None = None, ttl: float = _TTL_SECONDS) -> list[dict[str, Any]]:
+async def reachable(cfg: dict[str, Any] | None = None, ttl: float = _TTL_SECONDS,
+                    llama_status: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """返回当前健康平台上可直接调用的模型条目。"""
     now = time.time()
     if _CACHE["items"] and now - _CACHE["at"] <= ttl:
@@ -37,7 +38,7 @@ async def reachable(cfg: dict[str, Any] | None = None, ttl: float = _TTL_SECONDS
 
     cfg = cfg or load_config()
     selected = platforms.normalize_selected(cfg.get("deploy_platforms"))
-    status_items = await platforms.status(cfg, selected, probe_all=False)
+    status_items = await platforms.status(cfg, selected, llama_status=llama_status, probe_all=False)
 
     out: list[dict[str, Any]] = []
     seen: set[str] = set()

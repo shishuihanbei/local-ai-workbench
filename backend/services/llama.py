@@ -37,7 +37,10 @@ class LlamaServer:
         healthy = False
         served: list[str] = []
         try:
-            async with httpx.AsyncClient(timeout=2.5) as c:
+            from . import platforms
+            if not await asyncio.to_thread(platforms._port_open, f"http://127.0.0.1:{port}"):
+                raise ConnectionError("端口未开放")
+            async with httpx.AsyncClient(timeout=0.8) as c:
                 r = await c.get(f"http://127.0.0.1:{port}/v1/models",
                                 headers={"Authorization": f"Bearer {cfg['upstream_key']}"})
                 healthy = r.status_code == 200

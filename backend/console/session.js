@@ -347,26 +347,43 @@ document.addEventListener("click", async (ev) => {
       }
       return;
     }
+    else if (t.dataset.pstop) {
+      const key = t.dataset.pstop;
+      t.disabled = true;
+      t.textContent = "停止中…";
+      try {
+        const r = await api(`/api/system/local-platforms/${encodeURIComponent(key)}/stop`, { method: "POST" });
+        uiToast(r.msg || (r.ok ? "已停止" : "停止失败"));
+        await loadDeployment();
+      } catch (e) {
+        uiToast(e.message);
+        t.disabled = false;
+        t.textContent = "停止";
+      }
+      return;
+    }
     else if (t.dataset.pdeploy) {
       const key = t.dataset.pdeploy;
       const p = (S.platforms || []).find((x) => x.key === key) || {};
       if (p.deployable === false || S.platformPolling[key]) return;
+      const isStart = p.action === "start";
       t.disabled = true;
       const old = t.textContent;
-      t.textContent = p.key === "custom" ? "测试中…" : "部署中…";
+      t.textContent = isStart ? "启动中…" : (p.key === "custom" ? "测试中…" : "部署中…");
       try {
         const endpoint = (platformEndpointValues()[key] || "").trim();
         const qs = endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : "";
-        const r = await api(`/api/system/local-platforms/${encodeURIComponent(key)}/deploy${qs}`, { method: "POST" });
+        const path = isStart ? "start" : "deploy";
+        const r = await api(`/api/system/local-platforms/${encodeURIComponent(key)}/${path}${qs}`, { method: "POST" });
         if (!r.ok) {
-          uiToast(r.msg || "无法开始部署");
+          uiToast(r.msg || (isStart ? "无法启动" : "无法开始部署"));
           t.textContent = old;
           t.disabled = false;
           return;
         }
         await pollPlatform(key);
         const btn = document.querySelector(`[data-pdeploy="${key}"]`);
-        if (btn && /部署中|测试中/.test(btn.textContent)) {
+        if (btn && /部署中|测试中|启动中/.test(btn.textContent)) {
           btn.textContent = old;
           btn.disabled = false;
         }

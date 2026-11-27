@@ -314,10 +314,14 @@ function renderPlatforms(data) {
     const uninstall = removable && !(p.install && p.install.running)
       ? `<button class="btn small danger" data-puninstall="${esc(p.key)}" title="停掉进程与端口，删掉工作台装的程序和下载缓存；保留你下载的模型和 data\\installers 里的安装包">卸载</button>`
       : "";
+    // 已经跑起来的工作台托管服务，给一个和 llama.cpp 一样的“停止”
+    const stop = p.healthy && p.managed && p.key !== "llama.cpp" && !(p.install && p.install.running)
+      ? `<button class="btn small ghost" data-pstop="${esc(p.key)}">停止</button>`
+      : "";
     const action = p.key === "custom"
       ? `<button class="btn small" data-pdeploy="${esc(p.key)}">${esc(label)}</button>
          <button class="btn small ghost" data-custom-guide>接入说明</button>`
-      : `<button class="btn small ${p.action === "install" ? "primary" : ""}" data-pdeploy="${esc(p.key)}" ${disabled ? "disabled" : ""}>${esc(label)}</button>${manage}${adopt}${uninstall}`;
+      : `<button class="btn small ${p.action === "install" ? "primary" : ""}" data-pdeploy="${esc(p.key)}" ${disabled ? "disabled" : ""}>${esc(label)}</button>${manage}${adopt}${stop}${uninstall}`;
     const u = p.usage || {};
     const frontBadge = u.frontend_ready
       ? `<span class="badge good" title="服务健康时，这些模型会自动出现在用户端模型下拉">已接入用户端 · ${u.frontend_count} 个模型</span>`

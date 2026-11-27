@@ -74,7 +74,12 @@ def test_turning_switch_on_starts_installed_external_platforms(client, admin_tok
         started.append(key)
         return {"ok": True, "msg": "启动成功"}
 
+    async def fake_start(key, endpoint=""):
+        started.append(key)
+        return {"ok": True, "msg": "启动成功"}
+
     monkeypatch.setattr(platform_deploy, "deploy", fake_deploy)
+    monkeypatch.setattr(platform_deploy, "start", fake_start)
     monkeypatch.setattr(platform_deploy, "is_running", lambda key: False)
 
     r = client.post("/api/system/local-deploy",

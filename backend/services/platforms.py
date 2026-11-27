@@ -32,7 +32,7 @@ PLATFORMS: dict[str, dict[str, Any]] = {
         "multimodal": "多模态（部分）",
         "model_types": ["文字 / 对话", "代码 / 编程", "多模态 / 视觉（部分）", "向量 / 检索（部分）"],
         "homepage": "https://ollama.com/download",
-        "note": "便携版装在 platforms/ollama（程序+模型同目录，可整体搬走）；pull 下来的模型会出现在「模型」页下拉，不需要 llama.cpp",
+        "note": "便携版程序装在 platforms/ollama，模型统一在 models/ollama；pull 下来的模型会出现在「模型」页下拉，不需要 llama.cpp",
     },
     "vllm": {
         "name": "vLLM",
@@ -110,12 +110,38 @@ def clean_endpoints(value: Any, cfg: dict) -> dict[str, str]:
     return out
 
 
-async def _probe_external(base: str, path: str) -> tuple[bool, list[str], str]:
+def _port_open(base: str, timeout: float = 0.25) -> bool:
+    """先做一次 TCP 连通性检查。Windows 上连接本机关闭端口会静默等到超时，
+    直接发 HTTP 会让控制台白等 1 秒；这里 0.15 秒就能判断出没起。"""
+    try:
+        from urllib.parse import urlparse
+        import socket
+        p = urlparse(base if "://" in base else "http://" + base)
+        host = p.hostname or "127.0.0.1"
+        port = p.port or (443 if p.scheme == "https" else 80)
+        local = host in ("127.0.0.1", "localhost", "0.0.0.0")
+        s = socket.socket()
+        s.settimeout(0.15 if local else timeout)
+        try:
+            s.connect((host, port))
+            return True
+        except Exception:
+            return False
+        finally:
+            s.close()
+    except Exception:
+        return False
+
+
+async def _probe_external(base: str, path: str, timeout: float = 0.6) -> tuple[bool, list[str], str]:
     if not base:
         return False, [], "没有填写服务地址"
     url = base.rstrip("/") + path
     try:
-        async with httpx.AsyncClient(timeout=2.2) as client:
+        if not await asyncio.to_thread(_port_open, base):
+            return False, [], "未连接：端口未开放"
+        # 本机服务正常时几十毫秒就回；超时说明没起或地址不通，不能拖住整个控制台
+        async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.get(url)
         if resp.status_code != 200:
             return False, [], f"HTTP {resp.status_code}"
@@ -196,15 +222,24 @@ async def status(cfg: dict, selected: list[str] | None = None,
                  llama_status: dict | None = None, probe_all: bool = False) -> list[dict]:
     """探测平台；probe_all=True 时连未勾选的平台也扫描，用于“更新”发现新平台。"""
     selected = normalize_selected(selected if selected is not None else cfg.get("deploy_platforms"))
-    srv = llama_status or await llama.server.status()
-    prof = hardware.profile()
+    prof_task = asyncio.to_thread(hardware.profile)
     eps = endpoints(cfg)
     tasks = {}
     for key, meta in PLATFORMS.items():
         if key != "llama.cpp" and (probe_all or key in selected):
             tasks[key] = _probe_external(eps[key], str(meta["probe"]))
-    results = await asyncio.gather(*tasks.values()) if tasks else []
-    probed = dict(zip(tasks.keys(), results))
+    # llama.cpp 的端口探测和外部平台、硬件画像并行，整体只等最慢的一个
+    llama_task = None if llama_status is not None else llama.server.status()
+    gathered = await asyncio.gather(prof_task, *tasks.values(),
+                                    *([llama_task] if llama_task else []))
+    prof = gathered[0]
+    extras = gathered[1:]
+    if llama_task:
+        srv = extras[-1]
+        probed = dict(zip(tasks.keys(), extras[:-1]))
+    else:
+        srv = llama_status or {}
+        probed = dict(zip(tasks.keys(), extras))
 
     items: list[dict] = []
     for key, meta in PLATFORMS.items():
