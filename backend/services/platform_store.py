@@ -189,6 +189,10 @@ def summary(cfg: dict[str, Any] | None = None, with_sizes: bool = True) -> list[
     rows.append({"key": "downloads", "label": "安装包缓存", "path": str(dl), "kind": "downloads",
                  "exists": dl.exists(),
                  "bytes": dir_bytes(dl) if (with_sizes and dl.exists()) else 0})
+    tunnel = target(cfg, "cloudflared")
+    rows.append({"key": "component:cloudflared", "label": "内网穿透 cloudflared", "path": str(tunnel),
+                 "kind": "component", "exists": tunnel.exists(),
+                 "bytes": dir_bytes(tunnel) if (with_sizes and tunnel.exists()) else 0})
     tmp = root / TMP_DIRNAME
     rows.append({"key": "tmp", "label": "临时解压", "path": str(tmp), "kind": "tmp",
                  "exists": tmp.exists(),

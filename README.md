@@ -1,6 +1,6 @@
 # 本地 AI 工作台
 
-> 当前版本 **0.9.4.0** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
+> 当前版本 **0.9.4.1** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
 
 单进程部署：FastAPI 后端 + 用户前端 + 管理控制台 + OpenAI 兼容 API。模型在本机运行，对话记录存本机 SQLite，不经过云端。
 
@@ -62,7 +62,7 @@ workbench/
 └── README.md
 ```
 
-模型统一放在程序根目录的 `models`，四个可管理的本地引擎（llama.cpp / Ollama / LM Studio / vLLM）全部落在 `platforms` 一个根目录下：程序本体在 `platforms/<引擎>`，下载的安装包缓存在 `platforms/.downloads/<引擎>`，解压与临时文件在 `platforms/.tmp`，pip / Hugging Face 缓存统一在 `data/cache`。模型不再跟着程序目录走：llama.cpp / vLLM 直接读 `models` 根下平铺的 GGUF；Ollama 用 `models/ollama`（blobs + manifests），启动时自动把旧的 `platforms/ollama/models` 搬进来并设置 `OLLAMA_MODELS`；LM Studio 用 `models/lmstudio`（`publisher/model/*.gguf` 层级），并在 `platforms/lmstudio/home/.lmstudio/config.json` 写入 `modelsDirectory` 指过去。子进程的 `TMP` / `TEMP` / `PIP_CACHE_DIR` / `HF_HOME` 都被指回这些目录，安装过程不会往 `%TEMP%`、`%LOCALAPPDATA%`、`~/.cache`、`~/.ollama`、`~/.lmstudio` 里丢东西。路径在控制台「部署 · 下载与安装目录」里可以直接看到（含体积），可在配置里改 `platforms_dir` / `models_dir`，不写死绝对路径；整个 `platforms` 与 `models` 文件夹可以分别整体搬走。
+模型统一放在程序根目录的 `models`，四个可管理的本地引擎（llama.cpp / Ollama / LM Studio / vLLM）和下载型组件全部落在 `platforms` 一个根目录下：程序本体在 `platforms/<引擎>`，内网穿透的 `cloudflared` 在 `platforms/cloudflared`（旧版本放在程序目录旁边的会在启动时自动搬进来），下载的安装包缓存在 `platforms/.downloads/<引擎>`，解压与临时文件在 `platforms/.tmp`，pip / Hugging Face 缓存统一在 `data/cache`。模型不再跟着程序目录走：llama.cpp / vLLM 直接读 `models` 根下平铺的 GGUF；Ollama 用 `models/ollama`（blobs + manifests），启动时自动把旧的 `platforms/ollama/models` 搬进来并设置 `OLLAMA_MODELS`；LM Studio 用 `models/lmstudio`（`publisher/model/*.gguf` 层级），并在 `platforms/lmstudio/home/.lmstudio/config.json` 写入 `modelsDirectory` 指过去。子进程的 `TMP` / `TEMP` / `PIP_CACHE_DIR` / `HF_HOME` 都被指回这些目录，安装过程不会往 `%TEMP%`、`%LOCALAPPDATA%`、`~/.cache`、`~/.ollama`、`~/.lmstudio` 里丢东西。路径在控制台「部署 · 下载与安装目录」里可以直接看到（含体积），可在配置里改 `platforms_dir` / `models_dir`，不写死绝对路径；整个 `platforms` 与 `models` 文件夹可以分别整体搬走。
 
 已安装的平台在卡上只有“启动 / 停止”，不会重新走下载和安装；只有没装过才显示“一键部署”。控制台的状态探测做了并行 + 端口预检（关闭端口不再白等 1 秒），部署页和模型页通常在 1 秒左右返回；开关拉起已装引擎也走同一条轻量启动路径。
 
@@ -319,7 +319,7 @@ llama.cpp、Ollama、LM Studio、vLLM 在部署页是**同一套按钮、同一�
 
 - **LM Studio 装的是无界面版**：下载 `llmster` 官方 zip 解压到 `platforms/lmstudio`，把它的家目录（`HOME` / `USERPROFILE`）指到 `platforms/lmstudio/home` 再跑一次 `bootstrap`，程序、模型、缓存都留在工作台里，不用打开桌面客户端，也不会写 `%LOCALAPPDATA%\lm-studio` 或 `~/.lmstudio`；`lms` 落在 `platforms/lmstudio/home/.lmstudio/bin`。
 - **vLLM 官方不发 Windows 包**（文档明确写了 not support Windows natively），所以 Windows 上这张卡只给三条路线：WSL2 里 `pip install vllm`、Docker 的 `vllm/vllm-openai` 镜像（`-p 8000:8000`）、社区轮子 `SystemPanic/vllm-windows`；Linux 上一键部署会建 `platforms/vllm/.venv` 装 vLLM，不污染工作台自己的依赖，服务起来后把卡片地址填成 `http://IP:8000` 即可。
-- **目录不散落**：安装包在 `platforms/.downloads/<引擎>`、解压临时目录在 `platforms/.tmp`、pip / HF 缓存在 `data/cache`；子进程的 `TMP` / `TEMP` / `PIP_CACHE_DIR` / `HF_HOME` 都由 `platform_store.child_env()` 改指到这些目录，安装全过程不往 `%TEMP%`、`%LOCALAPPDATA%`、`~/.cache`、`~/.ollama`、`~/.lmstudio` 写东西。控制台「下载与安装目录」面板逐项列出路径与体积，接口 `GET /api/system/engine-home`。
+- **目录不散落**：安装包在 `platforms/.downloads/<引擎>`、解压临时目录在 `platforms/.tmp`、内网穿透组件在 `platforms/cloudflared`、pip / HF 缓存在 `data/cache`；子进程的 `TMP` / `TEMP` / `PIP_CACHE_DIR` / `HF_HOME` 都由 `platform_store.child_env()` 改指到这些目录，安装全过程不往 `%TEMP%`、`%LOCALAPPDATA%`、`~/.cache`、`~/.ollama`、`~/.lmstudio` 写东西。控制台「下载与安装目录」面板逐项列出路径与体积，接口 `GET /api/system/engine-home`。
 
 ### 部署好之后怎么用：卡片里直接给，前端自动接
 

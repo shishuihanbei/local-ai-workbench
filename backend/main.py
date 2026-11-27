@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -21,6 +22,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 
 from .config import BASE_DIR, FRONTEND_DIR, LOG_DIR, load_config
+from .services import platform_store
 from .errors import DEFAULT_CODE_BY_STATUS, error_body
 from .version import ASSET_VERSION, VERSION
 from . import logbus
@@ -32,6 +34,9 @@ from .routers import (admin, apikeys, auth, auth_admin, branding, chat, cluster,
                       workbench)
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+# Hugging Face / pip 的下载缓存也落回工作台，避免写用户目录
+os.environ.setdefault("HF_HOME", str(platform_store.hf_home()))
+os.environ.setdefault("PIP_CACHE_DIR", str(platform_store.pip_cache()))
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -44,11 +49,15 @@ log = logging.getLogger("workbench")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        from .services import storage, platform_deploy
+        from .services import storage, platform_deploy, tunnel
         st = storage.ensure()
         log.info("存储目录：模型 %s；平台 %s", st["models_dir"], st["platforms_dir"])
         # 老库升级：把 Ollama / LM Studio 的模型目录收进 models 根下
         platform_deploy.ensure_model_layout()
+        # 老版本把 cloudflared 放在程序目录外，升级时搬进 platforms/cloudflared
+        moved = tunnel.ensure_cloudflared_layout()
+        if moved:
+            log.info("内网穿透组件已收进工作台：%s", moved)
     except Exception:
         log.exception("存储目录初始化失败，将使用配置里的原路径")
     await init_db()

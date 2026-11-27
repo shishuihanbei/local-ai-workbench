@@ -5,7 +5,10 @@ cd "$(dirname "$0")"
 
 PORT="${PORT:-9100}"
 HOST="${HOST:-0.0.0.0}"
-mkdir -p data/logs data/audio data/uploads
+mkdir -p data/logs data/audio data/uploads data/cache/pip data/cache/huggingface platforms/.tmp
+# 缓存留在工作台目录里，不写 ~/.cache
+export PIP_CACHE_DIR="$(pwd)/data/cache/pip"
+export HF_HOME="$(pwd)/data/cache/huggingface"
 
 echo
 echo "本地 AI 工作台 · 一键启动"

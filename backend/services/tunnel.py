@@ -14,14 +14,65 @@ from urllib.parse import urlsplit
 import httpx
 
 from ..config import BASE_DIR, CREATE_NO_WINDOW, DATA_DIR, IS_WINDOWS, load_config
+from . import platform_store
 
 LOG = DATA_DIR / "logs" / "tunnel.log"
 URL_RE = re.compile(r"https://[a-z0-9\-]+\.trycloudflare\.com")
+CLOUDFLARED_NAME = "cloudflared.exe" if IS_WINDOWS else "cloudflared"
+
+
+def cloudflared_dir(cfg: dict[str, Any] | None = None) -> Path:
+    """和四个引擎一样落在 platforms 下，整包搬走时只动工作台一个目录。"""
+    return platform_store.target(cfg or load_config(), "cloudflared")
+
+
+def cloudflared_dest(cfg: dict[str, Any] | None = None) -> Path:
+    return cloudflared_dir(cfg) / CLOUDFLARED_NAME
+
+
+def _legacy_cloudflared_paths() -> list[Path]:
+    """旧版本把 cloudflared 放在程序目录旁边（D:\\AI\\cloudflared），升级时收回来。"""
+    return [BASE_DIR.parent / "cloudflared" / CLOUDFLARED_NAME,
+            BASE_DIR.parent / "cloudflared" / "cloudflared"]
+
+
+def ensure_cloudflared_layout(cfg: dict[str, Any] | None = None) -> Path | None:
+    """把旧版本下载在工作台外面的 cloudflared 搬进 platforms/cloudflared。
+
+    不覆盖已经在新位置的文件；旧目录空了才删，绝不碰其它文件。
+    """
+    cfg = cfg or load_config()
+    dest = cloudflared_dest(cfg)
+    if dest.is_file():
+        return dest
+    for old in _legacy_cloudflared_paths():
+        if not old.is_file():
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.move(str(old), str(dest))
+        except Exception:
+            try:
+                shutil.copy2(old, dest)
+                old.unlink(missing_ok=True)
+            except Exception:
+                return dest if dest.is_file() else None
+        try:
+            old.parent.rmdir()          # 只在已经空了的时候成功
+        except Exception:
+            pass
+        return dest
+    return None
 
 
 def find_cloudflared() -> Path | None:
-    for cand in (BASE_DIR.parent / "cloudflared" / ("cloudflared.exe" if IS_WINDOWS else "cloudflared"),
-                 BASE_DIR.parent / "cloudflared" / "cloudflared",
+    dest = cloudflared_dest()
+    if dest.is_file():
+        return dest
+    ensure_cloudflared_layout()
+    if dest.is_file():
+        return dest
+    for cand in (cloudflared_dir() / "cloudflared",
                  Path("/usr/local/bin/cloudflared"), Path("/usr/bin/cloudflared")):
         if cand.exists():
             return cand
@@ -223,20 +274,19 @@ tunnel = Tunnel()
 
 
 async def download_cloudflared() -> dict[str, Any]:
+    dest = cloudflared_dest()
     if IS_WINDOWS:
         url = ("https://gh-proxy.com/https://github.com/cloudflare/cloudflared/"
                "releases/latest/download/cloudflared-windows-amd64.exe")
-        dest = BASE_DIR.parent / "cloudflared" / "cloudflared.exe"
     else:
         url = ("https://gh-proxy.com/https://github.com/cloudflare/cloudflared/"
                "releases/latest/download/cloudflared-linux-amd64")
-        dest = BASE_DIR.parent / "cloudflared" / "cloudflared"
     dest.parent.mkdir(parents=True, exist_ok=True)
     async with httpx.AsyncClient(timeout=None, follow_redirects=True) as c:
         async with c.stream("GET", url) as r:
             if r.status_code != 200:
                 return {"ok": False, "msg": f"下载失败 HTTP {r.status_code}"}
-            tmp = dest.with_suffix(".part")
+            tmp = dest.with_name(dest.name + ".part")
             with open(tmp, "wb") as f:
                 async for chunk in r.aiter_bytes(1024 * 512):
                     f.write(chunk)

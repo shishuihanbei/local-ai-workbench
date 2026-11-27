@@ -25,9 +25,12 @@ Write-Host "目录：$root"
 Write-Host ""
 
 # ---------------------------------------------------------------- 1. 准备数据目录
-foreach ($d in @("data", "data\logs", "data\audio", "data\uploads")) {
+foreach ($d in @("data", "data\logs", "data\audio", "data\uploads", "data\cache\pip", "data\cache\huggingface", "platforms\.tmp")) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d | Out-Null }
 }
+# 下载缓存也留在工作台里，不写 %LOCALAPPDATA%\pip 或 ~\.cache\huggingface
+$env:PIP_CACHE_DIR = Join-Path $root "data\cache\pip"
+$env:HF_HOME = Join-Path $root "data\cache\huggingface"
 
 # ---------------------------------------------------------------- 2. 找 Python
 $venvPy = Join-Path $root ".venv\Scripts\python.exe"

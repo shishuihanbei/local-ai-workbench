@@ -47,6 +47,13 @@ def _run(key: str, packages: list[str]) -> None:
     env = os.environ.copy()
     env.setdefault("PIP_INDEX_URL", "https://pypi.tuna.tsinghua.edu.cn/simple")
     env.setdefault("PIP_DISABLE_PIP_VERSION_CHECK", "1")
+    try:
+        from . import platform_store
+        env["PIP_CACHE_DIR"] = str(platform_store.pip_cache())
+        env["TMP"] = env["TEMP"] = env["TMPDIR"] = str(platform_store.tmp_root())
+        env["HF_HOME"] = str(platform_store.hf_home())
+    except Exception:
+        pass
     creationflags = 0x08000000 if os.name == "nt" else 0
     tail: list[str] = []
     try:

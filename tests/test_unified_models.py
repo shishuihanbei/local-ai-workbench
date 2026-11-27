@@ -53,3 +53,28 @@ def test_summary_lists_engine_model_dirs_under_models(tmp_path):
     assert by_key["models"]["path"] == str(tmp_path / "models")
     assert by_key["models:ollama"]["path"] == str(tmp_path / "models" / "ollama")
     assert by_key["models:lmstudio"]["path"] == str(tmp_path / "models" / "lmstudio")
+
+
+def test_cloudflared_moves_into_platforms(tmp_path, monkeypatch):
+    """旧版本下载在程序目录外的 cloudflared，要收进 platforms/cloudflared。"""
+    from backend.services import tunnel
+
+    cfg = _cfg(tmp_path)
+    legacy = tmp_path / "outside" / "cloudflared.exe"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"exe")
+    monkeypatch.setattr(tunnel, "_legacy_cloudflared_paths", lambda: [legacy])
+
+    dest = tunnel.ensure_cloudflared_layout(cfg)
+    assert dest == tmp_path / "platforms" / "cloudflared" / "cloudflared.exe"
+    assert dest.read_bytes() == b"exe"
+    assert not legacy.exists()
+    assert not legacy.parent.exists()
+
+
+def test_summary_lists_cloudflared_under_platforms(tmp_path):
+    from backend.services import platform_store
+
+    rows = platform_store.summary(_cfg(tmp_path), with_sizes=False)
+    by_key = {r["key"]: r for r in rows}
+    assert by_key["component:cloudflared"]["path"] == str(tmp_path / "platforms" / "cloudflared")
