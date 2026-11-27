@@ -604,3 +604,264 @@ html[data-theme="dark"] .fc-ic.purple { background: #261f3e; color: #bda8ff; }
 .wb-busy-list b { color: var(--ui-ink); font-weight: 600; }
 .wb-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .wb-dialog-actions .btn { min-height: 34px; padding: 0 14px; font-size: 12.5px; }
+
+/* ==========================================================================
+   豆包式聊天页收敛：更大字号、更宽松留白、浅色侧栏与圆角输入区
+   ========================================================================== */
+:root {
+  --sidebar-w: 272px;
+  --chat-font: 16px;
+  --ui-ink: #17191f;
+  --ui-text: #424a58;
+  --ui-muted: #8b93a3;
+  --ui-line: #e9ecf1;
+  --ui-soft: #f4f6f8;
+  --brand: #2f6bff;
+  --brand-2: #6a8cff;
+  --brand-ink: #1f5eff;
+  --brand-soft: #eef4ff;
+}
+
+html[data-theme="dark"] {
+  --ui-ink: #eef1f8;
+  --ui-text: #c6cedb;
+  --ui-muted: #8d98aa;
+  --ui-line: #293143;
+  --ui-soft: #1b2230;
+  --brand: #7f92ff;
+  --brand-2: #93a6ff;
+  --brand-ink: #b7c2ff;
+  --brand-soft: #1d2540;
+}
+
+body { font-size: 14.5px; }
+
+/* ------------------------------ 侧栏 ------------------------------ */
+.sidebar {
+  background: #f7f8fa;
+  border-right: 1px solid #eceef2;
+}
+.sidebar-head { padding: 18px 16px 12px; }
+.sidebar .brand-lockup b { font-size: 15px; font-weight: 650; }
+.sidebar .brand-lockup small { margin-top: 3px; font-size: 11px; }
+
+.new-chat {
+  min-height: 44px;
+  margin: 4px 12px 14px;
+  border: 1px solid #e7eaef;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ui-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  box-shadow: 0 1px 2px rgba(20, 28, 45, .05);
+}
+.new-chat:hover { background: #f2f4f8; border-color: #dfe4ec; }
+.new-chat svg { width: 16px; height: 16px; color: var(--brand); }
+.new-chat kbd, .new-chat em { color: var(--ui-muted); border-color: var(--ui-line); }
+
+.side-label { margin: 10px 18px 6px; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.side-tools { gap: 3px; padding: 0 10px; }
+.side-tools button,
+.side-tools .side-workbench,
+.side-tools .side-caps {
+  height: 36px;
+  gap: 10px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.side-tools button svg,
+.side-tools button .front-icon-slot { width: 16px; height: 16px; }
+
+.side-chat {
+  height: 36px;
+  gap: 10px;
+  margin: 0 10px 2px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: 13px;
+  box-shadow: none;
+}
+.side-chat svg { width: 16px; height: 16px; color: var(--brand); }
+.side-chat em { font-size: 10.5px; }
+
+.all-features {
+  height: 36px;
+  margin: 12px 10px 0;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+.all-features svg { width: 15px; height: 15px; }
+.all-features em { font-size: 10px; }
+
+.side-search { margin: 10px 14px 0; }
+.side-search input { height: 36px; border-radius: 10px; font-size: 13px; }
+.side-search svg { width: 14px; height: 14px; }
+
+.conv-head { margin-top: 14px; font-size: 11px; }
+.conv-head .linkbtn { font-size: 11px; }
+.conv-item { min-height: 42px; padding: 7px 44px 7px 10px; border-radius: 10px; font-size: 13px; }
+.conv-item .conv-ico { width: 22px; height: 22px; padding: 4px; }
+.conv-item b { font-size: 13px; font-weight: 500; }
+.conv-item small { margin-top: 3px; font-size: 11px; }
+
+.user-row { margin-top: 10px; padding-top: 10px; }
+.user-chip { height: 40px; border-radius: 10px; }
+.user-chip .avatar { width: 30px; height: 30px; border-radius: 9px; font-size: 11px; }
+.user-chip b { font-size: 13px; font-weight: 600; }
+.user-chip small { margin-top: 2px; font-size: 11px; }
+.console-entry { height: 40px; border-radius: 10px; font-size: 12px; }
+
+/* ------------------------------ 顶栏 ------------------------------ */
+.topbar {
+  min-height: 60px;
+  padding: 0 24px;
+  border-bottom: 1px solid #f0f1f4;
+  background: transparent;
+}
+.topbar .top-title h3 { font-size: 16px; font-weight: 600; }
+.topbar .top-title span { margin-top: 3px; font-size: 12px; }
+.top-model { max-width: 220px; }
+.top-model select {
+  height: 36px;
+  min-height: 36px;
+  border-radius: 10px;
+  background: var(--ui-soft);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.top-model svg { width: 14px; height: 14px; }
+
+/* ------------------------------ 主区与欢迎页 ------------------------------ */
+.main { background: #f7f8fa; }
+.chat-scroll { background: transparent; }
+.messages { width: min(860px, calc(100% - 40px)); padding: 32px 0 20px; }
+.welcome { width: min(860px, calc(100% - 40px)); padding: clamp(70px, 12vh, 120px) 0 30px; }
+.welcome h2 { font-size: 32px; font-weight: 650; }
+.welcome p { margin-top: 14px; max-width: 560px; font-size: 14px; line-height: 1.75; }
+.suggestions { max-width: 760px; gap: 12px; margin-top: 28px; }
+.suggestions button {
+  padding: 14px 16px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.quick-card b { font-size: 13px; }
+.quick-card small { font-size: 11px; }
+
+/* ------------------------------ 消息 ------------------------------ */
+.msg { gap: 14px; padding: 20px 0; }
+.msg-avatar {
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+.msg-author { margin: 2px 0 8px; gap: 8px; }
+.msg-author b { font-size: 13px; }
+.msg-author-tag { font-size: 10.5px; }
+.msg-text { font-size: var(--chat-font); line-height: 1.8; }
+.msg-user .bubble {
+  max-width: min(76%, 680px);
+  padding: 13px 16px;
+  border-radius: 18px 18px 6px 18px;
+  font-size: var(--chat-font);
+  line-height: 1.7;
+}
+.msg-image { max-width: 240px; border-radius: 11px; }
+.msg-image img { max-width: 240px; max-height: 170px; }
+.msg-actions { gap: 4px; margin-top: 8px; }
+.msg-actions button { height: 28px; padding: 0 9px; border-radius: 8px; font-size: 11px; }
+.msg-actions svg { width: 14px; height: 14px; }
+.md p, .md li { font-size: 15.5px; }
+.md table { font-size: .96em; }
+.md-code pre code { font-size: 13.5px; }
+.reasoning summary { font-size: 12.5px; }
+.reasoning pre { font-size: 13px; }
+
+/* ------------------------------ 输入区 ------------------------------ */
+.composer-wrap { padding: 0 24px 16px; background: transparent; }
+.composer {
+  width: min(860px, 100%);
+  min-height: 112px;
+  padding: 14px 16px 12px;
+  border: 1px solid #e6e9ef;
+  border-radius: 22px;
+  box-shadow: 0 10px 30px rgba(30, 42, 70, .08);
+}
+.composer:focus-within {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--ui-line));
+  box-shadow: 0 14px 38px rgba(30, 42, 70, .10);
+}
+.composer textarea {
+  min-height: 58px;
+  padding: 4px 2px 10px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+.composer-actions { gap: 10px; padding: 10px 2px 0; border-top: 1px solid #f0f1f4; }
+.composer-left { gap: 8px; }
+.agent-inline {
+  height: 32px;
+  border: 1px solid var(--ui-line);
+  border-radius: 10px;
+  background: var(--ui-soft);
+  color: var(--ui-text);
+  font-size: 12px;
+}
+.agent-inline select { font-size: 12px; }
+.toolbtn {
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--ui-line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ui-text);
+  font-size: 12px;
+  font-weight: 500;
+}
+.toolbtn:hover { background: var(--ui-soft); border-color: color-mix(in srgb, var(--brand) 28%, var(--ui-line)); }
+.toolbtn svg { width: 14px; height: 14px; }
+.skill-btn.active, .lib-btn.active, .web-btn.active {
+  border-color: color-mix(in srgb, var(--brand) 30%, var(--ui-line));
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+}
+.fmt-pick { height: 32px; border: 1px solid var(--ui-line); border-radius: 10px; background: var(--panel); color: var(--ui-text); }
+.fmt-pick select { font-size: 12px; }
+.composer-buttons { gap: 8px; }
+.composer-buttons .attach-btn { width: 34px; height: 34px; border-radius: 10px; }
+.composer-buttons .attach-btn svg { width: 15px; height: 15px; }
+.sendbtn { width: 38px; height: 38px; border-radius: 50%; }
+.sendbtn svg { width: 16px; height: 16px; }
+.composer-foot { width: min(860px, 100%); margin: 8px auto 0; font-size: 11.5px; }
+
+.attach-list { gap: 8px; padding: 3px 2px 8px; }
+.attach-card { max-width: 240px; padding: 6px 28px 6px 7px; border-radius: 11px; }
+.attach-card img, .attach-file-ico { width: 34px; height: 34px; border-radius: 8px; }
+.attach-meta b { max-width: 140px; font-size: 12.5px; }
+.attach-meta span { margin-top: 2px; font-size: 11px; }
+.attach-vision-hint { margin: 0 2px 6px; padding: 7px 10px; border-radius: 10px; font-size: 12px; line-height: 1.55; }
+
+@media (max-width: 900px) {
+  .composer-wrap { padding: 0 14px max(12px, env(safe-area-inset-bottom)); }
+  .composer { min-height: 108px; padding: 12px 12px 10px; border-radius: 18px; }
+  .messages, .welcome { width: calc(100% - 28px); }
+}
+
+/* ------------------------------ 暗色适配 ------------------------------ */
+html[data-theme="dark"] .sidebar { background: #11151d; }
+html[data-theme="dark"] .new-chat { background: #1b2230; border-color: #293143; color: var(--ui-ink); }
+html[data-theme="dark"] .new-chat:hover { background: #222a38; }
+html[data-theme="dark"] .main { background: #0e1118; }
+html[data-theme="dark"] .topbar { border-bottom-color: #222936; }
+html[data-theme="dark"] .composer { border-color: #293143; }
+html[data-theme="dark"] .composer-actions { border-top-color: #222936; }
+html[data-theme="dark"] .toolbtn,
+html[data-theme="dark"] .fmt-pick { border-color: #293143; background: var(--ui-soft); }
