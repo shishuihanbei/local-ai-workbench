@@ -35,6 +35,10 @@
     const agent = S.agentId ? (S.agents.find((a) => Number(a.id) === Number(S.agentId)) || null) : null;
     if (!message && attachments.length) message = "请阅读这些附件并总结要点。";
     if (!message) return;
+    const imageCount = attachments.filter((f) => f.kind === "image").length;
+    if (imageCount && !model.vision) {
+      toast("当前模型不能直接看图：本轮只带 OCR 文字，换视觉模型后可看原图");
+    }
 
     if (!regen) {
       S.lastUserMessage = message;
@@ -79,6 +83,7 @@
       library_docs: [...S.librarySelected],
       regenerate: regen,
       attachments: attachments.map((f) => f.id),
+      vision: !!model.vision,
       skill: skill ? skill.id : null,
       web: !!web,
       agent_id: S.agentId || null,

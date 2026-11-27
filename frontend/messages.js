@@ -13,10 +13,15 @@
     const webHtml = meta.web ? `<div class="msg-web"><svg><use href="#i-search"/></svg>联网检索</div>` : "";
     const fmtHtml = meta.output_format && OUT_FORMATS[meta.output_format]
       ? `<div class="msg-web"><svg><use href="#i-file"/></svg>${esc(OUT_FORMATS[meta.output_format])}</div>` : "";
-    const filesHtml = atts.length
-      ? `<div class="msg-files">${atts.map((f) => `<span class="msg-file"><svg><use href="#i-file"/></svg><span>${esc(f.name || "附件")}</span></span>`).join("")}</div>`
+    const images = atts.filter((f) => f.kind === "image" && f.url);
+    const docs = atts.filter((f) => f.kind !== "image");
+    const imagesHtml = images.length
+      ? `<div class="msg-images">${images.map((f) => `<button type="button" class="msg-image" data-img-preview="${esc(f.url)}" data-img-name="${esc(f.name || "图片")}" title="点击放大"><img src="${esc(f.url)}" alt="${esc(f.name || "图片")}" loading="lazy"></button>`).join("")}</div>`
       : "";
-    row.innerHTML = `<div class="bubble">${agentHtml}${skillHtml}${webHtml}${fmtHtml}${filesHtml}<div class="msg-text">${esc(text)}</div></div>`;
+    const filesHtml = docs.length
+      ? `<div class="msg-files">${docs.map((f) => `<span class="msg-file"><svg><use href="#i-file"/></svg><span>${esc(f.name || "附件")}</span></span>`).join("")}</div>`
+      : "";
+    row.innerHTML = `<div class="bubble">${agentHtml}${skillHtml}${webHtml}${fmtHtml}${imagesHtml}${filesHtml}<div class="msg-text">${esc(text)}</div></div>`;
     if (!animate) row.style.animation = "none";
     $("#messages").appendChild(row);
     scrollBottom(true);
@@ -356,3 +361,19 @@
     return `<div class="md">${html}${opts.streaming ? '<span class="md-caret" aria-hidden="true"></span>' : ""}</div>`;
   }
 
+  function closeImagePreview() {
+    document.querySelector(".img-viewer")?.remove();
+  }
+
+  function openImagePreview(src, name) {
+    closeImagePreview();
+    const box = document.createElement("div");
+    box.className = "img-viewer";
+    box.innerHTML = `<button type="button" class="img-viewer-close" aria-label="关闭">×</button>
+      <img src="${esc(src)}" alt="${esc(name || "图片")}">
+      <div class="img-viewer-name">${esc(name || "图片")}</div>`;
+    box.addEventListener("click", (ev) => {
+      if (ev.target.closest(".img-viewer-close") || ev.target === box) closeImagePreview();
+    });
+    document.body.appendChild(box);
+  }

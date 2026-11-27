@@ -41,7 +41,8 @@ def test_platform_models_are_classified_by_kind(monkeypatch):
         return [{
             "key": "lmstudio", "name": "LM Studio", "healthy": True,
             "base_url": "http://127.0.0.1:1234",
-            "models": ["text-embedding-nomic-embed-text-v1.5", "qwen2.5-7b-instruct"],
+            "models": ["text-embedding-nomic-embed-text-v1.5", "qwen2.5-7b-instruct",
+                       "qwen2.5vl:3b"],
             "homepage": "https://lmstudio.ai/", "multimodal": "部分",
         }]
 
@@ -53,8 +54,11 @@ def test_platform_models_are_classified_by_kind(monkeypatch):
     assert by_key["text-embedding-nomic-embed-text-v1.5"]["model_kind"] == "embedding"
     assert by_key["qwen2.5-7b-instruct"]["category"] == "text"
     assert by_key["qwen2.5-7b-instruct"]["model_kind"] == "chat"
+    assert by_key["qwen2.5vl:3b"]["category"] == "vision"
+    assert by_key["qwen2.5vl:3b"]["model_kind"] == "vision"
+    assert by_key["qwen2.5vl:3b"]["vision"] is True
 
 
-def test_frontend_chat_dropdown_only_takes_text_and_code():
+def test_frontend_chat_dropdown_takes_text_code_and_vision():
     src = (ROOT / "frontend/models.js").read_text(encoding="utf-8")
-    assert '["text", "code"].includes(m.category || "text")' in src
+    assert '["text", "code", "vision"].includes(m.category || "text")' in src

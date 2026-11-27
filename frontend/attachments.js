@@ -8,6 +8,51 @@
     return `${(size / 1024 / 1024).toFixed(1)} MB`;
   }
 
+  function hasImageAttachments() {
+    return (S.attachments || []).some((f) => f.kind === "image");
+  }
+
+  function renderVisionHint() {
+    const hint = $("#attachVisionHint");
+    if (!hint) return;
+    if (!hasImageAttachments()) {
+      hint.hidden = true;
+      hint.textContent = "";
+      hint.classList.remove("is-warn");
+      return;
+    }
+    hint.hidden = false;
+    const model = selectedModel();
+    if (model && model.vision) {
+      hint.classList.remove("is-warn");
+      hint.textContent = `当前模型 ${model.label || model.key} 会直接读取图片。`;
+      return;
+    }
+    const vision = (S.models || []).find((m) => m.vision && modelRunnable(m));
+    hint.classList.add("is-warn");
+    hint.textContent = vision
+      ? `当前模型不能看图；可用 ${modelLabel(vision)}。`
+      : "当前没有可用的视觉模型：先到「模型」页拉取 Qwen2.5-VL 3B 等，或仅用 OCR 文字。";
+  }
+
+  function preferVisionModel() {
+    if (!hasImageAttachments()) return false;
+    const model = selectedModel();
+    if (model && model.vision) {
+      renderVisionHint();
+      return true;
+    }
+    const vision = (S.models || []).find((m) => m.vision && modelRunnable(m));
+    if (vision) {
+      setModel(vision.key);
+      toast(`已切换到视觉模型 ${modelLabel(vision)} 来读取图片`);
+      renderVisionHint();
+      return true;
+    }
+    renderVisionHint();
+    return false;
+  }
+
   function renderAttachments() {
     const box = $("#attachList");
     if (!box) return;
@@ -20,6 +65,7 @@
         <span class="attach-meta"><b>${esc(f.name)}</b><span>${FILE_KINDS[f.kind] || "文件"} · ${fmtBytes(f.size)}</span></span>
         <button class="attach-remove" type="button" data-remove-att="${f.id}" title="移除"><svg><use href="#i-close"/></svg></button>
       </div>`).join("");
+    renderVisionHint();
   }
 
   async function removeAttachment(id) {
@@ -91,6 +137,7 @@
       }
     }
     if (libAdded) toast(`已同时加入个人资料库 ${libAdded} 个文件，可在聊天框「资料库」中反复选用`);
+    if (hasImageAttachments()) preferVisionModel();
     S.uploading = false;
     $("#attachBtn").disabled = false;
     $("#fileInput").value = "";

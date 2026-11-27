@@ -33,6 +33,35 @@ def is_embedding_model(model_id: str) -> bool:
     return bool(re.search(r"(^|-)(e5|gte)(-|$)", s))
 
 
+def is_vision_model(model_id: str) -> bool:
+    """按常见命名识别能直接看图片的平台模型。
+
+    平台 /v1/models 不返回 modalities，只能按家族名判断：
+    Qwen-VL / Qwen2.5-VL / Qwen3-VL、LLaVA、MiniCPM-V、InternVL、Pixtral、
+    Moondream、Gemma 3（4B 以上）、Llama 3.2 Vision、Mistral Small 3.1、
+    Phi-4 Multimodal、SmolVLM、Idefics、CogVLM、Ovis、Qwen-Omni 等。
+    识别偏保守：宁可让用户手动确认，也不把纯文本模型误标成视觉。
+    """
+    s = re.sub(r"[^a-z0-9.]+", "-", str(model_id or "").lower()).strip("-")
+    if not s:
+        return False
+    if is_embedding_model(s):
+        return False
+    if "qwen" in s and ("vl" in s or "omni" in s):
+        return True
+    if any(k in s for k in (
+            "llava", "minicpm-v", "internvl", "pixtral", "moondream",
+            "smolvlm", "idefics", "cogvlm", "ovis", "llama-3.2-vision",
+            "llama3.2-vision", "mistral-small-3.1", "mistral-small3.1",
+            "phi-4-multimodal", "phi-3.5-vision", "phi-3-vision",
+            "granite-3.2-vision", "granite3.2-vision", "video-llava",
+            "llava-next-video", "videollama", "minicpm-o")):
+        return True
+    if "gemma-3" in s or "gemma3" in s:
+        return not bool(re.search(r"(^|-)(1b|270m)(-|$)", s))
+    return bool(re.search(r"(^|-)(vl|vision)(-|$)", s))
+
+
 def invalidate() -> None:
     """平台地址、部署状态或模型列表变化后清空缓存。"""
     _CACHE["at"] = 0.0
@@ -79,6 +108,13 @@ async def reachable(cfg: dict[str, Any] | None = None, ttl: float = _TTL_SECONDS
                 continue
             seen.add(mid)
             embedding = is_embedding_model(mid)
+            vision = (not embedding) and is_vision_model(mid)
+            if embedding:
+                category, label, kind = "embedding", "向量 / 检索", "embedding"
+            elif vision:
+                category, label, kind = "vision", "多模态 / 视觉", "vision"
+            else:
+                category, label, kind = "text", "文字 / 对话", "chat"
             out.append({
                 "key": mid,
                 "alias": "",
@@ -90,9 +126,11 @@ async def reachable(cfg: dict[str, Any] | None = None, ttl: float = _TTL_SECONDS
                 "repo": "",
                 "fit": "unknown",
                 "sort": 800,
-                "category": "embedding" if embedding else "text",
-                "category_label": "向量 / 检索" if embedding else "文字 / 对话",
-                "model_kind": "embedding" if embedding else "chat",
+                "category": category,
+                "category_label": label,
+                "model_kind": kind,
+                "vision": vision,
+                "modalities": ["text", "image"] if vision else ["text"],
                 "engine": str(item.get("key") or ""),
                 "homepage": item.get("homepage") or "",
                 "installable": False,

@@ -247,6 +247,8 @@ async def catalog(user: dict = Depends(current_user)):
             "installable": installable,
             "category": category,
             "category_label": CATEGORY_LABELS.get(category, category),
+            "vision": category == "vision",
+            "modalities": ["text", "image"] if category == "vision" else ["text"],
             "engine": engine,
             "engine_repo": repo,
             "engine_ready": bool(engine_info and engine_info["ready"]),

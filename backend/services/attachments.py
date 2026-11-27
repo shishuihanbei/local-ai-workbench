@@ -1,7 +1,8 @@
-"""聊天附件：安全落盘、正文提取、上下文拼接。"""
+"""聊天附件：安全落盘、正文提取、上下文拼接，以及视觉模型的图片输入。"""
 from __future__ import annotations
 
 import asyncio
+import base64
 import io
 import logging
 import re
@@ -27,6 +28,12 @@ TEXT_EXTS = {
     "html", "htm", "css", "xml", "yaml", "yml", "ini", "conf", "sql", "sh", "bat", "ps1",
 }
 DOC_EXTS = {"pdf", "docx", "xlsx", "xlsm", "xls", "pptx"}
+
+# 视觉模型只看图，不需要 OCR；原图先缩到长边 1600，再压成 JPEG，兼顾截图文字和请求体积。
+VISION_MAX_IMAGES = 4
+VISION_MAX_SIDE = 1600
+VISION_JPEG_QUALITY = 86
+VISION_MAX_BYTES = 3 * 1024 * 1024
 
 _OCR_ENGINE = None
 _OCR_LOCK = threading.Lock()
@@ -83,6 +90,75 @@ def _ocr_image_text(raw: bytes) -> str:
     except Exception as e:
         log.warning("图片 OCR 失败: %s", e)
         return ""
+
+
+def image_data_url(raw: bytes) -> str:
+    """把已落盘的图片压成视觉模型能直接吃的数据 URL。
+
+    优先保证截图里的文字可读：长边最多 1600，JPEG 质量 86；
+    超过 3MB 时再降一档，避免一条消息带 4 张图把请求撑爆。
+    """
+    from PIL import Image, ImageOps
+
+    Image.MAX_IMAGE_PIXELS = 60_000_000
+    img = Image.open(io.BytesIO(raw))
+    img = ImageOps.exif_transpose(img)
+    if getattr(img, "n_frames", 1) > 1:
+        img.seek(0)
+    if img.mode in ("RGBA", "LA", "P"):
+        base = Image.new("RGB", img.size, (255, 255, 255))
+        base.paste(img.convert("RGBA"), mask=img.convert("RGBA").split()[-1])
+        img = base
+    else:
+        img = img.convert("RGB")
+    if max(img.size) > VISION_MAX_SIDE:
+        img.thumbnail((VISION_MAX_SIDE, VISION_MAX_SIDE), Image.Resampling.LANCZOS)
+    quality = VISION_JPEG_QUALITY
+    while True:
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality, optimize=True)
+        data = buf.getvalue()
+        if len(data) <= VISION_MAX_BYTES or quality <= 60:
+            break
+        quality -= 8
+    return "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")
+
+
+async def vision_payload(rows: list[dict[str, Any]], max_images: int = VISION_MAX_IMAGES
+                         ) -> tuple[list[dict], list[int]]:
+    """转图并返回 (内容块, 已成功转成图片的附件 id)。
+
+    id 用来告诉 context_block 只跳过这些图的 OCR；转图失败的图仍保留 OCR，
+    避免第 5 张图或坏图被彻底丢掉。
+    """
+    parts: list[dict] = []
+    used_ids: list[int] = []
+    for row in rows:
+        if len(parts) >= max_images:
+            break
+        if row.get("kind") != "image":
+            continue
+        stored = str(row.get("stored_name") or "")
+        if not stored:
+            continue
+        path = UPLOAD_DIR / stored
+        if not path.exists():
+            continue
+        try:
+            raw = await asyncio.to_thread(path.read_bytes)
+            url = await asyncio.to_thread(image_data_url, raw)
+        except Exception as e:
+            log.warning("图片转视觉输入失败 %s: %s", row.get("name"), e)
+            continue
+        parts.append({"type": "image_url", "image_url": {"url": url}})
+        if row.get("id") is not None:
+            used_ids.append(int(row["id"]))
+    return parts, used_ids
+
+
+async def vision_images(rows: list[dict[str, Any]], max_images: int = VISION_MAX_IMAGES) -> list[dict]:
+    """把图片附件转成 OpenAI 兼容的 image_url 内容块；读不到就跳过。"""
+    return (await vision_payload(rows, max_images))[0]
 
 
 def _pdf_text(raw: bytes) -> tuple[str, int]:
@@ -392,10 +468,14 @@ async def load_many(user_id: int, ids: list[int]) -> list[dict[str, Any]]:
         (user_id, *clean))
 
 
-def context_block(rows: list[dict[str, Any]]) -> str:
+def context_block(rows: list[dict[str, Any]], skip_images: bool = False,
+                  skip_image_ids: set[int] | None = None) -> str:
     parts = []
     used = 0
+    skip_ids = skip_image_ids or set()
     for row in rows:
+        if row.get("kind") == "image" and (skip_images or int(row.get("id") or -1) in skip_ids):
+            continue
         header = f"【附件：{row.get('name') or '未命名'}】"
         text = str(row.get("text_content") or "").strip()
         if text:

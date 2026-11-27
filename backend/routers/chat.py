@@ -20,8 +20,8 @@ from ..config import load_config
 from ..db import audit, execute, fetch_all, fetch_one, parse_meta
 from ..security import current_user, user_from_any_token
 from ..services import (access, admission, attachments, cluster, collab, docgen, kb,
-                        library, llama, memory, model_fit, model_usage, moderation, prompts,
-                        quota, routing, skills, tts, websearch)
+                        library, llama, memory, model_fit, model_usage, moderation,
+                        prompts, quota, routing, skills, tts, websearch)
 
 router = APIRouter(prefix="/api", tags=["chat"])
 log = logging.getLogger(__name__)
@@ -52,6 +52,7 @@ class ChatBody(BaseModel):
     library_docs: list[int] = Field(default_factory=list)
     regenerate: bool = False
     attachments: list[int] = Field(default_factory=list)
+    vision: bool = False          # 当前模型是视觉模型，图片以 image_url 直接送入
     skill: str | None = None
     web: bool = False
     agent_id: int | None = None
@@ -155,6 +156,24 @@ def _tokens(text: str) -> int:
     return max(1, len(text) // 2)
 
 
+def _content_with_images(text: str, images: list[dict]) -> str | list[dict]:
+    """OpenAI 兼容的视觉消息：文字块 + image_url 块。"""
+    if not images:
+        return text
+    parts: list[dict] = [{"type": "text", "text": text or "请查看这张图片。"}]
+    parts.extend(images)
+    return parts
+
+
+def _content_text(message: dict) -> str:
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(str(p.get("text") or "") for p in content if isinstance(p, dict))
+    return ""
+
+
 async def _build_context(user: dict, body: ChatBody, cfg: dict,
                          att_rows: list[dict] | None = None,
                          skill: dict | None = None) -> tuple[list[dict], int, dict]:
@@ -167,7 +186,11 @@ async def _build_context(user: dict, body: ChatBody, cfg: dict,
         skill = skills.get(body.skill)
     if att_rows is None:
         att_rows = await attachments.load_many(user["id"], body.attachments) if not body.regenerate else []
-    att_text = attachments.context_block(att_rows)
+    if body.vision:
+        current_images, current_image_ids = await attachments.vision_payload(att_rows)
+    else:
+        current_images, current_image_ids = [], []
+    att_text = attachments.context_block(att_rows, skip_image_ids=set(current_image_ids))
     link_unreadable = False
     link_title = ""
     if att_rows:
@@ -182,6 +205,12 @@ async def _build_context(user: dict, body: ChatBody, cfg: dict,
                     link_title = (m.group(1).strip() if m else "")[:120]
             except Exception:
                 pass
+    if current_images:
+        system_prompt += ("\n\n【图片输入】用户本轮带了 "
+                          f"{len(current_images)} 张图片/截图，已直接作为视觉输入发送给你。"
+                          "先看图片内容再回答；需要读文字时以图片为准，OCR 文本只作辅助。"
+                          "看不清、被裁掉或无法判断的地方要直接说明，不要凭猜测补全。")
+        meta["vision_images"] = len(current_images)
     if att_rows:
         meta["attachments"] = [attachments.public(r) for r in att_rows]
     if skill:
@@ -327,11 +356,26 @@ async def _build_context(user: dict, body: ChatBody, cfg: dict,
         history.reverse()
         total = 0
         keep: list[dict] = []
+        hist_images_left = max(0, attachments.VISION_MAX_IMAGES - len(current_images))
+        hist_image_msgs = 0
         for h in reversed(history):
             content = str(h["content"] or "")
             hist_meta = parse_meta(h.get("meta"))
             ids = [a.get("id") for a in hist_meta.get("attachments", []) if isinstance(a, dict)]
-            if h["role"] == "user" and ids:
+            hist_images: list[dict] = []
+            hist_ids: list[int] = []
+            if body.vision and h["role"] == "user" and ids:
+                rows = await attachments.load_many(user["id"], ids)
+                if hist_images_left > 0 and hist_image_msgs < 2:
+                    hist_images, hist_ids = await attachments.vision_payload(rows, hist_images_left)
+                # 只跳过已成功转成视觉输入的图；预算外或坏图继续带 OCR。
+                block = attachments.context_block(rows, skip_image_ids=set(hist_ids))
+                if block:
+                    content += "\n\n" + block
+                if hist_images:
+                    hist_images_left -= len(hist_images)
+                    hist_image_msgs += 1
+            elif h["role"] == "user" and ids:
                 rows = await attachments.load_many(user["id"], ids)
                 block = attachments.context_block(rows)
                 if block:
@@ -339,14 +383,14 @@ async def _build_context(user: dict, body: ChatBody, cfg: dict,
             total += len(content)
             if total > MAX_CONTEXT_CHARS:
                 break
-            keep.append({"role": h["role"], "content": content})
+            keep.append({"role": h["role"], "content": _content_with_images(content, hist_images)})
         keep.reverse()
         msgs.extend(keep)
     if not body.regenerate:
         user_content = body.message
         if att_text:
             user_content = f"{user_content}\n\n{att_text}"
-        msgs.append({"role": "user", "content": user_content})
+        msgs.append({"role": "user", "content": _content_with_images(user_content, current_images)})
     return msgs, (body.max_tokens or 2048), meta
 
 
@@ -382,11 +426,15 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
         if first:
             body.model = first
     fmt_pre = docgen.resolve_format(body.output_format, body.message)
-    model_switch = await model_fit.maybe_escalate(body, cfg, fmt_pre or "")
-    if model_switch and await access.can_use(user, model_switch["to"]):
-        body.model = model_switch["to"]
-    else:
+    # 视觉模型在会话里时不要再按“任务复杂”切到纯文本大模型，否则图片会被丢掉。
+    if body.vision:
         model_switch = None
+    else:
+        model_switch = await model_fit.maybe_escalate(body, cfg, fmt_pre or "")
+        if model_switch and await access.can_use(user, model_switch["to"]):
+            body.model = model_switch["to"]
+        else:
+            model_switch = None
     guard = await moderation.guard_input(
         body.message, user=user, model=body.model or "", conversation_id=body.conversation_id)
     if guard["blocked"]:
@@ -454,7 +502,7 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
         "temperature": body.temperature if body.temperature is not None else 0.7,
         "max_tokens": max_tokens,
     }
-    prompt_text = "\n".join(m.get("content", "") for m in msgs)[:12000]
+    prompt_text = "\n".join(_content_text(m) for m in msgs)[:12000]
     ctx["prompt"] = prompt_text
     ctx["prompt_hash"] = pipeline.prompt_hash(model_name, prompt_text, params)
     await pipeline.run("before_call", ctx)

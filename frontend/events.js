@@ -2,6 +2,13 @@
 "use strict";
   /* ------------------------------------------------------------------ 事件 */
   function bindEvents() {
+    document.addEventListener("click", (ev) => {
+      const img = ev.target.closest("[data-img-preview]");
+      if (img) openImagePreview(img.dataset.imgPreview, img.dataset.imgName);
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") closeImagePreview();
+    });
     $("#authForm").addEventListener("submit", submitAuth);
     $("#otpForm").addEventListener("submit", submitOtp);
     $("#otpSend").addEventListener("click", sendOtp);

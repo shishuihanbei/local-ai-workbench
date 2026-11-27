@@ -3,7 +3,8 @@
   /* ------------------------------------------------------------------ 模型 */
   function modelLabel(m) {
     const base = String(m.label || m.key || "").trim() || m.key;
-    const tag = m.light ? "（轻量测试）" : "";
+    const tags = [m.vision ? "视觉" : "", m.light ? "轻量测试" : ""].filter(Boolean);
+    const tag = tags.length ? `（${tags.join(" · ")}）` : "";
     return (m.source_platform ? `${base} · ${m.source_platform}` : base) + tag;
   }
 
@@ -30,7 +31,7 @@
       S.localEnabled = d.local_enabled !== false;
       S.models = (d.items || []).filter((m) =>
         m.available !== false && m.downloaded !== false
-        && ["text", "code"].includes(m.category || "text")
+        && ["text", "code", "vision"].includes(m.category || "text")
         && modelSelectable(m, d));
       S.serverModel = S.localEnabled ? ((d.server && d.server.model) || "") : "";
     } catch {
