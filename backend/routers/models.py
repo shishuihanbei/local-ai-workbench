@@ -233,7 +233,7 @@ async def catalog(user: dict = Depends(current_user)):
             "managed": bool(ollama_info.get("managed")),
             "path": ollama_info.get("path") or "",
             "models_path": ollama_info.get("models_path") or "",
-            "running": bool(ollama_ids),
+            "running": bool(ollama_healthy),
             "pulled": ollama_ids,
             "pull": platform_deploy.pull_state(),
         },
