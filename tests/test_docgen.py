@@ -44,6 +44,33 @@ def test_format_resolve():
     assert docgen.resolve_format(None, "今天天气怎么样") is None
 
 
+def test_all_file_formats_recognized_after_chinese():
+    """中文后面紧跟英文格式名也要识别；转换句取最后的目标格式。"""
+    from backend.services import docgen
+    cases = [
+        ("初中二次方程生成一个word，内容要全", "docx"),
+        ("把成绩整理成excel表格", "xlsx"),
+        ("做一个csv", "xlsx"),
+        ("整理成wps文字", "docx"),
+        ("做一份pdf讲义", "pdf"),
+        ("生成markdown笔记", "md"),
+        ("生成txt文件", "txt"),
+        ("我要一份word", "docx"),
+        ("需要excel", "xlsx"),
+        ("用word格式", "docx"),
+        ("用Excel做数据透视表", "xlsx"),
+        ("word转excel", "xlsx"),
+        ("excel转word", "docx"),
+        ("pdf转word", "docx"),
+        ("把word转成pdf", "pdf"),
+    ]
+    for text, fmt in cases:
+        assert docgen.detect_format(text) == fmt, text
+    for text in ("Word 文档怎么打开", "Excel 和 Word 有什么区别",
+                 "PPT 和 Word 哪个好", "wordpress 怎么建站"):
+        assert docgen.detect_format(text) is None, text
+
+
 def test_title_from_uses_first_sentence():
     from backend.services.docgen import title_from
 

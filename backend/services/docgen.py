@@ -31,14 +31,20 @@ ALIASES = {
     "ppt": "pptx", "pptx": "pptx", "slides": "pptx",
     "pdf": "pdf", "md": "md", "markdown": "md", "txt": "txt", "text": "txt",
 }
-DETECT_ACTION = re.compile(r"(写|生成|做|制作|整理|输出|导出|上传|下载|排版|给我|帮我|来一份|出一份|转成|转换成|保存为)")
+DETECT_ACTION = re.compile(
+    r"(写|撰写|生成|做|制作|整理|整理成|输出|导出|导出为|上传|下载|排版|给我|帮我|"
+    r"来一份|出一份|转成|转换成|转为|保存为|另存为|存为|转|做成|我要|需要|想要|发我)"
+)
+DETECT_CONTEXT = re.compile(r"(文件|格式|版本|文档|表格|演示|幻灯片|讲义|报告|笔记|材料|附件|模板)")
+DETECT_ASK = re.compile(r"(怎么|如何|为什么|是什么|有什么区别|哪个好|打不开|无法打开|怎样|支持)")
+DETECT_CONVERT = re.compile(r"(转成|转换成|转为|导出为|保存为|另存为|转|改成)")
 DETECT = [
-    (re.compile(r"(?i)word|docx|\.doc(?:$|\W)"), "docx"),
-    (re.compile(r"(?i)excel|xlsx|csv|电子表格|表格文件"), "xlsx"),
-    (re.compile(r"(?i)ppt(?:x)?|幻灯片|演示文稿|slides?"), "pptx"),
-    (re.compile(r"(?i)pdf"), "pdf"),
-    (re.compile(r"(?i)markdown|\.md(?:$|\W)"), "md"),
-    (re.compile(r"(?i)纯文本|txt文件|\.txt(?:$|\W)"), "txt"),
+    (re.compile(r"(?i)(?<![a-z])(?:word|docx?|wps文字|wps文档)(?![a-z])"), "docx"),
+    (re.compile(r"(?i)(?<![a-z])(?:excel|xlsx?|csv)(?![a-z])|电子表格|表格文件"), "xlsx"),
+    (re.compile(r"(?i)(?<![a-z])(?:ppt(?:x)?|slides?)(?![a-z])|幻灯片|演示文稿"), "pptx"),
+    (re.compile(r"(?i)(?<![a-z])pdf(?![a-z])"), "pdf"),
+    (re.compile(r"(?i)(?<![a-z])(?:markdown|md)(?![a-z])"), "md"),
+    (re.compile(r"(?i)(?<![a-z])txt(?![a-z])|纯文本"), "txt"),
 ]
 
 
@@ -49,12 +55,23 @@ def normalize_format(value: str | None) -> str | None:
 
 def detect_format(text: str) -> str | None:
     value = str(text or "")
-    if not DETECT_ACTION.search(value):
+    # 纯“怎么打开/有什么区别”是在问用法，不是让我生成文件。
+    if DETECT_ASK.search(value) and not (DETECT_ACTION.search(value) or DETECT_CONVERT.search(value)):
         return None
+    if value.strip().startswith(("怎么", "如何", "怎样")) and not re.search(
+            r"(帮我|给我|生成|做|写|制作|导出|整理|排版)", value):
+        return None
+    if not (DETECT_ACTION.search(value) or DETECT_CONTEXT.search(value)):
+        return None
+    hits: list[tuple[int, str]] = []
     for pattern, fmt in DETECT:
-        if pattern.search(value):
-            return fmt
-    return None
+        for match in pattern.finditer(value):
+            hits.append((match.start(), fmt))
+    if not hits:
+        return None
+    # “把 Word 转成 Excel”要落最后提到的目标格式；单纯列举时取第一个。
+    target = max(hits) if DETECT_CONVERT.search(value) else min(hits)
+    return target[1]
 
 
 def resolve_format(value: str | None, message: str) -> str | None:

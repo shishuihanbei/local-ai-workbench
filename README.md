@@ -1,6 +1,6 @@
 # 本地 AI 工作台
 
-> 当前版本 **0.9.5.8** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
+> 当前版本 **0.9.5.9** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
 
 单进程部署：FastAPI 后端 + 用户前端 + 管理控制台 + OpenAI 兼容 API。模型在本机运行，对话记录存本机 SQLite，不经过云端。
 
