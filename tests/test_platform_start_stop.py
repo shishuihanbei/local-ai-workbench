@@ -98,6 +98,28 @@ def test_closed_port_is_detected_quickly():
     assert time.time() - start < 0.8
 
 
+def test_managed_pids_matches_llmster_in_lms_dir(tmp_path, monkeypatch):
+    """LM Studio 的 detect 路径是 lms，但服务进程常是 llmster，必须能认回来。"""
+    import psutil
+    from backend.services import platform_deploy
+
+    bindir = tmp_path / "platforms" / "lmstudio" / "home" / ".lmstudio" / "bin"
+    bindir.mkdir(parents=True)
+    lms = bindir / "lms.exe"
+    llmster = bindir / "llmster.exe"
+    lms.write_bytes(b"MZ")
+    llmster.write_bytes(b"MZ")
+    info = {"installed": True, "path": str(lms), "lms": str(lms), "llmster": str(llmster)}
+    monkeypatch.setattr(platform_deploy, "load_config", lambda: _cfg(tmp_path))
+    monkeypatch.setattr(platform_deploy, "detect", lambda key: info)
+    monkeypatch.setattr(platform_deploy, "PROCS", {})
+    monkeypatch.setattr(psutil, "process_iter", lambda attrs=None: [
+        type("P", (), {"info": {"pid": 111, "exe": str(llmster)}})(),
+        type("P", (), {"info": {"pid": 222, "exe": "C:\\Windows\\notepad.exe"}})(),
+    ])
+    assert platform_deploy._managed_pids("lmstudio") == [111]
+
+
 def test_enrich_reports_alive_process_when_health_times_out(tmp_path, monkeypatch):
     """端口没回 HTTP、但进程还在时，不能把卡片写成“已安装，未启动”。"""
     from backend.services import platform_deploy
