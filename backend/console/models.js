@@ -66,9 +66,11 @@ function renderLocalStatus(platforms) {
   }
   box.innerHTML = rows.map((p) => {
     const live = !!p.healthy;
-    const state = live ? "运行中" : "已装未跑";
+    const state = live ? "运行中" : (p.process_alive ? "进程在·端口不通" : "已装未跑");
     const n = (p.models || []).length;
-    const detail = (live ? [p.detail || "", n ? n + " 个模型" : ""] : ["已安装，未启动", n ? n + " 个模型" : ""])
+    const detail = (live
+      ? [p.detail || "", n ? n + " 个模型" : ""]
+      : [p.detail || "已安装，未启动", n ? n + " 个模型" : ""])
       .filter(Boolean).join(" · ");
     return `<div class="local-status-row">
       <span class="dot ${live ? "on" : "warn"}"></span>

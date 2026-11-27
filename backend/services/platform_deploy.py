@@ -623,6 +623,14 @@ def enrich(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             item["target_path"] = str(ollama_dir(cfg))
         if key in ("lmstudio", "vllm"):
             item["target_path"] = str(platform_store.target(cfg, key))
+        # 健康检查失败不等于进程没在：大模型加载/CPU 满载时 HTTP 会短暂超时。
+        # 进程还在就把真实 PID 显示出来，避免“已安装，未启动”把人误导去重新装。
+        if (not item.get("healthy") and item.get("installed")
+                and key in ("ollama", "lmstudio")):
+            pids = _managed_pids(key)
+            if pids:
+                item["process_alive"] = True
+                item["detail"] = f"进程还在（PID {pids[0]}），但端口暂时没响应"
         item["usage"] = engine_usage(key, item, cfg)
         item["compatible"] = True
         if key == "lmstudio" and not item.get("healthy") and lmstudio_needs_avx2() and not hardware.has_avx2():

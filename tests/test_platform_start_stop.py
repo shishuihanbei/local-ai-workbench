@@ -95,4 +95,22 @@ def test_closed_port_is_detected_quickly():
 
     start = time.time()
     assert platforms._port_open("http://127.0.0.1:59999") is False
-    assert time.time() - start < 0.5
+    assert time.time() - start < 0.8
+
+
+def test_enrich_reports_alive_process_when_health_times_out(tmp_path, monkeypatch):
+    """端口没回 HTTP、但进程还在时，不能把卡片写成“已安装，未启动”。"""
+    from backend.services import platform_deploy
+
+    monkeypatch.setattr(platform_deploy, "load_config", lambda: _cfg(tmp_path))
+    monkeypatch.setattr(platform_deploy, "detect", lambda key: {"installed": True, "path": "x"})
+    monkeypatch.setattr(platform_deploy, "_managed_pids",
+                        lambda key: [4321] if key == "ollama" else [])
+    monkeypatch.setattr(platform_deploy, "STATE", {})
+    item = {
+        "key": "ollama", "healthy": False, "installed": True, "models": [],
+        "base_url": "http://127.0.0.1:11434/v1", "detail": "端口在监听，但接口超时",
+    }
+    out = platform_deploy.enrich([item])
+    assert out[0]["process_alive"] is True
+    assert "PID 4321" in out[0]["detail"]

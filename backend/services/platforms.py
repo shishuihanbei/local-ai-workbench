@@ -112,7 +112,8 @@ def clean_endpoints(value: Any, cfg: dict) -> dict[str, str]:
 
 def _port_open(base: str, timeout: float = 0.25) -> bool:
     """先做一次 TCP 连通性检查。Windows 上连接本机关闭端口会静默等到超时，
-    直接发 HTTP 会让控制台白等 1 秒；这里 0.15 秒就能判断出没起。"""
+    直接发 HTTP 会让控制台白等 1 秒；这里 0.45 秒就能判断出没起。
+    本机在跑大模型时 CPU 可能很忙，0.15 秒太紧，会把还在监听的端口误判成没开。"""
     try:
         from urllib.parse import urlparse
         import socket
@@ -121,7 +122,7 @@ def _port_open(base: str, timeout: float = 0.25) -> bool:
         port = p.port or (443 if p.scheme == "https" else 80)
         local = host in ("127.0.0.1", "localhost", "0.0.0.0")
         s = socket.socket()
-        s.settimeout(0.15 if local else timeout)
+        s.settimeout(0.45 if local else timeout)
         try:
             s.connect((host, port))
             return True
@@ -139,12 +140,12 @@ async def _probe_external(base: str, path: str, timeout: float = 0.6) -> tuple[b
     url = base.rstrip("/") + path
     try:
         if not await asyncio.to_thread(_port_open, base):
-            return False, [], "未连接：端口未开放"
+            return False, [], "端口未开放（进程可能已经退出）"
         # 本机服务正常时几十毫秒就回；超时说明没起或地址不通，不能拖住整个控制台
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.get(url)
         if resp.status_code != 200:
-            return False, [], f"HTTP {resp.status_code}"
+            return False, [], f"端口在监听，但接口返回 HTTP {resp.status_code}"
         payload = resp.json()
         rows = payload.get("models") if isinstance(payload, dict) else None
         if rows is None and isinstance(payload, dict):
@@ -157,6 +158,8 @@ async def _probe_external(base: str, path: str, timeout: float = 0.6) -> tuple[b
                 names.append(row)
         names = [n for n in names if n]
         return True, names[:8], f"已连接 · {len(names)} 个模型"
+    except httpx.TimeoutException:
+        return False, [], "端口在监听，但接口超时（可能正在加载模型或 CPU 忙）"
     except Exception as exc:
         return False, [], f"未连接：{type(exc).__name__}"
 
@@ -230,9 +233,9 @@ async def status(cfg: dict, selected: list[str] | None = None,
     tasks = {}
     for key, meta in PLATFORMS.items():
         if key != "llama.cpp" and (probe_all or key in selected):
-            # Ollama 刚 pull 完可能短暂忙/慢，0.6 秒会把“已拉取”误判成未连接；
-            # 本机服务给 2.5 秒，其余外部平台保持快速失败。
-            timeout = 2.5 if key == "ollama" else 0.6
+            # Ollama / LM Studio 本机服务给 2.5 秒：加载模型或 CPU 满载时 0.6 秒会把
+            # “还在跑但暂时没回 HTTP”误判成未启动；其余外部平台仍快速失败。
+            timeout = 2.5 if key in ("ollama", "lmstudio") else 0.8
             tasks[key] = _probe_external(eps[key], str(meta["probe"]), timeout=timeout)
     # llama.cpp 的端口探测和外部平台、硬件画像并行，整体只等最慢的一个
     llama_task = None if llama_status is not None else llama.server.status()
