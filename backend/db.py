@@ -597,6 +597,41 @@ MODEL_CATALOG_EXTRAS: list[dict[str, Any]] = [
          homepage="https://huggingface.co/jinaai/jina-reranker-v2-base-multilingual"),
 ]
 
+# Ollama 官方 registry 里常用的模型：单独一批补进内置清单，让使用者先在清单里
+# 看到有哪些可选（而不是只知道一个输入框）。这些条目不走 GGUF 下载，安装方式是
+# `ollama pull <tag>`，前端按 engine=Ollama 给“用 Ollama 拉取”按钮。
+# 只补一次，用户删掉的条目不会每次启动又回来。
+OLLAMA_MODEL_CATALOG: list[dict[str, Any]] = [
+    dict(key="ollama-qwen3-8b", alias="qwen3-8b", label="Qwen3-8B", family="Qwen3",
+         note="Ollama 官方 tag · 中文对话与推理 · 约 5.2GB", fit="good", sort=55, category="text",
+         filename="", total_bytes=5583457485, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/qwen3"),
+    dict(key="ollama-qwen3-4b", alias="qwen3-4b", label="Qwen3-4B", family="Qwen3",
+         note="Ollama 官方 tag · 轻量通用 · 约 2.6GB", fit="good", sort=56, category="text",
+         filename="", total_bytes=2791728742, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/qwen3"),
+    dict(key="ollama-llama32-3b", alias="llama3.2-3b", label="Llama-3.2-3B-Instruct", family="Llama 3.2",
+         note="Ollama 官方 tag · 英文与轻量对话 · 约 2.0GB", fit="good", sort=57, category="text",
+         filename="", total_bytes=2147483648, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/llama3.2"),
+    dict(key="ollama-llama32-1b", alias="llama3.2-1b", label="Llama-3.2-1B-Instruct", family="Llama 3.2",
+         note="Ollama 官方 tag · 超轻量，低配可用 · 约 1.3GB", fit="good", sort=58, category="text",
+         filename="", total_bytes=1395864371, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/llama3.2"),
+    dict(key="ollama-gemma3-4b", alias="gemma3-4b", label="Gemma-3-4B-it", family="Gemma 3",
+         note="Ollama 官方 tag · 多语言对话 · 约 3.3GB", fit="good", sort=59, category="text",
+         filename="", total_bytes=3543348019, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/gemma3"),
+    dict(key="ollama-phi4-mini", alias="phi4-mini", label="Phi-4-mini-instruct", family="Phi",
+         note="Ollama 官方 tag · 小体积英文推理 · 约 2.5GB", fit="good", sort=60, category="text",
+         filename="", total_bytes=2684354560, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/phi4-mini"),
+    dict(key="ollama-qwen25-coder-14b", alias="qwen2.5-coder-14b", label="Qwen2.5-Coder-14B-Instruct", family="Qwen Coder",
+         note="Ollama 官方 tag · 更强代码补全 · 约 9GB", fit="tight", sort=61, category="code",
+         filename="", total_bytes=9663676416, repo="", installable=0, engine="Ollama",
+         homepage="https://ollama.com/library/qwen2.5-coder"),
+]
+
 # 非 llama.cpp 模型必须写清后期要安装的独立引擎，方便按引擎分批接入
 ENGINE_REQUIREMENTS = {
     "llava-v16-7b": "vLLM / Transformers",
@@ -1315,6 +1350,21 @@ async def init_db() -> None:
                      m.get("homepage", ""), int(m.get("installable", 1))),
                 )
             await db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('model_catalog_extras','v2')")
+            await db.commit()
+        # Ollama 常用模型也补进内置清单；独立标记，老库升级时只补这一次
+        flag_ollama = await (await db.execute(
+            "SELECT value FROM settings WHERE key='model_catalog_ollama'")).fetchone()
+        if not flag_ollama:
+            for m in OLLAMA_MODEL_CATALOG:
+                await db.execute(
+                    "INSERT OR IGNORE INTO models(key,alias,label,family,note,filename,total_bytes,repo,fit,sort,"
+                    "category,engine,homepage,installable) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (m["key"], m.get("alias", ""), m["label"], m["family"], m["note"], m["filename"],
+                     m["total_bytes"], m["repo"], m.get("fit", "unknown"), m.get("sort", 0),
+                     m.get("category", "text"), m.get("engine", "Ollama"),
+                     m.get("homepage", ""), int(m.get("installable", 0))),
+                )
+            await db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('model_catalog_ollama','v1')")
             await db.commit()
         # 修正独立引擎名称；每次启动都校正，兼容已升级的旧库
         for key, engine in ENGINE_REQUIREMENTS.items():

@@ -11,11 +11,11 @@ from pydantic import BaseModel
 
 from .. import ollama_tags
 from ..config import load_config, model_file_path, save_config
-from ..db import (MODEL_CATALOG_EXTRAS, MODEL_SEED, audit, execute, executemany,
+from ..db import (MODEL_CATALOG_EXTRAS, MODEL_SEED, OLLAMA_MODEL_CATALOG, audit, execute, executemany,
                   fetch_all, fetch_one, model_repo, model_url)
 from ..security import admin_user, current_user
 from ..services import (access, engine_install, engines, hardware, hf_models, llama,
-                        model_usage, platform_deploy, platform_models)
+                        model_usage, platform_deploy, platform_models, platforms)
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -78,12 +78,22 @@ async def catalog(user: dict = Depends(current_user)):
     except Exception:
         ollama_ids = []
     ollama_info = platform_deploy.detect("ollama")
+    # 服务在不在跑要看端口，不能靠“有没有拉到模型”判断：空模型目录时也要能点拉取
+    ollama_healthy = False
+    try:
+        probe = await platforms.status(cfg, ["ollama"], {"running": False, "healthy": False}, probe_all=True)
+        ollama_healthy = any(i.get("key") == "ollama" and i.get("healthy") for i in probe)
+    except Exception:
+        ollama_healthy = False
     items = []
     for r in rows:
         installable = bool(r.get("installable", 1))
         category = r.get("category") or "text"
         engine = r.get("engine") or "llama.cpp"
+        is_ollama = str(engine).strip().lower() == "ollama"
         repo = model_repo(r["key"], r.get("repo") or "")
+        o_tag = r.get("ollama_tag") or ollama_tags.tag_for(r["key"], r.get("alias") or "")
+        o_pulled = bool(o_tag and o_tag in ollama_ids)
         engine_info = None
         if installable:
             path = model_file_path(cfg, r["filename"])
@@ -148,12 +158,26 @@ async def catalog(user: dict = Depends(current_user)):
             label = f"推荐 {engine_info['recommend']}" if engine_info["ready"] else "需先装引擎"
             advice = {"level": "good" if engine_info["ready"] else "warn",
                       "label": label, "text": engine_info["text"]}
-        o_tag = ollama_tags.tag_for(r["key"], r.get("alias") or "")
+        if is_ollama:
+            # Ollama 条目以 registry tag 为准：拉没拉过看 /api/tags，不看 GGUF 文件
+            ready = bool(ollama_healthy)
+            engine_info = {"ready": ready, "recommend": "Ollama", "recommend_key": "ollama",
+                           "package": "", "gpu": False,
+                           "text": ("Ollama 正在运行，可以直接拉取" if ready
+                                    else ("Ollama 已安装，先去「部署」页启动服务"
+                                          if ollama_info.get("installed") else "先在「部署」页一键安装 Ollama"))}
+            size, expected, pct_val = 0, 0, (100 if o_pulled else 0)
+            complete, partial = o_pulled, False
+            dl_state, dl_total, dl_error, dl_started = ("done" if o_pulled else "none"), 0, "", 0.0
+            advice = {"level": "good" if ready else "warn",
+                      "label": "Ollama 可拉取" if ready else "Ollama 未就绪",
+                      "text": engine_info["text"]}
         items.append({
             **r,
             "ollama_tag": o_tag,
-            "ollama_ready": bool(ollama_ids),
-            "ollama_pulled": bool(o_tag and o_tag in ollama_ids),
+            "ollama_ready": bool(ollama_healthy),
+            "ollama_installed": bool(ollama_info.get("installed")),
+            "ollama_pulled": o_pulled,
             "installable": installable,
             "category": category,
             "category_label": CATEGORY_LABELS.get(category, category),
@@ -236,7 +260,7 @@ async def refresh_catalog(user: dict = Depends(admin_user)):
     existing = {r["key"] for r in rows}
     existing_files = {Path(r["filename"]).name.lower() for r in rows if r.get("filename")}
     missing = []
-    for m in [*MODEL_SEED, *MODEL_CATALOG_EXTRAS]:
+    for m in [*MODEL_SEED, *MODEL_CATALOG_EXTRAS, *OLLAMA_MODEL_CATALOG]:
         if m["key"] in existing:
             continue
         existing.add(m["key"])

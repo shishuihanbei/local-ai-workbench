@@ -22,6 +22,14 @@ OLLAMA_TAGS: dict[str, str] = {
     "mistral-7b": "mistral:7b",
     "gemma2-9b": "gemma2:9b",
     "gemma2-2b": "gemma2:2b",
+    # Ollama 官方 registry 里常用、但工作台内置清单单独收录的条目
+    "ollama-qwen3-8b": "qwen3:8b",
+    "ollama-qwen3-4b": "qwen3:4b",
+    "ollama-llama32-3b": "llama3.2:3b",
+    "ollama-llama32-1b": "llama3.2:1b",
+    "ollama-gemma3-4b": "gemma3:4b",
+    "ollama-phi4-mini": "phi4-mini",
+    "ollama-qwen25-coder-14b": "qwen2.5-coder:14b",
 }
 
 # 输入框里允许出现的 tag 形态：qwen2.5:7b / hf.co/user/repo:Q4_K_M

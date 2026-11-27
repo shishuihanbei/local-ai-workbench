@@ -135,6 +135,13 @@ async function pollEngineInstall(key) {
 /* ---------------------------------------------------------------- 模型 */
 function statusBadge(m) {
   const d = m.download || {};
+  if (m.engine === "Ollama") {
+    if (m.ollama_pulled) return `<span class="badge good">已拉取</span>`;
+    if (m.ollama_ready) return `<span class="badge ok">可拉取</span>`;
+    return m.ollama_installed
+      ? `<span class="badge warn">Ollama 未启动</span>`
+      : `<span class="badge warn">需先装 Ollama</span>`;
+  }
   if (d.state === "running") return `<span class="badge warn">下载中 ${m.pct || d.pct || 0}%</span>`;
   if (d.state === "error" && !m.downloaded) return `<span class="badge bad">下载失败</span>`;
   if (m.installable === false) {
@@ -220,19 +227,25 @@ function renderModelRows() {
         if (m.downloaded && !m.loaded) act.push(`<button class="btn small" data-load="${esc(m.key)}" title="${m.available === false ? "加载模型会重新开启本地部署" : ""}">${m.available === false ? "加载并开启" : "加载"}</button>`);
         if (m.loaded) act.push(`<span class="badge ok">使用中</span>`);
       }
-      // 同一个模型在 Ollama 里还有一套“tag + blobs”的取法，装了 Ollama 就多给一个入口
-      if (m.ollama_tag && m.ollama_ready) {
-        act.push(m.ollama_pulled
-          ? `<span class="badge ok" title="Ollama 里已经有这个模型">Ollama 已拉取</span>`
-          : `<button class="btn small ghost" data-opull="${esc(m.ollama_tag)}" title="执行 ollama pull ${esc(m.ollama_tag)}，落到 Ollama 的模型目录">用 Ollama 拉取</button>`);
+      // Ollama 用 registry tag 取模型：内置清单里的条目直接给拉取按钮，
+      // 服务没跑时按钮禁用而不是消失，用户知道该先启动 Ollama
+      if (m.ollama_tag && (m.engine === "Ollama" || m.ollama_ready)) {
+        if (m.ollama_pulled) {
+          act.push(`<span class="badge ok" title="Ollama 里已经有这个模型">Ollama 已拉取</span>`);
+        } else {
+          const tip = m.ollama_ready
+            ? `执行 ollama pull ${m.ollama_tag}，落到 Ollama 的模型目录`
+            : "先在「部署」页启动 Ollama 服务，再来拉取";
+          act.push(`<button class="btn small ghost" data-opull="${esc(m.ollama_tag)}" ${m.ollama_ready ? "" : "disabled"} title="${esc(tip)}">用 Ollama 拉取</button>`);
+        }
       }
       const oTag = m.ollama_tag
-        ? `<div class="sub">Ollama：${esc(m.ollama_tag)}${m.ollama_pulled ? " · 已拉取" : (m.ollama_ready ? "" : " · 服务未启动")}</div>`
+        ? `<div class="sub">${m.engine === "Ollama" ? "tag：" : "Ollama："}${esc(m.ollama_tag)}${m.ollama_pulled ? " · 已拉取" : (m.ollama_ready ? "" : " · 服务未启动")}</div>`
         : "";
       html.push(`<tr>
         <td><div class="name">${esc(m.label || m.key)}</div><div class="sub">${esc(m.key)}${m.filename ? " · " + esc(m.filename) : ""}</div></td>
         <td><span class="badge cat">${esc(m.category_label || modelCategoryLabel(m.category))}</span></td>
-        <td><div>${esc(m.engine || "—")}</div>${m.installable === false ? `<div class="sub">推荐 ${esc(m.engine_recommend || "独立引擎")} · ${m.engine_ready ? "已安装" : "未安装"}</div>` : ""}${oTag}</td>
+        <td><div>${esc(m.engine || "—")}</div>${m.installable === false && m.engine !== "Ollama" ? `<div class="sub">推荐 ${esc(m.engine_recommend || "独立引擎")} · ${m.engine_ready ? "已安装" : "未安装"}</div>` : ""}${oTag}</td>
         <td>${m.bytes ? mb(m.bytes) : (m.total_bytes ? "约 " + mb(m.total_bytes) : "—")}</td>
         <td>${statusBadge(m)}</td>
         <td>${adviceBadge(m.advice)}</td>
@@ -514,8 +527,8 @@ function renderModels(data) {
   renderOllamaPull();
 }
 
-/* Ollama 的模型不在内置清单里，走它自己的 registry：给个输入框按 tag 拉，
-   拉完自动进模型下拉；装了 Ollama 才会显示这块（状态跟着 /api/models 一起返回）。 */
+/* Ollama 模型已收进内置清单（engine=Ollama），这里保留一个“清单外 tag”入口：
+   清单里没有的版本仍可手动拉，拉完自动进模型下拉；装了 Ollama 才显示。 */
 function ollamaPlatform() {
   const info = (S.models && S.models.ollama) || null;
   if (info) return info;
