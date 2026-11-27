@@ -341,7 +341,7 @@ def test_shared_conversation_page(browser, e2e_server):
     cid = conv["id"]
     with httpx.Client(timeout=60) as client:
         with client.stream("POST", base + "/api/chat/stream", headers=headers,
-                           json={"conversation_id": cid, "message": "分享页用这条"}) as r:
+                           json={"conversation_id": cid, "message": "分享页用这条", "agent_mode": False}) as r:
             assert r.status_code == 200, r.read()
             for _ in r.iter_lines():
                 pass

@@ -31,6 +31,7 @@
     const attachments = regen ? [] : S.attachments.slice();
     const skill = regen ? (S.lastSkill || S.skill) : S.skill;
     const web = regen ? S.lastWeb : S.web;
+    const agentMode = regen ? S.lastAgentMode : S.agentMode;
     const outFormat = regen ? (S.lastOutputFormat || S.outputFormat) : S.outputFormat;
     const agent = S.agentId ? (S.agents.find((a) => Number(a.id) === Number(S.agentId)) || null) : null;
     if (!message && attachments.length) message = "请阅读这些附件并总结要点。";
@@ -86,11 +87,13 @@
       vision: !!model.vision,
       skill: skill ? skill.id : null,
       web: !!web,
+      agent_mode: !!agentMode,
       agent_id: S.agentId || null,
       output_format: outFormat || null,
     };
     S.lastSkill = skill || null;
     S.lastWeb = !!web;
+    S.lastAgentMode = !!agentMode;
     S.lastOutputFormat = outFormat || "";
     if (!regen) {
       S.attachments = [];
@@ -167,6 +170,9 @@
               renderWebTags(assistant, evt.web);
               if (!content) setAssistantText(assistant, "正在生成回答…", true);
             }
+          } else if (evt.type === "agent_action") {
+            renderAgentAction(assistant, evt.action);
+            if (!content && !gotDelta) setAssistantText(assistant, "正在调用工具检索资料…", true);
           } else if (evt.type === "reasoning") {
             reasoning += evt.text || "";
             setAssistantReasoning(assistant, reasoning);

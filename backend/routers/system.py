@@ -45,6 +45,7 @@ SETTING_KEYS = [
     "system_prompt", "tts_voice", "session_hours", "models_dir", "llama_dir", "llama_bin",
     "tunnel_target", "tunnel_token", "tunnel_domain", "github_proxy", "kb_enabled", "kb_top_k",
     "library_enabled", "library_max_chars", "library_max_docs",
+    "agent_mode_enabled", "agent_max_turns",
     "frontend_url", "allow_register",
     "org_name", "org_short_name", "org_domain", "org_industry", "org_size",
     "org_contact_name", "org_contact_email",

@@ -15,7 +15,7 @@ def test_prompt_assets_are_registered(client, admin_token):
     counts = data["counts"]
     assert counts["core"] == 1
     assert counts["skill"] >= 6
-    assert counts["plugin"] == 10
+    assert counts["plugin"] == 11
     assert counts["format"] == 6
     assert counts["workbench"] == 9
 

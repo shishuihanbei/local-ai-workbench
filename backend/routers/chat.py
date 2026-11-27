@@ -19,7 +19,7 @@ from .. import logbus, pipeline
 from ..config import load_config
 from ..db import audit, execute, fetch_all, fetch_one, parse_meta
 from ..security import current_user, user_from_any_token
-from ..services import (access, admission, attachments, cluster, collab, docgen, kb,
+from ..services import (access, admission, agent, attachments, cluster, collab, docgen, kb,
                         library, llama, memory, model_fit, model_usage, moderation,
                         prompts, quota, routing, skills, tts, websearch)
 
@@ -56,6 +56,7 @@ class ChatBody(BaseModel):
     skill: str | None = None
     web: bool = False
     agent_id: int | None = None
+    agent_mode: bool | None = None
     output_format: str | None = None
 
 
@@ -444,6 +445,10 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
     decision = await routing.resolve(body, cfg)
     if decision.get("disabled"):
         raise HTTPException(503, decision.get("reason") or "本地部署已关闭")
+    use_agent = bool(cfg.get("agent_mode_enabled", True)) and (
+        body.agent_mode if body.agent_mode is not None else True)
+    if decision.get("pool_id"):
+        use_agent = False
     ctx = pipeline.new_ctx(user, body, cfg)
     await pipeline.run("before_render", ctx)
     now = time.time()
@@ -461,6 +466,7 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             (user["id"], body.message.strip().replace("\n", " ")[:30] or "新对话",
              body.model or "", body.system_prompt, agent["id"] if agent else None, now, now))
 
+    att_rows: list[dict[str, Any]] = []
     if body.regenerate:
         last = await fetch_one(
             "SELECT id,role FROM messages WHERE conversation_id=? ORDER BY id DESC LIMIT 1", (cid,))
@@ -494,6 +500,25 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
     msgs, max_tokens, extra = await _build_context(
         user, body, cfg, att_rows if not body.regenerate else None,
         skill if not body.regenerate else skills.get(body.skill))
+    agent_ctx: dict[str, Any] = {
+        "user": user, "cfg": cfg, "body": body,
+        "attachments": att_rows, "extra": extra,
+    }
+    agent_tools: list[dict[str, Any]] = []
+    if use_agent:
+        agent_rules = prompts.get(
+            "function.agent_rules",
+            "你现在处于只读工具模式。必要时可以调用系统提供的检索工具；工具结果不足时明确说明，不要编造。")
+        if msgs and msgs[0].get("role") == "system":
+            msgs[0]["content"] = (str(msgs[0].get("content") or "") + "\n\n" + agent_rules).strip()
+        else:
+            msgs.insert(0, {"role": "system", "content": agent_rules})
+        agent_tools = agent.build_tools(agent_ctx)
+        if not agent_tools:
+            use_agent = False
+        else:
+            extra["agent_mode"] = True
+            extra["agent_tools"] = [t["function"]["name"] for t in agent_tools]
     ctx["decision"] = decision
     if model_switch:
         extra["model_switch"] = model_switch
@@ -510,6 +535,9 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
     base = str(ctx.get("base") or decision["base"]).rstrip("/")
     key = str(ctx.get("key") or decision["key"])
     model_name = str(ctx.get("model") or model_name)
+    if use_agent and not base:
+        use_agent = False
+        agent_tools = []
     is_pool = bool(decision.get("pool_id")) and not ctx.get("base")
     pool_candidates: list[dict] = []
     pool_info: dict | None = None
@@ -546,8 +574,12 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
         status = "ok"
         mod_blocked = False
         admission_token = None
+        agent_result: dict[str, Any] | None = None
+        agent_trace: list[dict[str, Any]] = []
 
         async def upstream_lines():
+            if use_agent:
+                return
             if not is_pool:
                 if not base:
                     raise RuntimeError("未配置上游模型服务地址")
@@ -624,11 +656,50 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             model_usage.begin(usage_model, str(user.get("username") or ""))
 
         try:
-            yield f"data: {json.dumps({'type':'meta','conversation_id':cid,'kb':extra.get('kb',[]),'web':extra.get('web') or None,'memory':extra.get('memory') or None,'model':model_name,'provider':decision['provider'],'trace_id':ctx['trace_id'],'route':decision['strategy'],'file_mode':bool(extra.get('file_mode')),'output_format':extra.get('output_format') or None,'model_switch':extra.get('model_switch') or None}, ensure_ascii=False)}\n\n".encode()
+            yield f"data: {json.dumps({'type':'meta','conversation_id':cid,'kb':extra.get('kb',[]),'web':extra.get('web') or None,'memory':extra.get('memory') or None,'model':model_name,'provider':decision['provider'],'trace_id':ctx['trace_id'],'route':decision['strategy'],'file_mode':bool(extra.get('file_mode')),'output_format':extra.get('output_format') or None,'model_switch':extra.get('model_switch') or None,'agent_mode':bool(use_agent),'agent_tools':extra.get('agent_tools') or []}, ensure_ascii=False)}\n\n".encode()
             if extra.get("web_fallback"):
                 note = "原文档链接需要登录，无法直接读取；以下是按文档标题检索到的公开资料概要，并非原文档内容。\n\n"
                 content_buf.append(note)
                 yield f"data: {json.dumps({'type':'delta','text':note}, ensure_ascii=False)}\n\n".encode()
+            if use_agent:
+                agent_result = await agent.run_agent(
+                    messages=msgs, tools=agent_tools, base=base, key=key,
+                    model=model_name, params=params, ctx=agent_ctx)
+                agent_trace = agent_result.get("trace") or []
+                extra["agent_trace"] = agent_trace
+                usage = agent_result.get("usage") or {}
+                for action in agent_trace:
+                    yield f"data: {json.dumps({'type':'agent_action','action':action}, ensure_ascii=False)}\n\n".encode()
+                agent_reason = str(agent_result.get("reasoning") or "")
+                if agent_reason:
+                    safe_rc = reason_filter.feed(agent_reason)
+                    if reason_filter.blocked:
+                        mod_blocked = True
+                        err = "回复触发内容安全策略，已拦截"
+                        status = "moderation_blocked"
+                        yield f"data: {json.dumps({'type':'error','message':err,'code':'content_blocked'}, ensure_ascii=False)}\n\n".encode()
+                    else:
+                        if first_token:
+                            ttft_ms = int((time.monotonic() - upstream_started) * 1000)
+                            first_token = False
+                        if safe_rc:
+                            reason_buf.append(safe_rc)
+                            yield f"data: {json.dumps({'type':'reasoning','text':safe_rc}, ensure_ascii=False)}\n\n".encode()
+                agent_content = str(agent_result.get("content") or "")
+                if agent_content and not mod_blocked:
+                    safe_c = output_filter.feed(agent_content)
+                    if output_filter.blocked:
+                        mod_blocked = True
+                        err = "回复触发内容安全策略，已拦截"
+                        status = "moderation_blocked"
+                        yield f"data: {json.dumps({'type':'error','message':err,'code':'content_blocked'}, ensure_ascii=False)}\n\n".encode()
+                    else:
+                        if first_token:
+                            ttft_ms = int((time.monotonic() - upstream_started) * 1000)
+                            first_token = False
+                        if safe_c:
+                            content_buf.append(safe_c)
+                            yield f"data: {json.dumps({'type':'delta','text':safe_c}, ensure_ascii=False)}\n\n".encode()
             async for line in upstream_lines():
                 if await request.is_disconnected():
                     raise asyncio.CancelledError()
@@ -734,6 +805,8 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
                                    "avatar": agent["avatar"]} if agent else None),
                         "memory": extra.get("memory") or None,
                         "output_format": file_fmt or None, "files": files,
+                        "agent_mode": bool(use_agent),
+                        "agent_trace": agent_trace,
                         "file_error": file_error or None,
                         "model_switch": extra.get("model_switch") or None}
                 msg_id = await execute(

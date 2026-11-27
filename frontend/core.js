@@ -173,6 +173,8 @@
     lastSkill: null,
     web: false,
     lastWeb: false,
+    agentMode: true,
+    lastAgentMode: true,
     outputFormat: "",
     lastOutputFormat: "",
     libraryItems: [],

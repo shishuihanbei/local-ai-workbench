@@ -71,6 +71,7 @@
     if (current && S.models.some((m) => m.key === current)) {
       select.value = current;
     }
+    if (typeof syncAgentModelLock === "function") syncAgentModelLock();
   }
 
   function setModel(key, persist = true) {
@@ -79,6 +80,7 @@
     if (persist) savePrefs({ model: key });
     const picked = S.models.find((m) => m.key === key);
     if (picked && picked.light) toast("轻量测试模型只适合短问答，复杂任务会自动切换到默认强模型");
+    if (typeof syncAgentModelLock === "function") syncAgentModelLock();
     updateWelcome();
   }
 

@@ -38,6 +38,7 @@
       <div class="body">
         <div class="msg-author"><b>${esc(agent ? agent.name : "AI 助手")}</b>${agent ? '<span class="msg-author-tag">智能体</span>' : ""}</div>
         <details class="reasoning" ${opts.reasoning ? "" : "hidden"}><summary>思考过程</summary><pre></pre></details>
+        <div class="agent-trace" hidden></div>
         <div class="msg-text ${opts.streaming ? "streaming" : ""}"></div>
         <div class="kb-tags" hidden></div>
         <div class="web-tags" hidden></div>
@@ -146,6 +147,26 @@
       return `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer" title="${esc(s.url)}">${esc(short)}</a>`;
     }).join("");
     box.innerHTML = `<span class="web-label" title="${esc(q)}"><svg><use href="#i-search"/></svg>${esc(label)}</span>${links}`;
+  }
+
+  const AGENT_TOOL_LABELS = {
+    search_knowledge_base: "检索知识库",
+    search_library: "检索资料库",
+    search_web: "联网检索",
+    read_attachments: "读取附件",
+  };
+
+  function renderAgentAction(row, action = {}) {
+    const box = $(".agent-trace", row);
+    if (!box || !action || !action.tool) return;
+    box.hidden = false;
+    const label = AGENT_TOOL_LABELS[action.tool] || action.tool;
+    const query = action.arguments && action.arguments.query ? String(action.arguments.query) : "";
+    const item = document.createElement("div");
+    item.className = `agent-action ${action.status === "error" ? "error" : "ok"}`;
+    item.innerHTML = `<svg><use href="#i-brain"/></svg><span>${esc(label)}${query ? `：${esc(query)}` : ""}</span>`;
+    box.appendChild(item);
+    scrollBottom(false);
   }
 
   function fileExpiry(f, nowMs = Date.now()) {

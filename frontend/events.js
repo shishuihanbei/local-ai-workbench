@@ -102,6 +102,10 @@
       setWeb(!S.web);
       toast(S.web ? "联网已开启：发送时先搜索网页" : "联网已关闭");
     });
+    $("#agentBtn").addEventListener("click", () => {
+      setAgentMode(!S.agentMode);
+      toast(S.agentMode ? "自动工具已开启：模型会按需检索资料后再回答" : "自动工具已关闭：本轮按普通对话生成");
+    });
     $("#formatSelect").addEventListener("change", (ev) => {
       setOutputFormat(ev.target.value);
       ev.target.blur();

@@ -828,11 +828,13 @@ body { font-size: 14.5px; }
 }
 .toolbtn:hover { background: var(--ui-soft); border-color: color-mix(in srgb, var(--brand) 28%, var(--ui-line)); }
 .toolbtn svg { width: 14px; height: 14px; }
-.skill-btn.active, .lib-btn.active, .web-btn.active {
+.skill-btn.active, .lib-btn.active, .web-btn.active, .agent-tool-btn.active {
   border-color: color-mix(in srgb, var(--brand) 30%, var(--ui-line));
   background: var(--brand-soft);
   color: var(--brand-ink);
 }
+.toolbtn:disabled, .toolbtn.disabled { opacity: .45; cursor: not-allowed; }
+.toolbtn:disabled:hover, .toolbtn.disabled:hover { background: var(--panel); border-color: var(--ui-line); }
 .fmt-pick { height: 32px; border: 1px solid var(--ui-line); border-radius: 10px; background: var(--panel); color: var(--ui-text); }
 .fmt-pick select { font-size: 12px; }
 .composer-buttons { gap: 8px; }
@@ -848,6 +850,16 @@ body { font-size: 14.5px; }
 .attach-meta b { max-width: 140px; font-size: 12.5px; }
 .attach-meta span { margin-top: 2px; font-size: 11px; }
 .attach-vision-hint { margin: 0 2px 6px; padding: 7px 10px; border-radius: 10px; font-size: 12px; line-height: 1.55; }
+
+.agent-trace { display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px; }
+.agent-action {
+  display: inline-flex; align-items: center; gap: 6px; width: fit-content;
+  max-width: 100%; padding: 5px 9px; border-radius: 999px;
+  background: var(--brand-soft); color: var(--brand-ink); font-size: 12px; font-weight: 500;
+}
+.agent-action svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.agent-action span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-action.error { background: #fff1f0; color: #c0392b; }
 
 @media (max-width: 900px) {
   .composer-wrap { padding: 0 14px max(12px, env(safe-area-inset-bottom)); }
@@ -865,3 +877,4 @@ html[data-theme="dark"] .composer { border-color: #293143; }
 html[data-theme="dark"] .composer-actions { border-top-color: #222936; }
 html[data-theme="dark"] .toolbtn,
 html[data-theme="dark"] .fmt-pick { border-color: #293143; background: var(--ui-soft); }
+html[data-theme="dark"] .agent-action.error { background: #3a1f22; color: #ff8a80; }

@@ -96,6 +96,33 @@
     btn.title = S.web ? "联网已开启：发送时会先搜索网页" : "联网检索实时网页（中文 360 / 英文 Bing），默认关闭";
   }
 
+  function modelSupportsAgentTools() {
+    const m = selectedModel();
+    return !!m && m.owned_by !== "cluster" && m.engine !== "cluster";
+  }
+
+  function setAgentMode(on) {
+    if (!modelSupportsAgentTools()) on = false;
+    S.agentMode = !!on;
+    const btn = $("#agentBtn");
+    if (!btn) return;
+    btn.classList.toggle("active", S.agentMode);
+    btn.setAttribute("aria-pressed", String(S.agentMode));
+    const locked = btn.disabled || btn.classList.contains("disabled");
+    btn.title = locked
+      ? "当前为算力池模型，暂不支持自动工具，已按普通对话生成"
+      : S.agentMode ? "自动工具已开启：模型可按需检索资料、网页和附件" : "自动工具关闭：本轮按普通对话生成";
+  }
+
+  function syncAgentModelLock() {
+    const btn = $("#agentBtn");
+    if (!btn) return;
+    const supported = modelSupportsAgentTools();
+    btn.disabled = !supported;
+    btn.classList.toggle("disabled", !supported);
+    setAgentMode(S.agentMode && supported);
+  }
+
   /* -------------------------------------------------------------- 前台功能 */
   const FRONT_TAB_FEATURE = {
     api: "api_access", kb: "kb", library: "library", memory: "memory", data: "data_export",
@@ -107,6 +134,10 @@
     docgen: { desc: "把回答整理成 Word、Excel、PPT、PDF", go: "选格式", run: () => { $("#formatSelect")?.focus(); } },
     attach: { desc: "上传文档、图片并解析或 OCR", go: "上传", run: () => { $("#attachBtn")?.click(); } },
     agent: { desc: "在输入框左侧切换智能体", go: "切换", run: () => { const s = $("#agentSelect"); if (s) { s.focus(); try { s.showPicker?.(); } catch {} } } },
+    agent_tools: { desc: "模型按需自主检索资料、网页和附件后再回答", go: "开启", run: () => {
+      if (!modelSupportsAgentTools()) { toast("当前为算力池模型，暂不支持自动工具"); return; }
+      setAgentMode(true); toast("自动工具已开启");
+    } },
     library: { desc: "长期保存资料，可挑选后随消息反复使用", go: "打开", run: () => openSettings("library") },
     kb: { desc: "个人知识库资料与检索", go: "打开", run: () => openSettings("kb") },
     memory: { desc: "跨对话保存偏好与长期记忆", go: "打开", run: () => openSettings("memory") },
@@ -234,6 +265,7 @@
       if (S.wbTab === "caps" && $("#workbenchDrawer") && !$("#workbenchDrawer").hidden) setWbTab("overview");
     }
     if (!frontOn("web") && S.web) setWeb(false);
+    if (!frontOn("agent_tools") && S.agentMode) setAgentMode(false);
     if (!frontOn("docgen") && S.outputFormat) {
       setOutputFormat("", true);
       S.lastOutputFormat = "";

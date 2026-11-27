@@ -20,11 +20,11 @@ def test_front_catalog_defaults(client, admin_token):
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["revision"] >= 1
-    assert len(data["items"]) == 15
+    assert len(data["items"]) == 16
     assert len(data["groups"]) == 4
     assert len(data["presets"]) >= 16
     keys = {x["key"] for x in data["items"]}
-    assert {"skills", "web", "library", "kb", "memory", "workbench", "schedule", "files",
+    assert {"skills", "web", "agent_tools", "library", "kb", "memory", "workbench", "schedule", "files",
             "collab", "desk", "api_access", "data_export"} <= keys
     assert all(x["name"] and x["description"] for x in data["items"])
 
@@ -103,7 +103,7 @@ def test_front_frontend_mount_points_cover_all_features():
     html = (root / "frontend" / "index.html").read_text(encoding="utf-8")
     css = (root / "frontend" / "app.css").read_text(encoding="utf-8")
     app = "".join(p.read_text(encoding="utf-8") for p in sorted((root / "frontend").glob("*.js")))
-    expected = {"skills", "web", "docgen", "attach", "agent", "library", "kb", "memory",
+    expected = {"skills", "web", "agent_tools", "docgen", "attach", "agent", "library", "kb", "memory",
                 "workbench", "schedule", "files", "collab", "desk", "api_access", "data_export"}
     mounted = set(re.findall(r'data-front="([^"]+)"', html))
     assert expected <= mounted
