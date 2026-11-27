@@ -14,6 +14,7 @@ import asyncio
 import hashlib
 import importlib.util
 import json
+import logging
 import os
 import platform
 import shutil
@@ -33,6 +34,7 @@ from ..db import fetch_all
 from . import hardware, installer, llama, platform_store, platforms
 
 STATE: dict[str, dict[str, Any]] = {}
+log = logging.getLogger("workbench.platform_deploy")
 PROCS: dict[str, subprocess.Popen] = {}
 LOG_DIR = DATA_DIR / "logs"
 
@@ -150,11 +152,11 @@ def ollama_dir(cfg: dict[str, Any] | None = None) -> Path:
 
 
 def ollama_models_dir(cfg: dict[str, Any] | None = None) -> Path:
-    """Ollama 的模型目录：默认与程序一起放在 <platforms_dir>/ollama/models。"""
+    """Ollama 的模型目录：统一放在 <models_dir>/ollama，不再跟程序目录走。"""
     env = os.getenv("WORKBENCH_OLLAMA_MODELS")
     if env:
         return Path(env).expanduser()
-    return ollama_dir(cfg) / "models"
+    return platform_store.models_dir(cfg or load_config(), "ollama")
 
 
 def system_ollama_models_dir() -> Path:
@@ -184,8 +186,126 @@ def lmstudio_dir(cfg: dict[str, Any] | None = None) -> Path:
 
 
 def lmstudio_home(cfg: dict[str, Any] | None = None) -> Path:
-    """llmster 的“LM Studio 家目录”：程序、模型、缓存都落在这里，不碰 ~/.lmstudio。"""
+    """llmster 的“LM Studio 家目录”：程序、配置、缓存都落在这里，不碰 ~/.lmstudio。"""
     return lmstudio_dir(cfg) / "home"
+
+
+def lmstudio_models_dir(cfg: dict[str, Any] | None = None) -> Path:
+    """LM Studio 的模型目录：和 Ollama 一样收到 <models_dir>/lmstudio 下。"""
+    return platform_store.models_dir(cfg or load_config(), "lmstudio")
+
+
+def lmstudio_config_file(cfg: dict[str, Any] | None = None) -> Path:
+    return lmstudio_home(cfg) / ".lmstudio" / "config.json"
+
+
+def _same_dir(a: Path, b: Path) -> bool:
+    try:
+        return os.path.normcase(str(a.resolve())) == os.path.normcase(str(b.resolve()))
+    except Exception:
+        return os.path.normcase(str(a)) == os.path.normcase(str(b))
+
+
+def _is_dir_link(p: Path) -> bool:
+    try:
+        return p.is_symlink() or bool(getattr(p, "is_junction", lambda: False)())
+    except Exception:
+        return False
+
+
+def _drop_dir_link(p: Path) -> None:
+    """只删链接本身，不碰链接指向的模型目录。"""
+    try:
+        if p.is_symlink():
+            p.unlink()
+        elif getattr(p, "is_junction", lambda: False)():
+            p.rmdir()
+    except Exception:
+        pass
+
+
+def _merge_tree(src: Path, dst: Path) -> bool:
+    """把 src 合并进 dst；同名已存在就保留 dst，不覆盖用户文件。"""
+    if not src.exists() or not src.is_dir() or _same_dir(src, dst):
+        return False
+    if _is_dir_link(src):
+        _drop_dir_link(src)
+        return False
+    try:
+        if not dst.exists():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+            return True
+        moved = False
+        for item in list(src.iterdir()):
+            target = dst / item.name
+            if target.exists():
+                if item.is_dir() and not _is_dir_link(item):
+                    moved = _merge_tree(item, target) or moved
+            else:
+                shutil.move(str(item), str(target))
+                moved = True
+        try:
+            src.rmdir()
+        except OSError:
+            pass
+        return moved
+    except Exception:
+        log.exception("合并模型目录失败：%s -> %s", src, dst)
+        return False
+
+
+def ensure_lmstudio_models(cfg: dict[str, Any] | None = None, write_config: bool = True) -> Path:
+    """把 LM Studio 的家目录模型路径收到 models/lmstudio，并写进它的 config.json。
+
+    LM Studio 只认自己的 modelsDirectory 配置，不能直接吃平铺的 .gguf；
+    统一后模型仍在 models 根下，只是多一层 lmstudio 子目录。
+    """
+    cfg = cfg or load_config()
+    target = lmstudio_models_dir(cfg)
+    target.mkdir(parents=True, exist_ok=True)
+    # 老版本把模型放在 platforms/lmstudio/models 或 home/.lmstudio/models，先搬过来
+    for src in (lmstudio_home(cfg) / ".lmstudio" / "models", lmstudio_dir(cfg) / "models"):
+        if src.exists() and not _same_dir(src, target):
+            _merge_tree(src, target)
+    if write_config:
+        conf = lmstudio_config_file(cfg)
+        data: dict[str, Any] = {}
+        try:
+            if conf.is_file():
+                raw = json.loads(conf.read_text(encoding="utf-8"))
+                if isinstance(raw, dict):
+                    data = raw
+        except Exception:
+            data = {}
+        data["modelsDirectory"] = str(target)
+        conf.parent.mkdir(parents=True, exist_ok=True)
+        conf.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return target
+
+
+def _migrate_ollama_models(cfg: dict[str, Any]) -> Path:
+    """老版本的 platforms/ollama/models 搬到 models/ollama；同盘改名，很快。"""
+    target = ollama_models_dir(cfg)
+    old = ollama_dir(cfg) / "models"
+    if old.exists() and not _same_dir(old, target):
+        _merge_tree(old, target)
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def ensure_model_layout(cfg: dict[str, Any] | None = None) -> None:
+    """启动时调用一次：把 Ollama / LM Studio 的模型都收进 models 根目录。"""
+    cfg = cfg or load_config()
+    try:
+        _migrate_ollama_models(cfg)
+    except Exception:
+        log.exception("迁移 Ollama 模型目录失败")
+    try:
+        if lmstudio_dir(cfg).exists() or (lmstudio_home(cfg) / ".lmstudio").exists():
+            ensure_lmstudio_models(cfg)
+    except Exception:
+        log.exception("整理 LM Studio 模型目录失败")
 
 
 LMS_NAMES = (
@@ -440,7 +560,7 @@ def engine_usage(key: str, item: dict[str, Any], cfg: dict[str, Any]) -> dict[st
         ],
         "ollama": [
             "本卡点“启动”，等状态变成“已连接”",
-            "拉模型：在「模型」页点“用 Ollama 拉取”，或命令行 ollama pull qwen2.5:7b（模型落在 platforms\\ollama\\models）",
+            "拉模型：在「模型」页点“用 Ollama 拉取”，或命令行 ollama pull qwen2.5:7b（模型落在 models\\ollama）",
             "用户端模型下拉自动出现该模型；也可以直接调下面的接口地址",
         ],
         "lmstudio": [
@@ -656,8 +776,7 @@ async def _install_ollama(key: str, force: bool = False) -> tuple[bool, str]:
             Path(exe).chmod(0o755)
         except Exception:
             pass
-    models = ollama_models_dir(cfg)
-    models.mkdir(parents=True, exist_ok=True)
+    models = _migrate_ollama_models(cfg)
     _set(key, pct=88, step="安装", msg=f"程序 {exe} · 模型目录 {models}")
     return True, "Ollama 便携版已装到 platforms/ollama"
 
@@ -687,13 +806,12 @@ async def _start_ollama(key: str, endpoint: str = "", force: bool = False) -> tu
     exe = portable_ollama(cfg) or detect("ollama")["path"]
     if not exe:
         return False, "没有找到 ollama 程序"
-    models = ollama_models_dir(cfg)
-    models.mkdir(parents=True, exist_ok=True)
+    models = _migrate_ollama_models(cfg)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log = open(LOG_DIR / "ollama.log", "a", encoding="utf-8")
     env = platform_store.child_env(cfg)
     env["OLLAMA_HOST"] = _host_port(base)
-    env["OLLAMA_MODELS"] = str(models)   # 让模型落在 platforms/ollama/models，而不是 ~/.ollama
+    env["OLLAMA_MODELS"] = str(models)   # 统一落在 models/ollama，而不是 ~/.ollama
     flags = CREATE_NO_WINDOW if IS_WINDOWS else 0
     PROC = subprocess.Popen([exe, "serve"], stdout=log, stderr=subprocess.STDOUT,
                             creationflags=flags, env=env)
@@ -793,6 +911,11 @@ async def _install_lmstudio(key: str, force: bool = False) -> tuple[bool, str, b
     env = platform_store.child_env(cfg, {"LMS_NO_MODIFY_PATH": "1", "LMS_BOOTSTRAP_INSTALL_SH": "1"},
                                    home=home)
     await asyncio.to_thread(_run, key, [str(llmster), "bootstrap"], 1500, env)
+    # 让 LM Studio 的模型目录收到 models/lmstudio，不再跟着 home 散落
+    try:
+        ensure_lmstudio_models(cfg)
+    except Exception:
+        log.exception("初始化 LM Studio 模型目录失败")
     lms = managed_lms(cfg)
     if not lms:
         return False, f"初始化完成但没在 {target} 里找到 lms，请查 data\\logs 或点“查看日志”", False
@@ -815,6 +938,11 @@ async def _start_lmstudio(key: str, endpoint: str = "", force: bool = False) -> 
                            "想把程序收进工作台目录，点“装到工作台目录”")
         return False, "没有找到 LM Studio，请先点“一键部署”"
     port = _host_port(base, LMSTUDIO_PORT).rsplit(":", 1)[-1]
+    if info.get("managed"):
+        try:
+            ensure_lmstudio_models(cfg)
+        except Exception:
+            log.exception("写入 LM Studio 模型目录配置失败")
     env = platform_store.child_env(cfg, home=(lmstudio_home(cfg) if info.get("managed") else None))
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log = open(LOG_DIR / "lmstudio.log", "a", encoding="utf-8")
@@ -1185,6 +1313,14 @@ async def uninstall(key: str) -> dict[str, Any]:
         return {"ok": False, "msg": f"正在拉取 {PULL.get('tag')}，等拉完再卸载"}
 
     cfg = load_config()
+    # 删程序前先把模型收到 models 根下，避免老版本目录里的模型被一起删掉
+    try:
+        if key == "ollama":
+            _migrate_ollama_models(cfg)
+        elif key == "lmstudio":
+            ensure_lmstudio_models(cfg, write_config=False)
+    except Exception:
+        log.exception("卸载前整理模型目录失败")
     root = _platforms_root(cfg)
     kept_models = ""
     targets: list[Path] = []

@@ -9,26 +9,29 @@ import pytest
 def _fake_cfg(tmp_path: Path) -> dict:
     return {
         "platforms_dir": str(tmp_path / "platforms"),
+        "models_dir": str(tmp_path / "models"),
         "ollama_dir": str(tmp_path / "platforms" / "ollama"),
         "ollama_models": "",
     }
 
 
-def test_ollama_paths_default_under_platforms(tmp_path, monkeypatch):
+def test_ollama_paths_default_under_platforms_and_models(tmp_path, monkeypatch):
     from backend.services import platform_deploy
 
     monkeypatch.setattr(platform_deploy, "load_config", lambda: _fake_cfg(tmp_path))
     assert platform_deploy.ollama_dir().parts[-2:] == ("platforms", "ollama")
-    assert platform_deploy.ollama_models_dir().parts[-3:] == ("platforms", "ollama", "models")
+    # 程序在 platforms/ollama，模型统一收到 models/ollama
+    assert platform_deploy.ollama_models_dir().parts[-2:] == ("models", "ollama")
 
 
 def test_ollama_dir_follows_platforms_dir(tmp_path, monkeypatch):
     from backend.services import platform_deploy
 
-    cfg = {"platforms_dir": str(tmp_path / "moved" / "platforms"), "ollama_dir": "", "ollama_models": ""}
+    cfg = {"platforms_dir": str(tmp_path / "moved" / "platforms"), "models_dir": str(tmp_path / "moved" / "models"),
+           "ollama_dir": "", "ollama_models": ""}
     monkeypatch.setattr(platform_deploy, "load_config", lambda: cfg)
     assert platform_deploy.ollama_dir() == tmp_path / "moved" / "platforms" / "ollama"
-    assert platform_deploy.ollama_models_dir() == tmp_path / "moved" / "platforms" / "ollama" / "models"
+    assert platform_deploy.ollama_models_dir() == tmp_path / "moved" / "models" / "ollama"
 
 
 @pytest.mark.parametrize("rel", ["ollama.exe", "bin/ollama.exe", "bin/ollama"])
@@ -86,7 +89,7 @@ def test_detect_marks_platform_managed(tmp_path, monkeypatch):
     assert info["installed"] is True
     assert info["managed"] is True
     assert info["path"] == str(exe)
-    assert info["models_path"] == str(tmp_path / "platforms" / "ollama" / "models")
+    assert info["models_path"] == str(tmp_path / "models" / "ollama")
 
 
 def test_detect_marks_system_install_unmanaged(tmp_path, monkeypatch):
@@ -125,7 +128,7 @@ def test_detect_marks_system_dir_models_as_legacy_after_portable(tmp_path, monke
     info = platform_deploy.detect("ollama")
     assert info["managed"] is True
     assert info["legacy_models"] is True
-    assert info["models_path"] == str(tmp_path / "platforms" / "ollama" / "models")
+    assert info["models_path"] == str(tmp_path / "models" / "ollama")
     assert info["system_models_path"] == str(sys_models)
 
 
@@ -179,7 +182,7 @@ def test_adopt_models_moves_files(tmp_path, monkeypatch):
 
     result = __import__("asyncio").run(platform_deploy.adopt_ollama_models())
     assert result["ok"] is True, result
-    dst = tmp_path / "platforms" / "ollama" / "models"
+    dst = tmp_path / "models" / "ollama"
     assert (dst / "blobs" / "sha256-abc").read_text(encoding="utf-8") == "blob-data"
     assert (dst / "manifests" / "registry" / "qwen").exists()
     assert not (src / "blobs" / "sha256-abc").exists()

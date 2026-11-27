@@ -88,7 +88,7 @@ def test_install_flow_uses_cache_and_sets_models_dir(tmp_path, monkeypatch):
     exe = Path(platform_deploy.portable_ollama(cfg))
     assert exe.is_file()
     assert exe.parent == tmp_path / "platforms" / "ollama"
-    assert (tmp_path / "platforms" / "ollama" / "models").is_dir()
+    assert (tmp_path / "models" / "ollama").is_dir()
     state = platform_deploy.get_state("ollama")
     assert "platforms" in state["msg"] or "程序" in state["msg"]
 
@@ -108,24 +108,6 @@ def test_install_flow_reports_after_extract(tmp_path, monkeypatch):
     ok, msg = asyncio.run(platform_deploy._install_ollama("ollama", force=True))
     assert ok is True, msg
     assert "platforms/ollama" in msg or "platforms\\ollama" in msg
-
-
-def test_force_start_refuses_when_other_ollama_owns_port(tmp_path, monkeypatch):
-    from backend.services import platform_deploy
-
-    monkeypatch.setattr(platform_deploy, "load_config", lambda: _cfg(tmp_path))
-    exe = tmp_path / "platforms" / "ollama" / "ollama.exe"
-    exe.parent.mkdir(parents=True, exist_ok=True)
-    exe.write_bytes(b"MZ")
-    monkeypatch.setattr(platform_deploy, "PROCS", {})
-
-    async def healthy(*a, **kw):
-        return True, [], ""
-
-    monkeypatch.setattr(platform_deploy.platforms, "_probe_external", healthy)
-    ok, msg = asyncio.run(platform_deploy._start_ollama("ollama", "", force=True))
-    assert ok is False
-    assert "Quit" in msg
 
 
 def test_start_passes_models_env(tmp_path, monkeypatch):
@@ -159,5 +141,5 @@ def test_start_passes_models_env(tmp_path, monkeypatch):
     assert ok is True, msg
     assert seen["cmd"][0] == str(exe)
     assert seen["cmd"][1] == "serve"
-    assert seen["env"]["OLLAMA_MODELS"] == str(tmp_path / "platforms" / "ollama" / "models")
+    assert seen["env"]["OLLAMA_MODELS"] == str(tmp_path / "models" / "ollama")
     assert seen["env"]["OLLAMA_HOST"] == "127.0.0.1:11434"

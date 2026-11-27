@@ -29,12 +29,14 @@ def test_every_engine_lands_under_one_root(tmp_path):
     assert platform_store.tmp_root(cfg) == root / ".tmp"
 
 
-def test_engine_models_stay_with_engine(tmp_path):
+def test_engine_models_live_under_models_root(tmp_path):
     cfg = _cfg(tmp_path)
-    assert platform_store.models_dir(cfg, "ollama") == platform_store.target(cfg, "ollama") / "models"
-    assert platform_store.models_dir(cfg, "lmstudio") == platform_store.target(cfg, "lmstudio") / "models"
-    assert platform_store.models_dir(cfg, "llama.cpp") == Path(cfg["models_dir"])
-    assert platform_store.models_dir(cfg, "vllm") == Path(cfg["models_dir"])
+    models = Path(cfg["models_dir"])
+    # 所有引擎的模型都在 models 根下，只是 Ollama / LM Studio 各占一层子目录
+    assert platform_store.models_dir(cfg, "ollama") == models / "ollama"
+    assert platform_store.models_dir(cfg, "lmstudio") == models / "lmstudio"
+    assert platform_store.models_dir(cfg, "llama.cpp") == models
+    assert platform_store.models_dir(cfg, "vllm") == models
 
 
 def test_child_env_redirects_system_temp_and_caches(tmp_path):
@@ -67,7 +69,7 @@ def test_summary_lists_all_storage_without_scanning_models(tmp_path):
     cfg = _cfg(tmp_path)
     rows = platform_store.summary(cfg, with_sizes=False)
     keys = {r["key"] for r in rows}
-    assert {"downloads", "tmp", "cache", "models", "data"} <= keys
+    assert {"downloads", "tmp", "cache", "models", "models:ollama", "models:lmstudio", "data"} <= keys
     for key in platform_store.MANAGED_ENGINES:
         assert f"engine:{key}" in keys
     models_row = next(r for r in rows if r["key"] == "models")

@@ -6,7 +6,7 @@
     <根目录>\\platforms\\llama.cpp|ollama|lmstudio|vllm   程序本体
     <根目录>\\platforms\\.downloads                     下载的安装包 / 压缩包
     <根目录>\\platforms\\.tmp                           解压与临时文件
-    <根目录>\\platforms\\<引擎>\\models                  引擎自己的模型（Ollama / LM Studio）
+    <根目录>\\platforms\\<引擎>\\models                  引擎自己的模型（vLLM 等）
     <根目录>\\models                                    GGUF / Hugging Face 仓库
     <根目录>\\data\\cache                                pip / Hugging Face / 其它缓存
 
@@ -76,12 +76,19 @@ def target(cfg: dict[str, Any] | None, key: str) -> Path:
 
 
 def models_dir(cfg: dict[str, Any] | None, key: str) -> Path:
-    """每个引擎自己的模型目录：Ollama、LM Studio 跟着程序走；其余用公共 models。"""
+    """模型统一放在 models 下：llama.cpp / vLLM 用 models 根，Ollama / LM Studio 用子目录。
+
+    Ollama 的 registry 结构是 blobs + manifests，LM Studio 要 publisher/model/xxx.gguf
+    的层级，两者都不能和平铺的 .gguf 混在同一层；所以在 models 下各给一层子目录，
+    物理上仍然只有一个模型根目录，备份/搬走只动 models 一处。
+    """
     cfg = cfg or load_config()
+    base = Path(str(cfg.get("models_dir") or "").strip()).expanduser() if str(cfg.get("models_dir") or "").strip() else default_models_dir()
     if key in ("ollama", "lmstudio"):
-        return target(cfg, key) / "models"
-    raw = str(cfg.get("models_dir") or "").strip()
-    return Path(raw).expanduser() if raw else default_models_dir()
+        return base / key
+    if key in ("llama.cpp", "vllm", "shared"):
+        return base
+    return base
 
 
 def cache_root() -> Path:
@@ -189,6 +196,10 @@ def summary(cfg: dict[str, Any] | None = None, with_sizes: bool = True) -> list[
     md = models_dir(cfg, "shared")
     rows.append({"key": "models", "label": "模型目录", "path": str(md), "kind": "models",
                  "exists": md.exists(), "bytes": -1})
+    for key, label in (("ollama", "Ollama 模型"), ("lmstudio", "LM Studio 模型")):
+        d = models_dir(cfg, key)
+        rows.append({"key": f"models:{key}", "label": label, "path": str(d), "kind": "models",
+                     "exists": d.exists(), "bytes": -1})
     cache = cache_root()
     rows.append({"key": "cache", "label": "pip / HF 缓存", "path": str(cache), "kind": "cache",
                  "exists": cache.exists(),

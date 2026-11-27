@@ -50,9 +50,10 @@ def test_ollama_uninstall_keeps_user_models(tmp_path, monkeypatch):
     assert not (root / "ollama.exe").exists()
     assert not (root / "lib").exists()
     assert not cache.exists()
-    # 用户自己 pull 的模型留着
-    assert (root / "models" / "blobs" / "sha256-0").exists()
-    assert result["kept_models"] == str(root / "models")
+    # 用户自己 pull 的模型留着，并被收进 models/ollama
+    kept = tmp_path / "models" / "ollama"
+    assert (kept / "blobs" / "sha256-0").exists()
+    assert result["kept_models"] == str(kept)
     assert "模型保留" in result["msg"]
     assert "installers" in result["msg"]
     assert result["freed"] > 0

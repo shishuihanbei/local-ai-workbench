@@ -1,6 +1,6 @@
 # 本地 AI 工作台
 
-> 当前版本 **0.9.2.0** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
+> 当前版本 **0.9.3.0** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
 
 单进程部署：FastAPI 后端 + 用户前端 + 管理控制台 + OpenAI 兼容 API。模型在本机运行，对话记录存本机 SQLite，不经过云端。
 
@@ -62,7 +62,7 @@ workbench/
 └── README.md
 ```
 
-模型放在程序根目录的 `models`，四个可管理的本地引擎（llama.cpp / Ollama / LM Studio / vLLM）全部落在 `platforms` 一个根目录下：程序本体在 `platforms/<引擎>`（Ollama、LM Studio 的模型也在 `platforms/<引擎>/models`），下载的安装包缓存在 `platforms/.downloads/<引擎>`，解压与临时文件在 `platforms/.tmp`，pip / Hugging Face 缓存统一在 `data/cache`。子进程的 `TMP` / `TEMP` / `PIP_CACHE_DIR` / `HF_HOME` 都被指回这些目录，安装过程不会往 `%TEMP%`、`%LOCALAPPDATA%`、`~/.cache`、`~/.ollama`、`~/.lmstudio` 里丢东西。路径在控制台「部署 · 下载与安装目录」里可以直接看到（含体积），可在配置里改 `platforms_dir`，不写死绝对路径；整个 `platforms` 文件夹可以整体搬走。
+模型统一放在程序根目录的 `models`，四个可管理的本地引擎（llama.cpp / Ollama / LM Studio / vLLM）全部落在 `platforms` 一个根目录下：程序本体在 `platforms/<引擎>`，下载的安装包缓存在 `platforms/.downloads/<引擎>`，解压与临时文件在 `platforms/.tmp`，pip / Hugging Face 缓存统一在 `data/cache`。模型不再跟着程序目录走：llama.cpp / vLLM 直接读 `models` 根下平铺的 GGUF；Ollama 用 `models/ollama`（blobs + manifests），启动时自动把旧的 `platforms/ollama/models` 搬进来并设置 `OLLAMA_MODELS`；LM Studio 用 `models/lmstudio`（`publisher/model/*.gguf` 层级），并在 `platforms/lmstudio/home/.lmstudio/config.json` 写入 `modelsDirectory` 指过去。子进程的 `TMP` / `TEMP` / `PIP_CACHE_DIR` / `HF_HOME` 都被指回这些目录，安装过程不会往 `%TEMP%`、`%LOCALAPPDATA%`、`~/.cache`、`~/.ollama`、`~/.lmstudio` 里丢东西。路径在控制台「部署 · 下载与安装目录」里可以直接看到（含体积），可在配置里改 `platforms_dir` / `models_dir`，不写死绝对路径；整个 `platforms` 与 `models` 文件夹可以分别整体搬走。
 
 ## 快速开始
 
