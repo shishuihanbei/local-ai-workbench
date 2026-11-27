@@ -1,6 +1,6 @@
 # 本地 AI 工作台
 
-> 当前版本 **0.9.1.0** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
+> 当前版本 **0.9.1.1** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
 
 单进程部署：FastAPI 后端 + 用户前端 + 管理控制台 + OpenAI 兼容 API。模型在本机运行，对话记录存本机 SQLite，不经过云端。
 
@@ -340,7 +340,7 @@ llama.cpp、Ollama、LM Studio、vLLM 在部署页是**同一套按钮、同一�
 - 控制台「整机卸载」面板显示本机 `uninstall.bat` 的完整路径，可一键复制；
 - 这是**整机**卸载；只想换某个引擎时用卡片上的「卸载」，它只删 `platforms/<引擎>` 并保留你自己下载的模型。
 
-部署页只描述**本机实际装了的引擎**：没装 llama.cpp 就不会出现“llama.cpp 状态”这一块，装了 Ollama 就在“本地部署开关”和“服务”里显示 Ollama 的地址与运行状态——部署几个写几个，不拿 llama.cpp 当默认前提。
+部署页只描述**本机实际装了的引擎**：原来的“llama.cpp 状态”已换成“本地部署状态”，逐个列出已装引擎（llama.cpp、Ollama、LM Studio、vLLM）是“运行中”还是“已装未跑”，并带端口、模型数；没装的引擎只在下面一行提示去平台卡部署，不占卡片。llama.cpp 的安装路径、模型目录和备用安装按钮只在装了它（或正在装）时出现，不再拿 llama.cpp 当默认前提。
 
 ### 登录页记住账号
 

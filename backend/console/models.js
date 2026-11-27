@@ -23,20 +23,23 @@ function renderHardware(hw) {
 function renderInstall(st) {
   S.install = st;
   const llama = st.llama;
-  // 这台机子没装 llama.cpp 就整块不显示：装了 Ollama / LM Studio 的用户不需要这个“备用入口”
+  // 这块现在叫“本地部署状态”：装了 Ollama / LM Studio 的用户也能看到自己的引擎
   const panel = $("installPanel");
-  if (panel) panel.hidden = !llama.installed && !st.install.running;
+  if (panel) panel.hidden = false;
+  const showLlama = !!llama.installed || !!st.install.running;
+  if ($("installRow")) $("installRow").hidden = !showLlama;
+  if ($("depsRow")) $("depsRow").hidden = !showLlama;
   $("installInfo").innerHTML = `
     <div class="status-line"><span class="dot ${llama.installed ? "on" : ""}"></span>
-      <b>${llama.installed ? "llama.cpp 已就绪" : "本机未安装 llama.cpp"}</b></div>
+      <b>${llama.installed ? "llama.cpp 已就绪" : "llama.cpp 正在安装"}</b></div>
     <div class="mono">${esc(llama.installed ? (llama.path + (llama.version ? " · " + llama.version : "")) : "安装后会写入 " + llama.llama_dir)}</div>
     <div class="mono">模型目录：${esc(st.models_dir)} ${st.models_dir_exists ? "（存在）" : "（不存在，会自动创建）"}</div>`;
 
   $("installBtn").hidden = !!llama.installed || !st.supported;
   $("installBtn").textContent = "备用安装 llama.cpp";
   $("installBtn").disabled = !!st.install.running;
-  $("installHint").textContent = st.install.running ? "安装进行中…"
-    : "本机已装 llama.cpp；没装的引擎不会在这里占位，统一在上方平台卡部署";
+  $("installHint").textContent = st.install.running ? "llama.cpp 安装进行中…"
+    : "已装的引擎逐个列在这里，未安装的去上方平台卡部署";
 
   $("depsRow").innerHTML = Object.entries(st.python_packages || {}).map(([k, ok]) =>
     `<span class="chip ${ok ? "ok" : "miss"}">${esc(k)} ${ok ? "已安装" : "缺失"}</span>`).join("")
@@ -50,6 +53,32 @@ function renderInstall(st) {
 }
 
 let installPolling = false;
+
+function renderLocalStatus(platforms) {
+  const box = $("localStatusRows");
+  if (!box) return;
+  const list = (platforms || []).filter((p) => p && p.key !== "custom");
+  const rows = list.filter((p) => p.installed || p.healthy);
+  const idle = list.filter((p) => !p.installed && !p.healthy).map((p) => p.name || p.key);
+  if (!rows.length) {
+    box.innerHTML = `<div class="hint">本机还没有装任何本地引擎：在平台卡点“一键部署”，装好后这里会逐个列出状态。</div>`;
+    return;
+  }
+  box.innerHTML = rows.map((p) => {
+    const live = !!p.healthy;
+    const state = live ? "运行中" : "已装未跑";
+    const n = (p.models || []).length;
+    const detail = (live ? [p.detail || "", n ? n + " 个模型" : ""] : ["已安装，未启动", n ? n + " 个模型" : ""])
+      .filter(Boolean).join(" · ");
+    return `<div class="local-status-row">
+      <span class="dot ${live ? "on" : "warn"}"></span>
+      <b>${esc(p.name || p.key)}</b>
+      <span class="badge ${live ? "good" : "warn"}">${state}</span>
+      <span class="mono">${esc(detail)}</span>
+    </div>`;
+  }).join("");
+  if (idle.length) box.innerHTML += `<p class="hint">未安装：${esc(idle.join("、"))}（在平台卡点“一键部署”）</p>`;
+}
 
 async function pollInstall() {
   if (installPolling) return;
@@ -328,6 +357,7 @@ function renderPlatforms(data) {
     const names = items.filter((p) => selected.has(p.key)).map((p) => p.name);
     $("platformNote").textContent = `已选择：${names.join("、")}。“保存选择”只保存勾选和地址；每张卡里的“一键部署”才会安装并启动。`;
   }
+  renderLocalStatus(items);
 }
 
 function platformSelection() {

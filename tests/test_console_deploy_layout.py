@@ -1,4 +1,4 @@
-"""部署页只描述本机实际装了的引擎：没装 llama.cpp 不占位，开关与服务按已装引擎写。"""
+"""部署页只描述本机实际装了的引擎：本地部署状态列出各已装引擎，不再以 llama.cpp 为默认前提。"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,17 +10,25 @@ def _read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
-def test_llama_panel_can_be_hidden():
+def test_local_status_panel_lists_all_installed_engines():
     html = _read("backend/console/index.html")
     assert 'id="installPanel"' in html
-    assert "llama.cpp 状态" in html
-    assert "<h2>本地部署状态</h2>" not in html
+    assert "<h2>本地部署状态</h2>" in html
+    assert "llama.cpp 状态" not in html
+    assert 'id="localStatusRows"' in html
+    js = _read("backend/console/models.js")
+    assert "function renderLocalStatus(platforms)" in js
+    assert "已装未跑" in js
+    assert "未安装：" in js
 
 
-def test_install_panel_hidden_when_llama_absent():
+def test_llama_detail_block_only_when_llama_present():
     js = _read("backend/console/models.js")
     assert 'const panel = $("installPanel");' in js
-    assert "panel.hidden = !llama.installed && !st.install.running" in js
+    assert "panel.hidden = false" in js
+    assert "const showLlama = !!llama.installed || !!st.install.running" in js
+    assert '$("installRow").hidden = !showLlama' in js
+    assert '$("depsRow").hidden = !showLlama' in js
 
 
 def test_switch_and_service_talk_about_real_engines():

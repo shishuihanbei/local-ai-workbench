@@ -1600,10 +1600,11 @@ ollama pull qwen2.5:7b
 
     <section class="panel" id="installPanel">
       <div class="panel-head">
-        <h2>llama.cpp 状态</h2>
-        <span class="hint" id="installHint">正在检测…；没装 llama.cpp 时不占位，直接在上方平台卡选别的引擎</span>
+        <h2>本地部署状态</h2>
+        <span class="hint" id="installHint">已装的引擎逐个列在这里，未安装的去上方平台卡部署</span>
       </div>
-      <div class="install-row">
+      <div class="local-status-list" id="localStatusRows"></div>
+      <div class="install-row" id="installRow">
         <div class="install-info" id="installInfo"></div>
         <div class="install-act">
           <button class="btn" id="installBtn" hidden>备用安装 llama.cpp</button>
