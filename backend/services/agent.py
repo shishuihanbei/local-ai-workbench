@@ -150,7 +150,7 @@ def build_tools(ctx: dict[str, Any]) -> list[dict[str, Any]]:
     cfg = ctx["cfg"]
     body = ctx["body"]
     tools: list[dict[str, Any]] = []
-    if cfg.get("kb_enabled"):
+    if cfg.get("kb_enabled") and cfg.get("agent_tool_kb", True):
         tools.append({
             "type": "function",
             "function": {
@@ -166,7 +166,7 @@ def build_tools(ctx: dict[str, Any]) -> list[dict[str, Any]]:
                 },
             },
         })
-    if cfg.get("library_enabled"):
+    if cfg.get("library_enabled") and cfg.get("agent_tool_library", True):
         tools.append({
             "type": "function",
             "function": {
@@ -182,7 +182,7 @@ def build_tools(ctx: dict[str, Any]) -> list[dict[str, Any]]:
                 },
             },
         })
-    if websearch.is_enabled() and getattr(body, "web", False):
+    if websearch.is_enabled() and getattr(body, "web", False) and cfg.get("agent_tool_web", True):
         tools.append({
             "type": "function",
             "function": {
@@ -198,14 +198,15 @@ def build_tools(ctx: dict[str, Any]) -> list[dict[str, Any]]:
                 },
             },
         })
-    tools.append({
-        "type": "function",
-        "function": {
-            "name": "read_attachments",
-            "description": "读取本轮已上传附件的文件名、解析正文和 OCR 摘要；图片以视觉输入为准。",
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    })
+    if cfg.get("agent_tool_attachments", True):
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": "read_attachments",
+                "description": "读取本轮已上传附件的文件名、解析正文和 OCR 摘要；图片以视觉输入为准。",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
+        })
     return tools
 
 
@@ -312,7 +313,7 @@ async def run_agent(*, messages: list[dict[str, Any]], tools: list[dict[str, Any
         await finish_with(first)
     else:
         current = first
-        for _ in range(max_turns):
+        for turn in range(1, max_turns + 1):
             assistant_message: dict[str, Any] = {
                 "role": "assistant",
                 "content": current["content"] or "",
@@ -333,6 +334,7 @@ async def run_agent(*, messages: list[dict[str, Any]], tools: list[dict[str, Any
                 dur_ms = int((time.monotonic() - started) * 1000)
                 trace.append({
                     "tool": call["name"],
+                    "turn": turn,
                     "arguments": call["args"],
                     "status": "ok" if result.get("ok") else "error",
                     "summary": result.get("text", "")[:220],

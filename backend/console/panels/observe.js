@@ -53,11 +53,27 @@ async function loadRequests() {
       <td class="req-conv">${r.conversation_id ? `<div class="req-conv-title" title="${esc(r.conversation_title || '未命名对话')}">${esc(r.conversation_title || "未命名对话")}</div><div class="sub mono">#${esc(r.conversation_id)}</div>` : "—"}</td>
       <td><div class="name">${esc(r.model || "—")}</div><div class="sub mono">${esc(r.trace_id || "")}</div></td>
       <td><span class="src ${esc(r.provider || "")}">${esc(r.provider || "—")}</span></td>
+      <td>${agentCell(r)}</td>
       <td>${fmtInt(r.total_tokens)}${r.tokens_estimated ? `<div class="sub">估算</div>` : ""}</td>
       <td>${fmtMs(r.ttft_ms)}</td><td>${fmtMs(r.total_ms)}</td><td>${fmtCost(r.cost)}</td>
       <td class="status-${esc(r.status)}">${esc(r.status)}${r.error ? `<div class="sub" title="${esc(r.error)}">${esc(r.error.slice(0, 24))}</div>` : ""}</td>
     </tr>`).join("")
-    : `<tr><td colspan="10" style="color:var(--muted)">没有匹配的记录</td></tr>`;
+    : `<tr><td colspan="11" style="color:var(--muted)">没有匹配的记录</td></tr>`;
+}
+
+/* 列表里标出这条回答是否走了自动工具 Agent，以及调了几次工具 */
+function agentCell(r) {
+  let attrs = {};
+  try {
+    attrs = typeof r.llm_attrs === "string" ? JSON.parse(r.llm_attrs) : (r.llm_attrs || {});
+  } catch {
+    attrs = {};
+  }
+  const tools = Number(r.tool_count || 0);
+  if (!attrs || attrs.agent_mode !== true) return '<span class="sub">—</span>';
+  const names = (attrs.agent_tools || []).length;
+  return `<span class="badge ${tools ? "good" : "ok"}">Agent${tools ? " · " + tools + " 次工具" : ""}</span>`
+    + `<div class="sub">${names} 个工具可用${attrs.agent_turns ? " · " + attrs.agent_turns + " 轮" : ""}</div>`;
 }
 
 async function loadRequestDetail(rid) {
@@ -65,6 +81,9 @@ async function loadRequestDetail(rid) {
   const r = d.request;
   $("reqDetail").hidden = false;
   $("detailHint").textContent = "trace " + (r.trace_id || "");
+  const toolSpans = (d.spans || []).filter((s) => s.kind === "tool");
+  const llmSpan = (d.spans || []).find((s) => s.kind === "llm");
+  const llmAttrs = llmSpan ? parseSpanAttrs(llmSpan) : {};
   const kv = [
     ["状态", r.status], ["模型", r.model], ["来源", r.provider + (r.provider_id ? " #" + r.provider_id : "")],
     ["Prompt Token", fmtInt(r.prompt_tokens)], ["Completion Token", fmtInt(r.completion_tokens)],
@@ -76,11 +95,50 @@ async function loadRequestDetail(rid) {
     ["Prompt Hash", r.prompt_hash || "—"], ["路由决策", r.decision_json || "—"],
     ["参数", r.params_json || "—"], ["错误", r.error || "—"],
   ];
+  kv.push(["自动工具", llmAttrs.agent_mode === true
+    ? `开启 · ${(llmAttrs.agent_tools || []).length} 个工具可用 · ${toolSpans.length} 次调用`
+      + `${llmAttrs.agent_turns ? " · " + llmAttrs.agent_turns + " 轮" : ""}`
+    : "未启用"],
+  ["可用工具", (llmAttrs.agent_tools || []).map(toolLabel).join("、") || "—"]);
   const spans = d.spans.map((s) => `<span class="badge off">${esc(s.kind)} · ${esc(s.name || "")} ${fmtMs(s.dur_ms)}</span>`).join(" ");
+  const toolList = toolSpans.length
+    ? `<div class="kv" style="grid-column:1/-1"><b>工具调用</b><span>${toolSpans.map((s) => {
+      const a = parseSpanAttrs(s);
+      return `<div class="agent-call">
+        <b>${esc(toolLabel(s.name))}</b>
+        <span class="badge ${a.status === "error" ? "bad" : "good"}">${esc(a.status === "error" ? "失败" : "成功")}</span>
+        <span class="hint">${esc(fmtMs(s.dur_ms))} · ${esc(a.count ? a.count + " 条" : "")}</span>
+        <div class="hint mono">${esc(JSON.stringify(a.arguments || {}))}</div>
+        ${a.error ? `<div class="hint" style="color:var(--bad)">${esc(a.error)}</div>` : ""}
+        ${a.summary ? `<div class="hint">${esc(a.summary)}</div>` : ""}
+        ${(a.sources || []).length ? `<div class="hint">${a.sources.map((x) =>
+          esc(x.title || x.url || "来源")).join(" · ")}</div>` : ""}
+      </div>`;
+    }).join("")}</span></div>`
+    : "";
   $("detailBody").innerHTML = kv.map(([k, v]) => `<div class="kv"><b>${esc(k)}</b><span>${esc(String(v ?? "—"))}</span></div>`).join("")
+    + toolList
     + `<div class="kv" style="grid-column:1/-1"><b>Span</b><span>${spans || "—"}</span></div>`
     + `<pre>${esc(r.prompt_rendered || "（未记录 prompt）")}</pre>`;
   $("reqDetail").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function parseSpanAttrs(span) {
+  try {
+    const v = typeof span.attrs_json === "string" ? JSON.parse(span.attrs_json) : (span.attrs_json || {});
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+function toolLabel(name) {
+  return {
+    search_knowledge_base: "检索知识库",
+    search_library: "检索资料库",
+    search_web: "联网检索",
+    read_attachments: "读取附件",
+  }[name] || (name || "工具");
 }
 
 /* ---------------------------------------------------------------- 供应商 */

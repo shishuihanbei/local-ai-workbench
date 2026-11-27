@@ -501,6 +501,13 @@ input, select, textarea { color: var(--text); }
 .detail .kv { border-bottom: 1px dashed var(--line); padding-bottom: 8px; }
 .detail .kv b { display: block; color: var(--muted); font-size: 11px; font-weight: 500; margin-bottom: 3px; }
 .detail .kv span { word-break: break-all; }
+.agent-call {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin: 0 0 8px; padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--panel-soft, #f7f8fb);
+}
+.agent-call > div { flex-basis: 100%; }
+.agent-call .mono { font-size: 11.5px; }
 .detail pre { grid-column: 1/-1; background: #f7f8fc; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; }
 .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .src { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; background: #f4f6fb; color: var(--muted); }

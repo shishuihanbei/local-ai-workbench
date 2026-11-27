@@ -19,9 +19,10 @@ from .. import logbus, pipeline
 from ..config import load_config
 from ..db import audit, execute, fetch_all, fetch_one, parse_meta
 from ..security import current_user, user_from_any_token
-from ..services import (access, admission, agent, attachments, cluster, collab, docgen, kb,
+from ..services import (access, admission, attachments, cluster, collab, docgen, kb,
                         library, llama, memory, model_fit, model_usage, moderation,
                         prompts, quota, routing, skills, tts, websearch)
+from ..services import agent as agent_runtime
 
 router = APIRouter(prefix="/api", tags=["chat"])
 log = logging.getLogger(__name__)
@@ -513,7 +514,7 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             msgs[0]["content"] = (str(msgs[0].get("content") or "") + "\n\n" + agent_rules).strip()
         else:
             msgs.insert(0, {"role": "system", "content": agent_rules})
-        agent_tools = agent.build_tools(agent_ctx)
+        agent_tools = agent_runtime.build_tools(agent_ctx)
         if not agent_tools:
             use_agent = False
         else:
@@ -662,7 +663,7 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
                 content_buf.append(note)
                 yield f"data: {json.dumps({'type':'delta','text':note}, ensure_ascii=False)}\n\n".encode()
             if use_agent:
-                agent_result = await agent.run_agent(
+                agent_result = await agent_runtime.run_agent(
                     messages=msgs, tools=agent_tools, base=base, key=key,
                     model=model_name, params=params, ctx=agent_ctx)
                 agent_trace = agent_result.get("trace") or []
@@ -835,6 +836,26 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             price_out = float(decision.get("price_out") or 0)
             cost = round((ptok * price_in + ctok * price_out) / 1_000_000, 6)
             await pipeline.run("after_call", ctx)
+            tool_spans: list[dict[str, Any]] = []
+            tool_cursor = retrieve_ms
+            for action in agent_trace:
+                dur = int(action.get("dur_ms") or 0)
+                tool_spans.append({
+                    "kind": "tool", "name": str(action.get("tool") or ""),
+                    "start_ms": tool_cursor, "dur_ms": dur,
+                    "attrs": {
+                        "arguments": action.get("arguments") or {},
+                        "status": action.get("status") or "ok",
+                        "count": action.get("count") or 0,
+                        "error": action.get("error") or "",
+                        "summary": str(action.get("summary") or "")[:220],
+                        "sources": [
+                            {"title": s.get("title") or "", "url": s.get("url") or ""}
+                            for s in (action.get("sources") or [])[:5]
+                        ],
+                    },
+                })
+                tool_cursor += dur
             event = {
                 "request": {
                     "trace_id": ctx["trace_id"], "user_id": user["id"], "conversation_id": cid,
@@ -858,10 +879,14 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
                     {"kind": "retrieval", "name": "kb.search", "start_ms": 0,
                      "dur_ms": retrieve_ms,
                      "attrs": {"kb": extra.get("kb", []), "top_k": cfg.get("kb_top_k")}},
-                    {"kind": "llm", "name": model_name, "start_ms": retrieve_ms,
+                    *tool_spans,
+                    {"kind": "llm", "name": model_name, "start_ms": tool_cursor,
                      "dur_ms": total_ms,
                      "attrs": {"provider": decision["provider"], "ttft_ms": ttft_ms,
-                               "tokens": ptok + ctok, "status": status}},
+                               "tokens": ptok + ctok, "status": status,
+                               "agent_mode": bool(use_agent),
+                               "agent_tools": extra.get("agent_tools") or [],
+                               "agent_turns": len({a.get("turn") for a in agent_trace})}},
                 ],
             }
             await logbus.put(event)

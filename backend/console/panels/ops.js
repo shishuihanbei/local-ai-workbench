@@ -88,6 +88,35 @@ async function loadAgentsPage() {
     <td class="right"><button class="btn small" data-agent-edit="${a.id}">编辑</button>
       <button class="btn small danger" data-agent-del="${a.id}">删除</button></td>
   </tr>`).join("") : '<tr><td colspan="6" class="hint">还没有智能体，先建一个角色</td></tr>';
+  await loadAgentConfig();
+}
+
+/* 自动工具 Agent 的全局配置：总开关、最大轮次、每个只读工具是否暴露 */
+async function loadAgentConfig() {
+  const d = await api("/api/system/settings");
+  const c = d || {};
+  $("agentModeOn").checked = c.agent_mode_enabled !== false;
+  $("agentToolKb").checked = c.agent_tool_kb !== false;
+  $("agentToolLibrary").checked = c.agent_tool_library !== false;
+  $("agentToolWeb").checked = c.agent_tool_web !== false;
+  $("agentToolAttach").checked = c.agent_tool_attachments !== false;
+  $("agentMaxTurns").value = String(c.agent_max_turns ?? 4);
+}
+
+async function saveAgentConfig() {
+  const turns = Number($("agentMaxTurns").value);
+  if (!Number.isInteger(turns) || turns < 1 || turns > 6) throw new Error("最多工具轮次只支持 1–6");
+  const body = {
+    agent_mode_enabled: $("agentModeOn").checked,
+    agent_tool_kb: $("agentToolKb").checked,
+    agent_tool_library: $("agentToolLibrary").checked,
+    agent_tool_web: $("agentToolWeb").checked,
+    agent_tool_attachments: $("agentToolAttach").checked,
+    agent_max_turns: turns,
+  };
+  await api("/api/system/settings", { method: "PUT", body: JSON.stringify(body) });
+  uiToast("自动工具设置已保存，下一条消息生效");
+  await loadAgentConfig();
 }
 
 function resetAgentEditor() {
@@ -382,6 +411,9 @@ if ($("refreshAgents")) {
   $("refreshAgents").addEventListener("click", () => loadAgentsPage().catch((e) => uiToast(e.message, "bad")));
   $("saveAgent").addEventListener("click", () => saveAgent().catch((e) => uiToast(e.message, "bad")));
   $("resetAgent").addEventListener("click", resetAgentEditor);
+  if ($("saveAgentConfig")) {
+    $("saveAgentConfig").addEventListener("click", () => saveAgentConfig().catch((e) => uiToast(e.message, "bad")));
+  }
   $("refreshPartners").addEventListener("click", () => loadPartnersPage().catch((e) => uiToast(e.message, "bad")));
   $("refreshSquads").addEventListener("click", () => loadSquadsPage().catch((e) => uiToast(e.message, "bad")));
   $("createSquad").addEventListener("click", () => createSquad().catch((e) => uiToast(e.message, "bad")));

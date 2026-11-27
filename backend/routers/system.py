@@ -46,6 +46,7 @@ SETTING_KEYS = [
     "tunnel_target", "tunnel_token", "tunnel_domain", "github_proxy", "kb_enabled", "kb_top_k",
     "library_enabled", "library_max_chars", "library_max_docs",
     "agent_mode_enabled", "agent_max_turns",
+    "agent_tool_kb", "agent_tool_library", "agent_tool_web", "agent_tool_attachments",
     "frontend_url", "allow_register",
     "org_name", "org_short_name", "org_domain", "org_industry", "org_size",
     "org_contact_name", "org_contact_email",

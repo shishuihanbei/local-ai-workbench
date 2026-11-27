@@ -37,6 +37,73 @@ def test_build_tools_respects_switches():
     assert "search_web" in names2
 
 
+def test_build_tools_respects_per_tool_switches():
+    ctx = _ctx(cfg={"agent_tool_kb": False, "agent_tool_library": False,
+                    "agent_tool_attachments": False}, body={"web": True})
+    names = {t["function"]["name"] for t in agent.build_tools(ctx)}
+    assert names == {"search_web"}
+
+    ctx2 = _ctx(cfg={"agent_tool_web": False}, body={"web": True})
+    names2 = {t["function"]["name"] for t in agent.build_tools(ctx2)}
+    assert "search_web" not in names2
+    assert {"search_knowledge_base", "search_library", "read_attachments"} <= names2
+
+
+def test_trace_records_turn_number():
+    ctx = _ctx(cfg={"agent_max_turns": 2})
+    tools = agent.build_tools(ctx)
+
+    async def caller(payload: dict) -> dict:
+        caller.calls += 1
+        if caller.calls <= 2:
+            return {"choices": [{"message": {
+                "content": "",
+                "tool_calls": [_tool_call(f"call_{caller.calls}", "read_attachments")],
+            }}]}
+        return {"choices": [{"message": {"content": "好了。"}}]}
+
+    caller.calls = 0
+    result = asyncio.run(agent.run_agent(
+        messages=[{"role": "user", "content": "读两轮"}], tools=tools,
+        base="http://127.0.0.1:8000", key="", model="test-model",
+        params={}, ctx=ctx, caller=caller))
+    assert [a["turn"] for a in result["trace"]] == [1, 2]
+
+
+def test_agent_settings_are_saved_and_exposed(client, admin_token):
+    from tests.conftest import auth  # noqa: PLC0415
+
+    from backend.config import load_config
+
+    before = {k: v for k, v in load_config().items() if k.startswith("agent_")}
+    try:
+        r = client.put("/api/system/settings", headers=auth(admin_token),
+                       json={"agent_mode_enabled": False, "agent_max_turns": 5,
+                             "agent_tool_kb": False, "agent_tool_library": True,
+                             "agent_tool_web": False, "agent_tool_attachments": True})
+        assert r.status_code == 200, r.text
+        assert set(r.json()["changed"]) >= {
+            "agent_mode_enabled", "agent_max_turns", "agent_tool_kb",
+            "agent_tool_library", "agent_tool_web", "agent_tool_attachments"}
+
+        body = client.get("/api/system/settings", headers=auth(admin_token)).json()
+        assert body["agent_mode_enabled"] is False
+        assert body["agent_max_turns"] == 5
+        assert body["agent_tool_kb"] is False
+        assert body["agent_tool_web"] is False
+
+        tools = agent.build_tools(_ctx(cfg={
+            "agent_mode_enabled": False, "agent_tool_kb": False,
+            "agent_tool_web": False, "agent_tool_library": True,
+            "agent_tool_attachments": True}, body={"web": True}))
+        names = {t["function"]["name"] for t in tools}
+        assert "search_knowledge_base" not in names
+        assert "search_web" not in names
+        assert {"search_library", "read_attachments"} <= names
+    finally:
+        client.put("/api/system/settings", headers=auth(admin_token), json=before)
+
+
 def test_run_agent_executes_tool_then_final_answer():
     ctx = _ctx()
     tools = agent.build_tools(ctx)

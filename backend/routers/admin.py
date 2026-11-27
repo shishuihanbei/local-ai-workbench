@@ -136,7 +136,10 @@ async def list_requests(page: int = 1, size: int = 20, status: str = "", model: 
         f"(SELECT u.username FROM users u WHERE u.id=requests.user_id) username,"
         f"(SELECT c.title FROM conversations c WHERE c.id=requests.conversation_id) conversation_title,"
         f"prompt_tokens,completion_tokens,total_tokens,tokens_estimated,cost,"
-        f"ttft_ms,total_ms,queue_ms,cache_hit,tokens_estimated,created_at "
+        f"ttft_ms,total_ms,queue_ms,cache_hit,tokens_estimated,created_at,"
+        f"(SELECT attrs_json FROM spans s WHERE s.request_id=requests.id AND s.kind='llm' "
+        f"ORDER BY s.id LIMIT 1) llm_attrs,"
+        f"(SELECT COUNT(*) FROM spans s WHERE s.request_id=requests.id AND s.kind='tool') tool_count "
         f"FROM requests WHERE {sql} ORDER BY id DESC LIMIT ? OFFSET ?",
         params + [size, (page - 1) * size])
     return {"items": rows, "total": (total or {}).get("c", 0), "page": page, "size": size}
