@@ -182,7 +182,7 @@ function ollamaStatusLine(m) {
     return `<div class="sub ollama-state warn">Ollama 拉取中断，${part}可断点续传</div>`;
   }
   if (m.ollama_satisfied) {
-    return `<div class="sub ollama-state">Ollama 副本未拉取；本地已下载，不重复拉取</div>`;
+    return `<div class="sub ollama-state">Ollama 副本未拉取；本地 GGUF 已下载，Ollama 仍需单独拉取</div>`;
   }
   return "";
 }
@@ -190,7 +190,7 @@ function ollamaStatusLine(m) {
 function ollamaAction(m) {
   const st = m.ollama_state || {};
   const pct = Math.max(0, Math.min(100, Number(st.pct || 0)));
-  if (m.ollama_satisfied && !st.running) return "";
+  if (m.ollama_pulled && !st.running) return "";
   if (st.running) {
     return `<button class="btn small ghost" disabled title="同一 tag 不重复拉取">Ollama 拉取中 ${pct}%</button>`;
   }
@@ -306,11 +306,15 @@ function renderModelRows() {
       } else {
         if (running) act.push(`<button class="btn small" disabled>下载中…</button>`);
         else if (!m.downloaded) act.push(`<button class="btn small" data-dl="${esc(m.key)}">${failed ? "重试下载" : (m.partial ? "继续下载" : "下载")}</button>`);
-        if (m.downloaded && !m.loaded) act.push(`<button class="btn small" data-load="${esc(m.key)}" title="${m.available === false ? "加载模型会重新开启本地部署" : ""}">${m.available === false ? "加载并开启" : "加载"}</button>`);
+        if (m.downloaded && !m.loaded && m.engine === "llama.cpp" && m.engine_ready === false) {
+          act.push(`<button class="btn small" disabled title="本机未安装 llama.cpp；到「部署」页安装后才能加载这个本地 GGUF">需装 llama.cpp</button>`);
+        } else if (m.downloaded && !m.loaded) {
+          act.push(`<button class="btn small" data-load="${esc(m.key)}" title="${m.available === false ? "加载模型会重新开启本地部署" : ""}">${m.available === false ? "加载并开启" : "加载"}</button>`);
+        }
         if (m.loaded) act.push(`<span class="badge ok">使用中</span>`);
       }
-      // Ollama 用 registry tag 取模型：已经拉取过、或本地 GGUF 已下载的，
-      // 不再给“重复拉取”按钮；正在拉取/中断续传时给出明确状态。
+      // Ollama 用 registry tag 取模型：只有 Ollama 里真的拉到了才隐藏拉取按钮；
+      // 本地有同名 GGUF 不代表 Ollama 能用，仍然允许单独拉取/续传。
       if (m.ollama_tag && (m.engine === "Ollama" || m.ollama_ready)) {
         if (m.ollama_pulled) {
           act.push(`<span class="badge ok" title="Ollama 里已经有这个模型">Ollama 已拉取</span>`);
@@ -324,7 +328,9 @@ function renderModelRows() {
       const oTagState = m.ollama_pulled ? " · 已拉取"
         : (ost.running ? ` · 拉取中 ${opct}%`
           : ((ost.resumable || m.ollama_partial) ? " · 已中断"
-            : (m.ollama_satisfied ? " · 本地已下载" : (m.ollama_ready ? "" : " · 服务未启动"))));
+            : (m.ollama_satisfied
+              ? (m.engine === "Ollama" ? " · 本地已下载" : " · Ollama 未拉取，本地 GGUF 已下载")
+              : (m.ollama_ready ? "" : " · 服务未启动"))));
       const oTag = m.ollama_tag
         ? `<div class="sub">${m.engine === "Ollama" ? "tag：" : "Ollama："}${esc(m.ollama_tag)}${esc(oTagState)}</div>`
         : "";

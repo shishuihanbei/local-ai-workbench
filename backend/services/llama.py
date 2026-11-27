@@ -103,7 +103,7 @@ class LlamaServer:
             return False, f"模型未下载完整（{size/2**30:.2f}/{expected/2**30:.2f} GB）"
         exe = llama_executable(cfg)
         if not exe:
-            return False, "未找到 llama-server 可执行文件，请在设置里配置 llama 目录"
+            return False, "本机未安装 llama.cpp：请到控制台「部署」页安装后再加载 GGUF；也可以改用 Ollama 拉取同一模型"
 
         if not self.running():
             try:
