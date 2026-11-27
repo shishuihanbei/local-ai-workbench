@@ -431,12 +431,15 @@ function renderLocalDeploy(data) {
   const deployedNames = (platforms || [])
     .filter((p) => p && p.key !== "custom" && (p.installed || p.healthy))
     .map((p) => p.name || p.key);
+  const installedIdle = (platforms || [])
+    .filter((p) => p && p.key !== "custom" && p.installed && !p.healthy)
+    .map((p) => p.name || p.key);
   let title, desc, meta;
   if (on && running.length) {
     dot.className = "dot on"; badge.className = "badge good"; badge.textContent = "运行中";
-    title = "本地部署已开启";
-    desc = "用户端和 OpenAI 接口可以调用本地模型。关闭后本地模型会立即从可用列表移除，并拒绝本地模型请求。";
-    meta = `引擎 ${running.join("；")}`;
+    title = `本地部署已开启 · 引擎 ${running.length} 个`;
+    desc = "用户端和 OpenAI 接口可以调用这些平台上的模型。关闭后本地模型会立即从可用列表移除，并拒绝本地模型请求。";
+    meta = `引擎 ${running.join("；")}${installedIdle.length ? `；已装未跑：${installedIdle.join("、")}（开关会自动拉起）` : ""}`;
   } else if (on && srv.running) {
     dot.className = "dot warn"; badge.className = "badge warn"; badge.textContent = "启动中";
     title = "本地部署已开启，服务正在启动";
@@ -446,8 +449,8 @@ function renderLocalDeploy(data) {
     dot.className = "dot warn"; badge.className = "badge warn"; badge.textContent = "待运行";
     title = "本地部署已开启，还没有引擎在跑";
     desc = deployed.length
-      ? `本机已装 ${deployedNames.join("、")}，但服务都没在跑。去上方平台卡点“启动”，启动后用户端即可对话。`
-      : "本机还没有部署任何本地引擎：先在上方平台卡点一个“一键部署”（llama.cpp、Ollama、LM Studio 任选其一）。";
+      ? `开关会把已装的 ${deployedNames.join("、")} 一起拉起来；起不来时去对应平台卡看进度和报错。`
+      : "本机还没有部署任何本地引擎：先在上方平台卡点一个“一键部署”（llama.cpp、Ollama、LM Studio 任选其一），装好的平台会自动加进开关。";
     meta = deployed.length ? `已装 ${deployed.join("；")}` : (installed ? `模型目录 ${data.models_dir || "—"}` : "未检测到已部署引擎");
   } else {
     dot.className = "dot"; badge.className = "badge off"; badge.textContent = "已关闭";

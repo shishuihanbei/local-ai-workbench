@@ -59,12 +59,12 @@ class SettingsBody(BaseModel):
 class LocalDeployBody(BaseModel):
     enabled: bool
     platforms: list[str] | None = None
+    endpoints: dict[str, str] | None = None
+    github_proxy: str | None = None
 
 
 class OllamaPullBody(BaseModel):
     tag: str = ""
-    endpoints: dict[str, str] | None = None
-    github_proxy: str | None = None
 
 
 class LocalPlatformsBody(BaseModel):
@@ -606,13 +606,43 @@ async def _pick_local_model(cfg: dict) -> dict | None:
     return None
 
 
+def _adopt_deployed_platforms(cfg: dict, items: list[dict]) -> list[str]:
+    """把已经装好/在跑的平台自动加进“启用的平台”，别让开关只认一个引擎。
+
+    只补一次：记在 platform_auto_added 里，用户之后手动取消勾选会被尊重，
+    不会每次刷新又被塞回去；重装/新装另一个平台时会再补新增的那个。
+    """
+    autoed = {str(x) for x in (cfg.get("platform_auto_added") or []) if str(x)}
+    fresh = [i["key"] for i in items
+             if i["key"] not in ("llama.cpp", "custom")
+             and (i.get("installed") or i.get("healthy"))
+             and i["key"] not in autoed]
+    selected = platforms.normalize_selected(cfg.get("deploy_platforms"))
+    if not fresh:
+        return selected
+    merged = selected + [k for k in fresh if k not in selected]
+    cfg["deploy_platforms"] = merged
+    cfg["platform_auto_added"] = sorted(autoed | set(fresh))
+    save_config(cfg)
+    platform_models.invalidate()
+    return merged
+
+
 @router.get("/local-deploy")
 async def local_deploy_status(scan: bool = Query(False), user: dict = Depends(admin_user)):
-    """本地部署总开关、平台选择与各平台实际状态；scan=true 会扫描未勾选平台。"""
+    """本地部署总开关、平台选择与各平台实际状态；会顺带发现已装/在跑的平台。
+
+    以前只探测勾选的平台：装了 LM Studio 没勾选就显示“未选中，不检测”，
+    开关里也只列 Ollama。现在每次打开部署页都扫一遍全部平台，
+    并把新发现的已装平台自动并入启用列表。
+    """
     cfg = load_config()
     selected = platforms.normalize_selected(cfg.get("deploy_platforms"))
     srv = await llama.server.status()
-    items = await _platform_items(cfg, selected, srv, scan)
+    items = await _platform_items(cfg, selected, srv, True)
+    selected = _adopt_deployed_platforms(cfg, items)
+    for item in items:
+        item["selected"] = item["key"] in selected
     return {
         "enabled": bool(cfg.get("local_enabled", True)),
         "installed": hardware.llama_info()["installed"],
@@ -833,11 +863,21 @@ async def set_local_deploy(body: LocalDeployBody, user: dict = Depends(admin_use
             else:
                 ok, msg = await llama.server.start(row["key"])
                 notes.append(msg if ok else f"llama.cpp 启动失败：{msg}")
-    else:
-        notes.append("未选择 llama.cpp，工作台不会启动它")
 
     srv = await llama.server.status()
-    items = await _platform_items(cfg, selected, srv)
+    items = await _platform_items(cfg, selected, srv, True)
+    # 开关不只管 llama.cpp：已经装好的 Ollama / LM Studio / vLLM 也一起拉起来
+    import asyncio
+    starting: list[str] = []
+    for p in items:
+        if p["key"] in ("llama.cpp", "custom") or not p.get("selected"):
+            continue
+        if p.get("installed") and not p.get("healthy") and not platform_deploy.is_running(p["key"]):
+            asyncio.create_task(platform_deploy.deploy(p["key"]))
+            starting.append(p["name"])
+    if starting:
+        notes.append("正在启动：" + "、".join(starting) + "（进度见平台卡）")
+    srv = await llama.server.status()
     healthy_external = [p["name"] for p in items
                         if p["kind"] == "external" and p["selected"] and p["healthy"]]
     if healthy_external:
