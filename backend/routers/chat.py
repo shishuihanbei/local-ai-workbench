@@ -23,6 +23,7 @@ from ..services import (access, admission, attachments, cluster, collab, docgen,
                         library, llama, memory, model_fit, model_usage, moderation,
                         prompts, quota, routing, skills, tts, websearch)
 from ..services import agent as agent_runtime
+from ..services import agent_semi
 
 def _upstream_error(status: int, detail: str, model: str | None = None) -> str:
     """把上游错误翻成人能看懂的一句话，保留原始细节便于排查。"""
@@ -189,7 +190,8 @@ def _content_text(message: dict) -> str:
 
 async def _build_context(user: dict, body: ChatBody, cfg: dict,
                          att_rows: list[dict] | None = None,
-                         skill: dict | None = None) -> tuple[list[dict], int, dict]:
+                         skill: dict | None = None,
+                         semi: dict | None = None) -> tuple[list[dict], int, dict]:
     system_prompt = body.system_prompt or prompts.get(
         "core.system", cfg.get("system_prompt") or "")
     use_kb = cfg.get("kb_enabled", False) if body.use_kb is None else body.use_kb
@@ -229,7 +231,7 @@ async def _build_context(user: dict, body: ChatBody, cfg: dict,
     if skill:
         system_prompt = (system_prompt + "\n\n" + skill["prompt"]).strip()
         meta["skill"] = {"id": skill["id"], "name": skill["name"]}
-    if use_kb:
+    if use_kb and not (semi and semi.get("handles_kb")):
         try:
             flags = await fetch_one(
                 "SELECT kb_personal_enabled,kb_use_public,kb_use_personal "
@@ -295,7 +297,7 @@ async def _build_context(user: dict, body: ChatBody, cfg: dict,
         system_prompt = (system_prompt + "\n\n" + docgen.prompt_hint(fmt)).strip()
         meta["output_format"] = fmt
         meta["file_mode"] = True
-    if body.web:
+    if body.web and not (semi and semi.get("handles_web")):
         if not websearch.is_enabled():
             plan = {"query": "", "intent": "general", "skip": "管理后台已关闭联网检索"}
         else:
@@ -359,6 +361,20 @@ async def _build_context(user: dict, body: ChatBody, cfg: dict,
                 "【附件阅读状态】附件正文只是一个网页链接，链接页面没有返回正文"
                 "（需要登录或只显示在线文档界面）。不要声称已经阅读，也不要编造总结或给通用建议；"
                 "直接说明无法读取这个链接的正文，并请用户粘贴正文或导出 PDF/Word 后再上传。")
+    if semi:
+        # 半自主编排的成果：材料块按固定顺序拼好，这里只负责注入
+        if semi.get("prompt"):
+            system_prompt = (system_prompt + "\n\n" + str(semi["prompt"])).strip()
+        s_meta = semi.get("meta") or {}
+        if s_meta.get("kb"):
+            meta["kb"] = s_meta["kb"]
+        if s_meta.get("library"):
+            meta["library"] = s_meta["library"]
+        if s_meta.get("web"):
+            meta["web"] = s_meta["web"]
+            if body.web and s_meta["web"].get("skipped"):
+                system_prompt = (system_prompt + "\n\n【联网状态】" +
+                                 str(s_meta["web"]["skipped"]) + "；不要声称已经联网检索。").strip()
     if system_prompt:
         msgs.append({"role": "system", "content": system_prompt})
     cid = body.conversation_id
@@ -509,9 +525,21 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
              json.dumps(user_meta, ensure_ascii=False) if user_meta else None, now))
     await execute("UPDATE conversations SET updated_at=? WHERE id=?", (now, cid))
 
+    semi_result: dict[str, Any] | None = None
+    if not use_agent and cfg.get("agent_semi_enabled", True):
+        try:
+            semi_result = await agent_semi.run(
+                body.message, user=user, cfg=cfg, body=body,
+                attachments=[] if body.regenerate else att_rows)
+        except Exception as exc:  # 编排失败就退回原来的检索路径，不能挡住对话
+            log.warning("半自主检索编排失败，回退默认检索：%s", exc)
+            semi_result = None
     msgs, max_tokens, extra = await _build_context(
         user, body, cfg, att_rows if not body.regenerate else None,
-        skill if not body.regenerate else skills.get(body.skill))
+        skill if not body.regenerate else skills.get(body.skill), semi_result)
+    if semi_result:
+        extra["agent_plan"] = "semi"
+        extra["agent_tools"] = [s["tool"] for s in (semi_result.get("steps") or [])]
     agent_ctx: dict[str, Any] = {
         "user": user, "cfg": cfg, "body": body,
         "attachments": att_rows, "extra": extra,
@@ -668,11 +696,16 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             model_usage.begin(usage_model, str(user.get("username") or ""))
 
         try:
-            yield f"data: {json.dumps({'type':'meta','conversation_id':cid,'kb':extra.get('kb',[]),'web':extra.get('web') or None,'memory':extra.get('memory') or None,'model':model_name,'provider':decision['provider'],'trace_id':ctx['trace_id'],'route':decision['strategy'],'file_mode':bool(extra.get('file_mode')),'output_format':extra.get('output_format') or None,'model_switch':extra.get('model_switch') or None,'agent_mode':bool(use_agent),'agent_tools':extra.get('agent_tools') or []}, ensure_ascii=False)}\n\n".encode()
+            yield f"data: {json.dumps({'type':'meta','conversation_id':cid,'kb':extra.get('kb',[]),'web':extra.get('web') or None,'memory':extra.get('memory') or None,'model':model_name,'provider':decision['provider'],'trace_id':ctx['trace_id'],'route':decision['strategy'],'file_mode':bool(extra.get('file_mode')),'output_format':extra.get('output_format') or None,'model_switch':extra.get('model_switch') or None,'agent_mode':bool(use_agent),'agent_plan':extra.get('agent_plan') or None,'agent_tools':extra.get('agent_tools') or []}, ensure_ascii=False)}\n\n".encode()
             if extra.get("web_fallback"):
                 note = "原文档链接需要登录，无法直接读取；以下是按文档标题检索到的公开资料概要，并非原文档内容。\n\n"
                 content_buf.append(note)
                 yield f"data: {json.dumps({'type':'delta','text':note}, ensure_ascii=False)}\n\n".encode()
+            if semi_result:
+                # 半自主的来源在回答前先算完，这里把每一步摊给前端看
+                agent_trace = semi_result.get("steps") or []
+                for action in agent_trace:
+                    yield f"data: {json.dumps({'type':'agent_action','action':action}, ensure_ascii=False)}\n\n".encode()
             if use_agent:
                 agent_result = await agent_runtime.run_agent(
                     messages=msgs, tools=agent_tools, base=base, key=key,
@@ -818,6 +851,7 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
                         "memory": extra.get("memory") or None,
                         "output_format": file_fmt or None, "files": files,
                         "agent_mode": bool(use_agent),
+                        "agent_plan": extra.get("agent_plan") or None,
                         "agent_trace": agent_trace,
                         "file_error": file_error or None,
                         "model_switch": extra.get("model_switch") or None}
@@ -896,6 +930,7 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
                      "attrs": {"provider": decision["provider"], "ttft_ms": ttft_ms,
                                "tokens": ptok + ctok, "status": status,
                                "agent_mode": bool(use_agent),
+                               "agent_plan": extra.get("agent_plan") or None,
                                "agent_tools": extra.get("agent_tools") or [],
                                "agent_turns": len({a.get("turn") for a in agent_trace})}},
                 ],

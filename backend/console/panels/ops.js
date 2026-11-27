@@ -101,6 +101,15 @@ async function loadAgentConfig() {
   $("agentToolWeb").checked = c.agent_tool_web !== false;
   $("agentToolAttach").checked = c.agent_tool_attachments !== false;
   $("agentMaxTurns").value = String(c.agent_max_turns ?? 4);
+  if ($("agentSemiOn")) $("agentSemiOn").checked = c.agent_semi_enabled !== false;
+}
+
+/* 半自主检索：固定顺序、逐级降级，后端不依赖模型发 tool_calls */
+async function saveAgentSemi() {
+  const body = { agent_semi_enabled: $("agentSemiOn").checked };
+  await api("/api/system/settings", { method: "PUT", body: JSON.stringify(body) });
+  uiToast("半自主设置已保存，下一条消息生效");
+  await loadAgentConfig();
 }
 
 async function saveAgentConfig() {
@@ -413,6 +422,9 @@ if ($("refreshAgents")) {
   $("resetAgent").addEventListener("click", resetAgentEditor);
   if ($("saveAgentConfig")) {
     $("saveAgentConfig").addEventListener("click", () => saveAgentConfig().catch((e) => uiToast(e.message, "bad")));
+  }
+  if ($("saveAgentSemi")) {
+    $("saveAgentSemi").addEventListener("click", () => saveAgentSemi().catch((e) => uiToast(e.message, "bad")));
   }
   $("refreshPartners").addEventListener("click", () => loadPartnersPage().catch((e) => uiToast(e.message, "bad")));
   $("refreshSquads").addEventListener("click", () => loadSquadsPage().catch((e) => uiToast(e.message, "bad")));

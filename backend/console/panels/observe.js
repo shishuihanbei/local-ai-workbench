@@ -70,6 +70,10 @@ function agentCell(r) {
     attrs = {};
   }
   const tools = Number(r.tool_count || 0);
+  if (attrs && attrs.agent_plan === "semi") {
+    return `<span class="badge ${tools ? "good" : "ok"}">半自主${tools ? " · " + tools + " 步" : ""}</span>`
+      + `<div class="sub">固定顺序检索${(attrs.agent_tools || []).length ? " · " + (attrs.agent_tools || []).length + " 级" : ""}</div>`;
+  }
   if (!attrs || attrs.agent_mode !== true) return '<span class="sub">—</span>';
   const names = (attrs.agent_tools || []).length;
   return `<span class="badge ${tools ? "good" : "ok"}">Agent${tools ? " · " + tools + " 次工具" : ""}</span>`
@@ -98,7 +102,8 @@ async function loadRequestDetail(rid) {
   kv.push(["自动工具", llmAttrs.agent_mode === true
     ? `开启 · ${(llmAttrs.agent_tools || []).length} 个工具可用 · ${toolSpans.length} 次调用`
       + `${llmAttrs.agent_turns ? " · " + llmAttrs.agent_turns + " 轮" : ""}`
-    : "未启用"],
+    : (llmAttrs.agent_plan === "semi"
+        ? `半自主 · 固定顺序 · ${toolSpans.length} 步` : "未启用")],
   ["可用工具", (llmAttrs.agent_tools || []).map(toolLabel).join("、") || "—"]);
   const spans = d.spans.map((s) => `<span class="badge off">${esc(s.kind)} · ${esc(s.name || "")} ${fmtMs(s.dur_ms)}</span>`).join(" ");
   const toolList = toolSpans.length

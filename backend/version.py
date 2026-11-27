@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 # 主版本：功能/架构变化时递增（语义化：主.次.补丁.构建）
-VERSION = "0.9.7.1"
+VERSION = "0.9.7.2"
 
 # 静态资源缓存键。默认跟主版本一致；只改前端资源、不动后端时可以让它单独前进。
 ASSET_VERSION = VERSION

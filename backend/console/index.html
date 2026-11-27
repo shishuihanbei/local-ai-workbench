@@ -2836,6 +2836,15 @@ ollama pull qwen2.5:7b
       </div>
       <p class="hint" id="agentCfgHint">给模型暴露的工具越多，一次回答耗时越长；本机 CPU 推理建议只开知识库与附件。算力池模型暂不支持自动工具。</p>
     </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>半自主检索</h2><span class="hint">固定顺序 · 逐级降级 · 不需要模型 Function Calling</span></div>
+      <div class="form-grid">
+        <label class="checkline"><input type="checkbox" id="agentSemiOn"> 开启半自主检索</label>
+        <button class="btn primary" id="saveAgentSemi">保存半自主设置</button>
+      </div>
+      <p class="hint">每轮按「附件 → 知识库 → 资料库 → 联网」的顺序自动检索，本地资料够用就不联网；模型只负责最终措辞。与上面的自动工具二选一，同时开启时自动工具优先。</p>
+    </section>
 </div>
 
   <div class="tab-pane" id="pane-partners" hidden>

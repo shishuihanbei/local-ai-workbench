@@ -129,6 +129,7 @@ DEFAULTS: dict[str, Any] = {
     "agent_tool_library": True,          # 自动工具里是否暴露资料库检索
     "agent_tool_web": True,              # 自动工具里是否暴露联网检索（仍需用户本轮开启联网）
     "agent_tool_attachments": True,      # 自动工具里是否暴露读取本轮附件
+    "agent_semi_enabled": True,           # 半自主编排：不依赖模型发工具调用，按固定顺序检索并逐级降级
     "chat_max_active": 4,                # 同时进行的对话生成数，超出排队/拒绝
     "chat_rpm": 30,                      # 每账号每分钟最多发送消息条数
     "websearch_max_pages": 2,            # 最多抓取前几篇网页正文
