@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -15,6 +16,21 @@ from . import platform_store, platforms
 
 _CACHE: dict[str, Any] = {"at": 0.0, "items": []}
 _TTL_SECONDS = 8.0
+
+
+def is_embedding_model(model_id: str) -> bool:
+    """判断平台模型是不是向量/重排模型；这类模型不能当聊天模型用。
+
+    平台只给 /v1/models 的 id，没有能力字段，只能按常见命名识别：
+    text-embedding-*、nomic-embed-*、mxbai-embed-*、bge-*、gte-*、e5-*、
+    all-minilm、rerank、cross-encoder、colbert 等。
+    """
+    s = re.sub(r"[^a-z0-9]+", "-", str(model_id or "").lower()).strip("-")
+    if not s:
+        return False
+    if any(k in s for k in ("embed", "bge", "minilm", "rerank", "colbert", "cross-encoder")):
+        return True
+    return bool(re.search(r"(^|-)(e5|gte)(-|$)", s))
 
 
 def invalidate() -> None:
@@ -62,6 +78,7 @@ async def reachable(cfg: dict[str, Any] | None = None, ttl: float = _TTL_SECONDS
             if not mid or mid in seen:
                 continue
             seen.add(mid)
+            embedding = is_embedding_model(mid)
             out.append({
                 "key": mid,
                 "alias": "",
@@ -73,8 +90,9 @@ async def reachable(cfg: dict[str, Any] | None = None, ttl: float = _TTL_SECONDS
                 "repo": "",
                 "fit": "unknown",
                 "sort": 800,
-                "category": "text",
-                "category_label": "文字 / 对话",
+                "category": "embedding" if embedding else "text",
+                "category_label": "向量 / 检索" if embedding else "文字 / 对话",
+                "model_kind": "embedding" if embedding else "chat",
                 "engine": str(item.get("key") or ""),
                 "homepage": item.get("homepage") or "",
                 "installable": False,
