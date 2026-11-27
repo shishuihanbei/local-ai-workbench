@@ -162,9 +162,18 @@
     box.hidden = false;
     const label = AGENT_TOOL_LABELS[action.tool] || action.tool;
     const query = action.arguments && action.arguments.query ? String(action.arguments.query) : "";
+    const status = action.status || "ok";
+    const count = Number(action.count || 0);
+    let note = "";
+    if (status === "skip") note = " · 跳过";
+    else if (status === "error") note = " · 失败";
+    else if (count && ["search_knowledge_base", "search_library", "search_web"].includes(action.tool)) {
+      note = ` · ${count} 条`;
+    }
     const item = document.createElement("div");
-    item.className = `agent-action ${action.status === "error" ? "error" : "ok"}`;
-    item.innerHTML = `<svg><use href="#i-brain"/></svg><span>${esc(label)}${query ? `：${esc(query)}` : ""}</span>`;
+    item.className = `agent-action ${status === "error" ? "error" : (status === "skip" ? "skip" : "ok")}`;
+    item.title = String(action.summary || "");
+    item.innerHTML = `<svg><use href="#i-brain"/></svg><span>${esc(label)}${query ? `：${esc(query)}` : ""}${esc(note)}</span>`;
     box.appendChild(item);
     scrollBottom(false);
   }
