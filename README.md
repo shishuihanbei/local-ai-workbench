@@ -1,6 +1,6 @@
 # 本地 AI 工作台
 
-> 当前版本 **0.9.5.0** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
+> 当前版本 **0.9.5.1** · MIT · Docker 镜像与发布记录见 [Releases](https://github.com/shishuihanbei/local-ai-workbench/releases)
 
 单进程部署：FastAPI 后端 + 用户前端 + 管理控制台 + OpenAI 兼容 API。模型在本机运行，对话记录存本机 SQLite，不经过云端。
 
@@ -9,6 +9,7 @@
 三个界面从左到右：用户端登录与对话、控制台运行观测、模型清单（本地模型按用途分类，下载与加载状态实时可见）。
 
 - **模型页看得全、选得准**：内置清单补上 Qwen3.6-27B / 35B-A3B、Qwen3-14B / 30B-A3B / 32B、Qwen3-Coder-30B-A3B；每个模型直接列优点和缺点，并按 CPU、内存、显存给出“本机推荐 / 可用 / 勉强 / 不建议”与估算出字速度，支持按名称、系列、用途、优缺点搜索。
+- **Ollama 拉取不重复、可续传**：拉取前先查 `/api/tags`，已有 tag 直接标“已拉取”并拒绝重复下载；正在拉取的行显示百分比，进程中断后保留分片，下一次点“继续拉取”会复用 partial blob 断点续传；本地 GGUF 已下载的模型不再引导拉第二份 Ollama 副本。
 
 - **本地模型托管是后台一等公民**：下载、加载、切换保护、中断续传、下载进度、引擎检测都在控制台完成，不依赖 Ollama 外挂；装了外部平台也能自动读 `/v1/models` 并接入。
 - **给团队用的治理**：用户 / 部门 / 管理员角色权限 / 每人每日每月 Token 配额 / 公开与小队对话分享 / 操作审计 / 内容安全，都在同一套后台里。

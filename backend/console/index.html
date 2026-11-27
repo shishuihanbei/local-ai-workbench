@@ -1818,7 +1818,7 @@ ollama pull qwen2.5:7b
       <div class="ollama-pull" id="ollamaPullBox" hidden>
         <div class="ollama-pull-head">
           <b>从 Ollama 拉取模型</b>
-          <span>内置清单里标了 Ollama tag 的模型（如 <code>qwen3:8b</code>、<code>qwen2.5:7b</code>、<code>deepseek-r1:7b</code>）可直接在下面的模型表点「用 Ollama 拉取」；这里也可以填清单外的任意 tag，拉到 Ollama 自己的模型目录，结束后自动出现在前端切换列表。</span>
+          <span>内置清单里标了 Ollama tag 的模型（如 <code>qwen3:8b</code>、<code>qwen2.5:7b</code>、<code>deepseek-r1:7b</code>）可直接在下面的模型表点「用 Ollama 拉取」；这里也可以填清单外的任意 tag，拉到 Ollama 自己的模型目录，结束后自动出现在前端切换列表。已拉取的 tag 会直接提示，不会重复下载；中断后再拉同一个 tag 会复用分片断点续传。</span>
         </div>
         <div class="ollama-pull-row">
           <input id="ollamaTag" placeholder="qwen2.5:7b" autocomplete="off" spellcheck="false">

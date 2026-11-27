@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -31,6 +32,7 @@ import httpx
 
 from ..config import CREATE_NO_WINDOW, DATA_DIR, IS_WINDOWS, load_config
 from ..db import fetch_all
+from .. import ollama_tags
 from . import hardware, installer, llama, platform_models, platform_store, platforms
 
 STATE: dict[str, dict[str, Any]] = {}
@@ -1277,43 +1279,196 @@ async def adopt_ollama_models() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------- Ollama 拉取模型
-PULL: dict[str, Any] = {"running": False, "tag": "", "pct": 0, "step": "", "msg": "尚未拉取",
-                       "ok": None, "error": "", "started_at": 0, "finished_at": 0}
+# 一次只跑一个 pull；每个 tag 的进度单独记，页面刷新或进程重启后还能看到
+# “已拉取 / 拉取中 / 已中断”，中断后再点同一个 tag 会从 Ollama 的 partial blob 续传。
+PULL_FIELDS: dict[str, Any] = {
+    "running": False, "tag": "", "pct": 0, "step": "", "msg": "尚未拉取",
+    "ok": None, "error": "", "started_at": 0, "finished_at": 0,
+    "updated_at": 0, "digest": "", "bytes": 0, "total": 0, "resumable": False,
+}
+PULL: dict[str, Any] = dict(PULL_FIELDS)
+PULLS: dict[str, dict[str, Any]] = {}
+_PULLS_LOADED = False
+_PULL_SAVED_AT = 0.0
+_PULL_FILE = DATA_DIR / "ollama_pulls.json"
 
 
-def pull_state() -> dict[str, Any]:
+def _pull_path() -> Path:
+    return _PULL_FILE
+
+
+def _load_pulls() -> None:
+    global _PULLS_LOADED
+    if _PULLS_LOADED:
+        return
+    _PULLS_LOADED = True
+    try:
+        raw = json.loads(_pull_path().read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            for key, item in raw.items():
+                if not isinstance(item, dict):
+                    continue
+                state = dict(PULL_FIELDS)
+                state.update(item)
+                state["tag"] = state.get("tag") or key
+                # 进程重启时上一轮 HTTP 流已经断了，不能一直标“拉取中”
+                if state.get("running"):
+                    state["running"] = False
+                    state["ok"] = False
+                    state["step"] = "已中断"
+                    state["resumable"] = True
+                    state["msg"] = (state.get("msg") or "上次拉取没有完成")
+                    if "中断" not in state["msg"]:
+                        state["msg"] += "（已中断，可继续拉取）"
+                PULLS[str(key)] = state
+    except Exception:
+        PULLS.clear()
+
+
+def _save_pulls(force: bool = False) -> None:
+    global _PULL_SAVED_AT
+    now = time.time()
+    if not force and now - _PULL_SAVED_AT < 1.0:
+        return
+    _PULL_SAVED_AT = now
+    try:
+        path = _pull_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(PULLS, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
+    except Exception:
+        pass
+
+
+def _digest_from_status(text: str) -> str:
+    match = re.search(r"(?:pulling|verifying|writing)\s+([0-9a-fA-F]{8,})", text or "")
+    return match.group(1).lower() if match else ""
+
+
+def _partial_bytes(digest: str = "") -> int:
+    """Ollama 下载中断后会留 ``sha256-<digest>-partial``，下次 pull 会复用它。"""
+    try:
+        cfg = load_config()
+        blobs = Path(ollama_models_dir(cfg)) / "blobs"
+        if digest:
+            paths = list(blobs.glob(f"sha256-{digest}*-partial"))
+        else:
+            paths = [p for p in blobs.glob("*-partial") if p.is_file()]
+        sizes = [p.stat().st_size for p in paths if p.is_file()]
+        return max(sizes) if sizes else 0
+    except Exception:
+        return 0
+
+
+def partial_state() -> dict[str, Any]:
+    """控制台展示：即使没有 tag 记录，也能发现上次残留的未完成分片。"""
+    load_config()
+    _load_pulls()
+    paths = []
+    try:
+        blobs = Path(ollama_models_dir(load_config())) / "blobs"
+        paths = [p for p in blobs.glob("*-partial") if p.is_file() and p.stat().st_size > 1024]
+    except Exception:
+        paths = []
+    total = sum(p.stat().st_size for p in paths)
+    return {"bytes": total, "count": len(paths),
+            "msg": (f"有 {total / 2**20:.0f} MB 未完成分片，继续同一个 tag 会断点续传"
+                    if total else "")}
+
+
+def pull_state(tag: str | None = None) -> dict[str, Any]:
+    _load_pulls()
+    if tag:
+        key = ollama_tags.tag_key(tag)
+        item = dict(PULL_FIELDS)
+        item.update(PULLS.get(key) or {})
+        item["tag"] = tag
+        # 全局正在跑同一个 tag 时，以内存里的实时进度为准
+        if PULL.get("running") and ollama_tags.tag_key(PULL.get("tag") or "") == key:
+            item.update(PULL)
+        if item.get("running") and not PULL.get("running"):
+            item["running"] = False
+            item["step"] = item.get("step") or "已中断"
+        item["elapsed"] = round(time.time() - item["started_at"], 1) if item["running"] and item["started_at"] else 0
+        if not item.get("partial_bytes") and item.get("digest"):
+            item["partial_bytes"] = _partial_bytes(item["digest"])
+        else:
+            item["partial_bytes"] = int(item.get("partial_bytes") or 0)
+        return item
     item = dict(PULL)
     item["elapsed"] = round(time.time() - item["started_at"], 1) if item["running"] and item["started_at"] else 0
     return item
 
 
-def _pull_set(**kw) -> None:
-    PULL.update(kw)
+def _pull_set(tag: str = "", **kw) -> None:
+    PULL.update({k: v for k, v in kw.items() if k != "tag"})
+    if tag:
+        PULL["tag"] = tag
+        key = ollama_tags.tag_key(tag)
+        item = PULLS.setdefault(key, dict(PULL_FIELDS))
+        item.update(kw)
+        item["tag"] = tag
+        item["updated_at"] = time.time()
+        _save_pulls()
+
+
+async def _ollama_tag_list(base: str) -> list[str]:
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.get(f"{base}/api/tags")
+            if resp.status_code != 200:
+                return []
+            data = resp.json()
+        return [str(m.get("name") or "") for m in (data.get("models") or []) if m.get("name")]
+    except Exception:
+        return []
 
 
 async def ollama_pull(tag: str) -> dict[str, Any]:
-    """用 Ollama 自己的 HTTP 接口拉模型，进度落在 PULL 状态里供控制台轮询。
+    """用 Ollama 自己的 HTTP 接口拉模型，进度按 tag 记，刷新/重启后仍可看到。
 
-    走 ``/api/pull`` 而不是命令行，是因为它能直接给出 ``completed/total`` 字节数，
-    控制台可以显示百分比；pull 结束后模型就落在 OLLAMA_MODELS（platforms/ollama/models）。
+    拉之前先查 ``/api/tags``：已经有的 tag 直接返回 already，不重复下载；
+    上次中断留下的 partial blob 会由 Ollama 复用，再点同一个 tag 就是断点续传。
     """
+    _load_pulls()
     cfg = load_config()
     base = platforms.endpoints(cfg).get("ollama", "")
     healthy, _, detail = await platforms._probe_external(base, "/api/tags")
     if not healthy:
         return {"ok": False, "msg": f"Ollama 服务没在运行（{base}）：请先在部署卡片点“启动”，再拉模型"}
     if PULL.get("running"):
-        return {"ok": False, "msg": f"正在拉取 {PULL.get('tag') or '模型'}，请等这一轮结束"}
-    _pull_set(running=True, tag=tag, pct=1, step="排队", msg=f"准备拉取 {tag}",
-              ok=None, error="", started_at=time.time(), finished_at=0)
+        if ollama_tags.tag_key(PULL.get("tag") or "") == ollama_tags.tag_key(tag):
+            return {"ok": True, "already": True, "running": True, "tag": tag,
+                    "msg": f"{tag} 正在拉取（{PULL.get('pct', 0)}%），不用重复点"}
+        return {"ok": False, "busy": True,
+                "msg": f"正在拉取 {PULL.get('tag') or '模型'}，一次只能跑一个 Ollama 拉取任务"}
+    tags = await _ollama_tag_list(base)
+    if ollama_tags.tag_in(tag, tags):
+        prev = pull_state(tag)
+        _pull_set(tag=tag, running=False, ok=True, pct=100, step="已存在",
+                  msg=f"{tag} 已经在 Ollama 中，无需重复下载", finished_at=time.time(),
+                  resumable=False, error="")
+        _save_pulls(force=True)
+        return {"ok": True, "already": True, "tag": tag,
+                "msg": f"{tag} 已拉取过，无需重复下载", "state": pull_state(tag)}
+    prev = pull_state(tag)
+    resume = bool(prev.get("resumable") or prev.get("partial_bytes"))
+    _pull_set(tag=tag, running=True, pct=1, step="排队",
+              msg=(f"继续拉取 {tag}，会复用已下载分片" if resume else f"准备拉取 {tag}"),
+              ok=None, error="", started_at=time.time(), finished_at=0,
+              updated_at=time.time(), digest="", bytes=0, total=0, resumable=True)
+    _save_pulls(force=True)
     asyncio.create_task(_pull_task(base, tag))
-    return {"ok": True, "msg": f"开始拉取 {tag}；模型会落到 {ollama_models_dir(cfg)}"}
+    prefix = "继续拉取" if resume else "开始拉取"
+    return {"ok": True, "tag": tag, "resume": resume,
+            "msg": f"{prefix} {tag}；模型会落到 {ollama_models_dir(cfg)}"}
 
 
 async def _pull_task(base: str, tag: str) -> None:
     from . import platform_models  # 拉完让模型列表缓存立刻失效
     try:
-        _pull_set(pct=3, step="连接", msg=f"连接 {base} 拉取 {tag}")
+        _pull_set(tag=tag, pct=3, step="连接", msg=f"连接 {base} 拉取 {tag}")
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream("POST", f"{base}/api/pull",
                                      json={"name": tag, "stream": True}) as resp:
@@ -1331,20 +1486,27 @@ async def _pull_task(base: str, tag: str) -> None:
                     status = str(payload.get("status") or "").strip()
                     total = int(payload.get("total") or 0)
                     done = int(payload.get("completed") or 0)
+                    digest = _digest_from_status(status)
                     if payload.get("error"):
                         raise RuntimeError(str(payload["error"])[:300])
                     if total and done:
                         pct = 5 + round(min(done / total, 0.99) * 85, 1)
-                        _pull_set(pct=pct, step="下载",
+                        _pull_set(tag=tag, pct=pct, step="下载", digest=digest,
+                                  bytes=done, total=total,
                                   msg=f"{status or '下载'} {done / 2**20:.0f}/{total / 2**20:.0f} MB")
                     elif status:
-                        _pull_set(step="处理", msg=status[:160], pct=max(PULL.get("pct", 0), 5))
+                        _pull_set(tag=tag, step="处理", msg=status[:160],
+                                  pct=max(PULL.get("pct", 0), 5), digest=digest or PULL.get("digest", ""))
         platform_models.invalidate()
-        _pull_set(running=False, ok=True, pct=100, step="完成",
-                  msg=f"{tag} 已拉取完成，可在“模型”页切换使用", finished_at=time.time())
+        _pull_set(tag=tag, running=False, ok=True, pct=100, step="完成",
+                  msg=f"{tag} 已拉取完成，可在“模型”页切换使用", finished_at=time.time(),
+                  resumable=False, error="")
+        _save_pulls(force=True)
     except Exception as exc:
-        _pull_set(running=False, ok=False, step="失败", error=str(exc)[:300],
-                  msg=f"拉取 {tag} 失败：{str(exc)[:200]}", finished_at=time.time())
+        _pull_set(tag=tag, running=False, ok=False, step="已中断", error=str(exc)[:300],
+                  msg=f"拉取 {tag} 失败：{str(exc)[:200]}（已保留分片，可继续拉取）",
+                  finished_at=time.time(), resumable=True)
+        _save_pulls(force=True)
 
 
 # ---------------------------------------------------------------- 卸载（删程序、保模型）

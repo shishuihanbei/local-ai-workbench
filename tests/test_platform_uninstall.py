@@ -181,3 +181,59 @@ def test_pull_state_reports_progress(tmp_path, monkeypatch):
     assert st["running"] is True and st["tag"] == "qwen2.5:7b" and st["pct"] == 42.0
     assert st["elapsed"] >= 0
     platform_deploy.PULL.update(running=False, pct=0, step="", msg="尚未拉取", tag="")
+
+
+def test_pull_skips_tag_already_in_ollama(tmp_path, monkeypatch):
+    """已经拉过的 tag 直接返回 already，不再启动第二轮下载。"""
+    from backend.services import platform_deploy
+
+    cfg = _cfg(tmp_path)
+    monkeypatch.setattr(platform_deploy, "load_config", lambda: cfg)
+    platform_deploy.PULL.update(platform_deploy.PULL_FIELDS)
+    platform_deploy.PULLS.clear()
+
+    async def healthy(*a, **kw):
+        return True, [], ""
+
+    async def tags(_base):
+        return ["qwen2.5:7b"]
+
+    monkeypatch.setattr(platform_deploy.platforms, "_probe_external", healthy)
+    monkeypatch.setattr(platform_deploy, "_ollama_tag_list", tags)
+    result = asyncio.run(platform_deploy.ollama_pull("qwen2.5:7b"))
+    assert result["ok"] is True
+    assert result["already"] is True
+    assert "无需重复" in result["msg"]
+    assert platform_deploy.PULL["running"] is False
+    assert platform_deploy.pull_state("qwen2.5:7b")["step"] == "已存在"
+
+
+def test_pull_state_is_kept_per_tag(tmp_path, monkeypatch):
+    from backend.services import platform_deploy
+
+    monkeypatch.setattr(platform_deploy, "load_config", lambda: _cfg(tmp_path))
+    platform_deploy.PULL.update(platform_deploy.PULL_FIELDS)
+    platform_deploy.PULLS.clear()
+    platform_deploy._pull_set(tag="qwen2.5:7b", running=True, pct=39, step="下载",
+                              msg="39/1066 MB", digest="aabd4debf0c8", bytes=39 * 2**20,
+                              total=1066 * 2**20)
+    one = platform_deploy.pull_state("qwen2.5:7b")
+    other = platform_deploy.pull_state("qwen3:8b")
+    assert one["running"] is True and one["pct"] == 39 and one["digest"] == "aabd4debf0c8"
+    assert other["running"] is False and other["pct"] == 0
+    platform_deploy.PULL.update(platform_deploy.PULL_FIELDS)
+    platform_deploy.PULLS.clear()
+
+
+def test_partial_blob_is_detected(tmp_path, monkeypatch):
+    """Ollama 中断后留下的 -partial 分片要能被页面提示出来。"""
+    from backend.services import platform_deploy
+
+    cfg = _cfg(tmp_path)
+    monkeypatch.setattr(platform_deploy, "load_config", lambda: cfg)
+    blobs = tmp_path / "models" / "ollama" / "blobs"
+    blobs.mkdir(parents=True)
+    (blobs / "sha256-abc-partial").write_bytes(b"x" * (1024 * 1024))
+    state = platform_deploy.partial_state()
+    assert state["bytes"] == 1024 * 1024
+    assert "断点续传" in state["msg"]

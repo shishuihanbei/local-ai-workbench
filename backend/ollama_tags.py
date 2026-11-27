@@ -60,3 +60,17 @@ def normalize_tag(raw: str) -> str:
     if tag.lower().startswith("-") or not _TAG_RE.match(tag):
         raise ValueError("模型 tag 只能包含字母、数字、点、下划线、减号、斜杠和冒号")
     return tag
+
+
+def tag_key(tag: str) -> str:
+    """比较 tag 是否同一个模型：忽略大小写和末尾的 ``:latest``。"""
+    value = str(tag or "").strip().lower()
+    if value.endswith(":latest"):
+        value = value[:-7]
+    return value
+
+
+def tag_in(tag: str, tags) -> bool:
+    """Ollama 的 ``/api/tags`` 与 ``/v1/models`` 命名可能带/不带 ``:latest``。"""
+    key = tag_key(tag)
+    return bool(key) and any(tag_key(t) == key for t in (tags or []))

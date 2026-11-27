@@ -135,8 +135,11 @@ async function pollEngineInstall(key) {
 /* ---------------------------------------------------------------- 模型 */
 function statusBadge(m) {
   const d = m.download || {};
+  const st = m.ollama_state || {};
   if (m.engine === "Ollama") {
     if (m.ollama_pulled) return `<span class="badge good">已拉取</span>`;
+    if (st.running) return `<span class="badge ok">拉取中 ${st.pct || 0}%</span>`;
+    if (st.resumable || m.ollama_partial) return `<span class="badge warn">已中断 ${st.pct || 0}%</span>`;
     if (m.ollama_ready) return `<span class="badge ok">可拉取</span>`;
     return m.ollama_installed
       ? `<span class="badge warn">Ollama 未启动</span>`
@@ -162,6 +165,40 @@ function adviceBadge(a) {
   const label = a ? a.label : "未知";
   return `<span class="badge ${esc(lvl)}">${esc(label)}</span>
           <div class="advice-text">${esc(a ? a.text : "下载后可评估")}</div>`;
+}
+
+function ollamaStatusLine(m) {
+  const st = m.ollama_state || {};
+  const pct = Math.max(0, Math.min(100, Number(st.pct || 0)));
+  if (m.engine === "Ollama") return "";  // 状态列已经写了拉取中/已中断
+  if (m.ollama_pulled) {
+    return `<div class="sub ollama-state good">Ollama 已拉取，不会重复下载</div>`;
+  }
+  if (st.running) {
+    return `<div class="sub ollama-state running">Ollama 拉取中 ${pct}% · ${esc(st.msg || "")}</div>`;
+  }
+  if (st.resumable || m.ollama_partial) {
+    const part = m.ollama_partial ? `已存 ${mb(m.ollama_partial)}，` : "";
+    return `<div class="sub ollama-state warn">Ollama 拉取中断，${part}可断点续传</div>`;
+  }
+  if (m.ollama_satisfied) {
+    return `<div class="sub ollama-state">Ollama 副本未拉取；本地已下载，不重复拉取</div>`;
+  }
+  return "";
+}
+
+function ollamaAction(m) {
+  const st = m.ollama_state || {};
+  const pct = Math.max(0, Math.min(100, Number(st.pct || 0)));
+  if (m.ollama_satisfied && !st.running) return "";
+  if (st.running) {
+    return `<button class="btn small ghost" disabled title="同一 tag 不重复拉取">Ollama 拉取中 ${pct}%</button>`;
+  }
+  if (st.resumable || m.ollama_partial) {
+    const tip = `继续拉取 ${m.ollama_tag}，已下载的分片会复用，不会从头再来`;
+    return `<button class="btn small ghost" data-opull="${esc(m.ollama_tag)}" ${m.ollama_ready ? "" : "disabled"} title="${esc(tip)}">继续拉取${m.ollama_partial ? " " + mb(m.ollama_partial) : ""}</button>`;
+  }
+  return `<button class="btn small ghost" data-opull="${esc(m.ollama_tag)}" ${m.ollama_ready ? "" : "disabled"} title="${esc(`执行 ollama pull ${m.ollama_tag}，落到 Ollama 的模型目录`)}">用 Ollama 拉取</button>`;
 }
 
 function modelCategoryLabel(key) {
@@ -272,20 +309,24 @@ function renderModelRows() {
         if (m.downloaded && !m.loaded) act.push(`<button class="btn small" data-load="${esc(m.key)}" title="${m.available === false ? "加载模型会重新开启本地部署" : ""}">${m.available === false ? "加载并开启" : "加载"}</button>`);
         if (m.loaded) act.push(`<span class="badge ok">使用中</span>`);
       }
-      // Ollama 用 registry tag 取模型：内置清单里的条目直接给拉取按钮，
-      // 服务没跑时按钮禁用而不是消失，用户知道该先启动 Ollama
+      // Ollama 用 registry tag 取模型：已经拉取过、或本地 GGUF 已下载的，
+      // 不再给“重复拉取”按钮；正在拉取/中断续传时给出明确状态。
       if (m.ollama_tag && (m.engine === "Ollama" || m.ollama_ready)) {
         if (m.ollama_pulled) {
           act.push(`<span class="badge ok" title="Ollama 里已经有这个模型">Ollama 已拉取</span>`);
         } else {
-          const tip = m.ollama_ready
-            ? `执行 ollama pull ${m.ollama_tag}，落到 Ollama 的模型目录`
-            : "先在「部署」页启动 Ollama 服务，再来拉取";
-          act.push(`<button class="btn small ghost" data-opull="${esc(m.ollama_tag)}" ${m.ollama_ready ? "" : "disabled"} title="${esc(tip)}">用 Ollama 拉取</button>`);
+          const extra = ollamaAction(m);
+          if (extra) act.push(extra);
         }
       }
+      const ost = m.ollama_state || {};
+      const opct = Math.max(0, Math.min(100, Number(ost.pct || 0)));
+      const oTagState = m.ollama_pulled ? " · 已拉取"
+        : (ost.running ? ` · 拉取中 ${opct}%`
+          : ((ost.resumable || m.ollama_partial) ? " · 已中断"
+            : (m.ollama_satisfied ? " · 本地已下载" : (m.ollama_ready ? "" : " · 服务未启动"))));
       const oTag = m.ollama_tag
-        ? `<div class="sub">${m.engine === "Ollama" ? "tag：" : "Ollama："}${esc(m.ollama_tag)}${m.ollama_pulled ? " · 已拉取" : (m.ollama_ready ? "" : " · 服务未启动")}</div>`
+        ? `<div class="sub">${m.engine === "Ollama" ? "tag：" : "Ollama："}${esc(m.ollama_tag)}${esc(oTagState)}</div>`
         : "";
       html.push(`<tr>
         <td>
@@ -297,7 +338,7 @@ function renderModelRows() {
         <td><span class="badge cat">${esc(m.category_label || modelCategoryLabel(m.category))}</span></td>
         <td><div>${esc(m.engine || "—")}</div>${m.installable === false && m.engine !== "Ollama" ? `<div class="sub">推荐 ${esc(m.engine_recommend || "独立引擎")} · ${m.engine_ready ? "已安装" : "未安装"}</div>` : ""}${oTag}</td>
         <td>${m.bytes ? mb(m.bytes) : (m.total_bytes ? "约 " + mb(m.total_bytes) : "—")}</td>
-        <td>${statusBadge(m)}</td>
+        <td>${statusBadge(m)}${ollamaStatusLine(m)}</td>
         <td>${adviceBadge(m.advice)}</td>
         <td class="right"><div class="row-actions">${act.join("")}</div></td>
       </tr>`);
@@ -598,18 +639,30 @@ function renderOllamaPull() {
   const p = ollamaPlatform();
   const have = !!(p && (p.managed || p.installed));
   box.hidden = !have;
+  const st = (S.models && S.models.ollama && S.models.ollama.pull) || S.ollamaPull || {};
+  const partial = (S.models && S.models.ollama && S.models.ollama.partial) || {};
   const note = $("ollamaPullNote");
   if (note && p) {
-    note.textContent = p.running
+    const base = p.running
       ? `Ollama 服务在跑，模型目录 ${p.models_path || ""}`
       : (p.installed ? "Ollama 已安装但服务没在跑：先在「部署」页点“启动”，再来拉模型" : "");
+    const partText = (!st.running && partial.bytes) ? ` · ${partial.msg}` : "";
+    note.textContent = base + partText;
+    note.title = base + partText;
   }
-  const st = (S.models && S.models.ollama && S.models.ollama.pull) || S.ollamaPull || {};
   renderOllamaPullState(st);
   if (!box.hidden && st.running) pollOllamaWatch();
 }
 
 /* 轻量轮询：只在拉取进行中才真的转起来，避免模型页每 3 秒都多打一个请求 */
+async function syncModelCatalogForPull() {
+  try {
+    const data = await api("/api/models");
+    S.models = data;
+    renderModelRows();
+  } catch (e) { /* 拉取过程中接口短暂失败不打断进度条 */ }
+}
+
 async function pollOllamaWatch() {
   if (S.pullWatching) return;
   S.pullWatching = true;
@@ -619,8 +672,17 @@ async function pollOllamaWatch() {
       let st;
       try { st = await api("/api/system/local-platforms/ollama/pull"); }
       catch (e) { continue; }
-      if (st && st.running) { S.ollamaPull = st; renderOllamaPullState(st); }
-      else if (st && S.ollamaPull && S.ollamaPull.running) { S.ollamaPull = st; renderOllamaPullState(st); await loadAll(); return; }
+      if (st && st.running) {
+        S.ollamaPull = st;
+        renderOllamaPullState(st);
+        await syncModelCatalogForPull();
+      }
+      else if (st && S.ollamaPull && S.ollamaPull.running) {
+        S.ollamaPull = st;
+        renderOllamaPullState(st);
+        await loadAll();
+        return;
+      }
     }
   } finally {
     S.pullWatching = false;
@@ -637,7 +699,9 @@ function renderOllamaPullState(st) {
   if (bar) bar.style.width = `${Math.max(0, Math.min(100, Number(st.pct || 0)))}%`;
   const text = $("ollamaPullText");
   if (text) {
-    const head = st.running ? `${st.step || "拉取中"} ${st.pct || 0}%` : (st.ok ? "拉取完成" : (st.step || "失败"));
+    const head = st.running ? `${st.step || "拉取中"} ${st.pct || 0}%`
+      : (st.ok ? (st.step === "已存在" ? "已拉取过" : "拉取完成")
+        : (st.step || "失败"));
     text.textContent = `${head} · ${st.msg || ""}`.replace(/\s+/g, " ").trim();
   }
 }
@@ -652,6 +716,7 @@ async function pollOllamaPull() {
       catch (e) { await new Promise((r) => setTimeout(r, 2000)); continue; }
       S.ollamaPull = st;
       renderOllamaPullState(st);
+      if (i % 2 === 0) await syncModelCatalogForPull();
       if (!st.running) {
         await loadAll();
         uiToast(st.ok ? (st.msg || "拉取完成") : (st.msg || "拉取失败"));

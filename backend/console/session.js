@@ -285,6 +285,14 @@ document.addEventListener("click", async (ev) => {
         });
         uiToast(r.msg || "已开始拉取");
         if (!r.ok) { t.textContent = old; t.disabled = false; return; }
+        if (r.already) {
+          t.textContent = old;
+          t.disabled = false;
+          if (input) input.value = "";
+          await loadAll();
+          if (r.running) await pollOllamaWatch();
+          return;
+        }
         if (input) input.value = "";
         await pollOllamaPull();
       } catch (e) {
@@ -331,6 +339,13 @@ document.addEventListener("click", async (ev) => {
         });
         uiToast(r.msg || "已开始拉取");
         if (!r.ok) { t.textContent = old; t.disabled = false; return; }
+        if (r.already) {
+          t.textContent = old;
+          t.disabled = false;
+          await loadAll();
+          if (r.running) await pollOllamaWatch();
+          return;
+        }
         await pollOllamaPull();
       } catch (e) {
         uiToast(e.message);

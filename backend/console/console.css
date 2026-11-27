@@ -273,6 +273,10 @@ input, select, textarea { color: var(--text); }
 .model-pro, .model-con { font-size: 11.5px; line-height: 1.55; }
 .model-pro { color: #0f7b3f; }
 .model-con { color: #a15c07; }
+.ollama-state { margin-top: 3px; font-size: 11px; line-height: 1.45; }
+.ollama-state.good { color: #0f7b3f; }
+.ollama-state.running { color: #1d4ed8; }
+.ollama-state.warn { color: #9a5b06; }
 .ollama-pull { margin: 12px 0 4px; padding: 11px 12px; border: 1px solid #dfe6f5; border-radius: 10px; background: #f8faff; }
 .ollama-pull-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; margin-bottom: 8px; color: var(--muted); font-size: 11.5px; line-height: 1.6; }
 .ollama-pull-head b { color: var(--text); font-size: 12.5px; }

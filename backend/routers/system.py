@@ -764,8 +764,8 @@ async def pull_ollama_model(body: OllamaPullBody, user: dict = Depends(admin_use
 
 
 @router.get("/local-platforms/ollama/pull")
-async def pull_ollama_status(user: dict = Depends(admin_user)):
-    return platform_deploy.pull_state()
+async def pull_ollama_status(tag: str | None = None, user: dict = Depends(admin_user)):
+    return platform_deploy.pull_state(tag)
 
 
 @router.get("/local-platforms/{key}/progress")

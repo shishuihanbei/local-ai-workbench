@@ -141,7 +141,8 @@ async def catalog(user: dict = Depends(current_user)):
         is_ollama = str(engine).strip().lower() == "ollama"
         repo = model_repo(r["key"], r.get("repo") or "")
         o_tag = r.get("ollama_tag") or ollama_tags.tag_for(r["key"], r.get("alias") or "")
-        o_pulled = bool(o_tag and o_tag in ollama_ids)
+        o_pulled = bool(o_tag and ollama_tags.tag_in(o_tag, ollama_ids))
+        o_state = platform_deploy.pull_state(o_tag) if o_tag else dict(platform_deploy.PULL_FIELDS)
         engine_info = None
         if installable:
             path = model_file_path(cfg, r["filename"])
@@ -233,6 +234,10 @@ async def catalog(user: dict = Depends(current_user)):
             "ollama_ready": bool(ollama_healthy),
             "ollama_installed": bool(ollama_info.get("installed")),
             "ollama_pulled": o_pulled,
+            "ollama_state": o_state,
+            "ollama_partial": int(o_state.get("partial_bytes") or 0),
+            # 本地 GGUF 已经下载，就不再引导拉一份 Ollama 副本
+            "ollama_satisfied": bool(o_tag and (o_pulled or (complete and not is_ollama))),
             "installable": installable,
             "category": category,
             "category_label": CATEGORY_LABELS.get(category, category),
@@ -302,6 +307,7 @@ async def catalog(user: dict = Depends(current_user)):
             "running": bool(ollama_healthy),
             "pulled": ollama_ids,
             "pull": platform_deploy.pull_state(),
+            "partial": platform_deploy.partial_state(),
         },
         "hardware": {
             "cpu": prof["cpu"], "cores": prof["cores"],
