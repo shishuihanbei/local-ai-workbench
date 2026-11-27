@@ -9,6 +9,9 @@ import pytest
 _TEST_DATA = tempfile.mkdtemp(prefix="workbench-pytest-")
 os.environ["WORKBENCH_DATA"] = _TEST_DATA
 os.environ["WORKBENCH_SECRET"] = "pytest-secret-key-do-not-use-in-production"
+# 平台安装目录与模型目录也必须是临时目录，否则「卸载」类用例会删到真实安装
+os.environ["WORKBENCH_PLATFORMS"] = os.path.join(_TEST_DATA, "platforms")
+os.environ["WORKBENCH_MODELS"] = os.path.join(_TEST_DATA, "models")
 
 
 @pytest.fixture(scope="session")

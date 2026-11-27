@@ -209,6 +209,22 @@ async def _download(url: str, dest: Path, on_progress: Callable[[int, int, str],
     part.parent.mkdir(parents=True, exist_ok=True)
     attempts = 4
 
+    async def probe_total(url: str) -> int:
+        """只看响应头拿完整大小；用来识别“忽略 Range 但回了剩余字节”的 CDN。"""
+        try:
+            async with httpx.AsyncClient(follow_redirects=True,
+                                         timeout=httpx.Timeout(30, connect=10, read=30)) as c:
+                async with c.stream("GET", url, headers={"User-Agent": "workbench-installer"}) as r:
+                    if r.status_code == 200:
+                        return int(r.headers.get("content-length") or 0)
+        except Exception:
+            return 0
+        return 0
+
+    full_size = 0
+    if part.exists() and part.stat().st_size:
+        full_size = await probe_total(url_candidates(url)[0])
+
     def stopped() -> bool:
         return bool(STATE.get("cancel")) or bool(should_cancel and should_cancel())
 
@@ -228,6 +244,22 @@ async def _download(url: str, dest: Path, on_progress: Callable[[int, int, str],
                         if have and r.status_code == 206:
                             mode = "ab"
                             total = have + int(r.headers.get("content-length") or 0)
+                        elif have and r.status_code == 200:
+                            # 有些 CDN（LM Studio 的 Cloudflare 源）忽略 Range，却仍回 200：
+                            # 带 Content-Length 剩余字节。若长度正好等于“总大小 - 已下”，
+                            # 说明这确实是剩余段，可以接上；否则必须丢掉旧半截重下。
+                            clen = int(r.headers.get("content-length") or 0)
+                            if full_size and clen == full_size - have:
+                                mode = "ab"
+                                total = full_size
+                            elif full_size and clen == full_size:
+                                mode = "wb"
+                                have = 0
+                                total = full_size
+                            else:
+                                part.unlink(missing_ok=True)
+                                have = 0
+                                raise RuntimeError("服务器不支持断点续传，已从头重新下载")
                         else:
                             if r.status_code == 416:      # 服务器说范围不合法，重下
                                 part.unlink(missing_ok=True)

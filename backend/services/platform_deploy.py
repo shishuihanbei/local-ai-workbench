@@ -1061,6 +1061,11 @@ async def _start_lmstudio(key: str, endpoint: str = "", force: bool = False) -> 
         if proc.poll() is not None:
             break
     if proc.poll() is not None:
+        if proc.returncode in (-1073741795, 3221225501):
+            return False, ("LM Studio 0.0.27 的 lms 在这台 CPU 上无法运行："
+                           "启动即非法指令退出（0xC000001D），说明 CPU 缺少 AVX2。"
+                           "llmster 守护进程能装，但它不提供 1234 端口的 OpenAI 服务；"
+                           "请换支持 AVX2 的 CPU，或用支持老 CPU 的旧版 LM Studio 桌面版")
         return False, "LM Studio 服务进程退出了，详见 data\\logs\\lmstudio.log（多半是缺模型、端口被占或初始化没完成）"
     return False, "LM Studio 进程已启动，但端口还没响应，详见 data\\logs\\lmstudio.log"
 
@@ -1368,7 +1373,14 @@ def partial_state() -> dict[str, Any]:
     paths = []
     try:
         blobs = Path(ollama_models_dir(load_config())) / "blobs"
-        paths = [p for p in blobs.glob("*-partial") if p.is_file() and p.stat().st_size > 1024]
+        for p in blobs.glob("*-partial*"):
+            if not p.is_file() or p.stat().st_size <= 1024:
+                continue
+            # Ollama 0.40 会分多段写 -partial-0/-partial-1；模型拉完后完整 blob
+            # 已经落盘，这些残片只是历史垃圾，不能再提示“未完成/可续传”。
+            if (blobs / p.name.split("-partial")[0]).is_file():
+                continue
+            paths.append(p)
     except Exception:
         paths = []
     total = sum(p.stat().st_size for p in paths)

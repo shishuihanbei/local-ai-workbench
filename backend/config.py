@@ -185,4 +185,5 @@ def llama_executable(cfg: dict[str, Any] | None = None) -> Path | None:
 
 
 def model_file_path(cfg: dict[str, Any], filename: str) -> Path:
-    return Path(cfg["models_dir"]) / filename
+    """cfg 可能是只带局部字段的副本（测试、临时配置），缺 models_dir 时回落默认目录。"""
+    return Path(cfg.get("models_dir") or default_models_dir()) / filename

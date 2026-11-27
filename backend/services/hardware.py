@@ -14,6 +14,29 @@ import psutil
 from ..config import IS_WINDOWS, CREATE_NO_WINDOW, llama_executable, load_config
 
 _CPU_NAME_CACHE: str | None = None
+_AVX2_CACHE: bool | None = None
+
+
+def has_avx2() -> bool:
+    """本机 CPU 是否支持 AVX2。LM Studio 0.0.27 的 lms 在 AVX2 缺失时会直接 0xC000001D。"""
+    global _AVX2_CACHE
+    if _AVX2_CACHE is not None:
+        return _AVX2_CACHE
+    ok = False
+    try:
+        if IS_WINDOWS:
+            import ctypes
+            ok = bool(ctypes.windll.kernel32.IsProcessorFeaturePresent(40))
+        elif platform.system().lower() == "darwin":
+            ok = "AVX2" in _run(["sysctl", "-n", "machdep.cpu.features"]).upper()
+        else:
+            text = Path("/proc/cpuinfo").read_text(errors="ignore").lower()
+            ok = "avx2" in text
+    except Exception:
+        ok = False
+    _AVX2_CACHE = ok
+    return ok
+
 
 
 def _run(cmd: list[str], timeout: int = 8) -> str:
@@ -107,6 +130,7 @@ def profile(ttl: float = 8.0) -> dict:
         "python": sys.version.split()[0],
         "cpu": cpu_name(),
         "cores": psutil.cpu_count(logical=True),
+        "avx2": has_avx2(),
         "cpu_percent": psutil.cpu_percent(interval=0.5),
         "ram_total_gb": round(vm.total / 2**30, 1),
         "ram_free_gb": round(vm.available / 2**30, 1),

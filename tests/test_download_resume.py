@@ -27,6 +27,7 @@ class _RangeServer(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     payload = b""
     fail_first = 0  # 前 N 个请求直接断连，模拟网络抖动
+    ignore_range = False  # 模拟忽略 Range、却仍回 200 + 剩余字节的 CDN
 
     def do_GET(self):  # noqa: N802
         cls = type(self)
@@ -39,8 +40,9 @@ class _RangeServer(BaseHTTPRequestHandler):
         if rng and rng.startswith("bytes="):
             start = int(rng.split("=")[1].split("-")[0])
             body = data[start:]
-            self.send_response(206)
-            self.send_header("Content-Range", f"bytes {start}-{len(data)-1}/{len(data)}")
+            self.send_response(200 if cls.ignore_range else 206)
+            if not cls.ignore_range:
+                self.send_header("Content-Range", f"bytes {start}-{len(data)-1}/{len(data)}")
         else:
             body = data
             self.send_response(200)
@@ -85,6 +87,25 @@ def test_download_resumes_from_existing_part(server, tmp_path):
     assert dest.stat().st_size == len(payload)
     assert not part.exists()
     # 续传成功后内容必须完整
+    with zipfile.ZipFile(dest) as z:
+        assert z.testzip() is None
+
+
+def test_download_restarts_when_server_ignores_range(server, tmp_path):
+    """CDN 忽略 Range 却回 200 + 剩余字节时，不能把后半段当成整个文件。"""
+    payload = _make_zip()
+    _RangeServer.payload = payload
+    _RangeServer.fail_first = 0
+    _RangeServer.ignore_range = True
+    try:
+        dest = tmp_path / "lmstudio.zip"
+        part = tmp_path / "lmstudio.zip.part"
+        part.write_bytes(payload[: len(payload) // 2])
+        asyncio.run(installer._download(server + "/pkg.zip", dest))
+    finally:
+        _RangeServer.ignore_range = False
+    assert dest.stat().st_size == len(payload)
+    assert not part.exists()
     with zipfile.ZipFile(dest) as z:
         assert z.testzip() is None
 
