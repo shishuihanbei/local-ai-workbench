@@ -10,13 +10,27 @@
     return !!m && m.downloaded !== false && m.loaded === true;
   }
 
+  /* 用户端只列“现在真能选”的模型：
+     - 已经启动并可达的平台（含 Ollama / vLLM 等）由 /api/models 带 platform_key；
+     - 算力池另外调度；
+     - 本地 GGUF 必须装了 llama.cpp，否则选了也会在 /select 报“需要独立引擎”。 */
+  function modelSelectable(m, d) {
+    if (!m) return false;
+    if (m.platform_key || m.owned_by === "platform" || m.owned_by === "cluster") return true;
+    const engine = String(m.engine || "llama.cpp").toLowerCase();
+    if (engine !== "llama.cpp") return false;
+    const hw = (d && d.hardware) || {};
+    return hw.llama_installed === true || m.loaded === true;
+  }
+
   async function loadModels() {
     try {
       const d = await api("/api/models");
       S.localEnabled = d.local_enabled !== false;
       S.models = (d.items || []).filter((m) =>
         m.available !== false && m.downloaded !== false
-        && ["text", "code"].includes(m.category || "text"));
+        && ["text", "code"].includes(m.category || "text")
+        && modelSelectable(m, d));
       S.serverModel = S.localEnabled ? ((d.server && d.server.model) || "") : "";
     } catch {
       S.models = [];
