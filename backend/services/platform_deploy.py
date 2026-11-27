@@ -863,11 +863,24 @@ def _managed_pids(key: str) -> list[int]:
     exe = str(info.get("path") or "").lower()
     if not exe:
         return []
+    # LM Studio 的 detect 路径是 lms.exe，但真正监听 1234 的常是 llmster.exe；
+    # 同一个 bin 目录里的这两个都算“服务还活着”，否则会把运行中的 LM Studio 判成未启动。
+    cands = {exe}
+    for k in ("lms", "llmster", "path"):
+        v = str(info.get(k) or "").lower()
+        if v:
+            cands.add(v)
+    names = {"ollama.exe", "llama-server.exe", "llmster.exe", "lms.exe", "lm studio.exe"}
+    dirs = {str(Path(c).parent).lower() for c in cands}
     pids: list[int] = []
     try:
         import psutil
         for p in psutil.process_iter(["pid", "exe"]):
-            if str(p.info.get("exe") or "").lower() == exe:
+            pexe = str(p.info.get("exe") or "").lower()
+            if not pexe:
+                continue
+            if pexe in cands or (Path(pexe).name.lower() in names
+                                 and str(Path(pexe).parent).lower() in dirs):
                 pids.append(int(p.info["pid"]))
     except Exception:
         pass
