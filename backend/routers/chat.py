@@ -24,6 +24,17 @@ from ..services import (access, admission, attachments, cluster, collab, docgen,
                         prompts, quota, routing, skills, tts, websearch)
 from ..services import agent as agent_runtime
 
+def _upstream_error(status: int, detail: str, model: str | None = None) -> str:
+    """把上游错误翻成人能看懂的一句话，保留原始细节便于排查。"""
+    low = (detail or "").lower()
+    if status == 404 and model and ("not found" in low or "not_found" in low):
+        return (f"模型 {model} 在该平台已不存在（可能被删除，或模型目录没对上）。"
+                "请重新选择模型；或在「模型」页确认平台已启动、模型已拉取。")
+    if status in (401, 403):
+        return f"上游鉴权失败（{status}），请到供应商或平台设置里检查 API Key。"
+    return f"上游返回 {status}: {detail}"
+
+
 router = APIRouter(prefix="/api", tags=["chat"])
 log = logging.getLogger(__name__)
 
@@ -594,7 +605,7 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
                             headers=headers) as r:
                         if r.status_code != 200:
                             detail = (await r.aread()).decode("utf-8", "replace")[:300]
-                            raise RuntimeError(f"上游返回 {r.status_code}: {detail}")
+                            raise RuntimeError(_upstream_error(r.status_code, detail, payload.get("model")))
                         async for line in r.aiter_lines():
                             yield line
                 return

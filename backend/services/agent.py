@@ -273,6 +273,11 @@ async def run_agent(*, messages: list[dict[str, Any]], tools: list[dict[str, Any
             r = await client.post(f"{base}/chat/completions", json=payload, headers=headers)
         if r.status_code != 200:
             detail = (r.text or "")[:300]
+            low = detail.lower()
+            if r.status_code == 404 and ("not found" in low or "not_found" in low):
+                raise RuntimeError(
+                    f"模型 {payload.get('model')} 在该平台已不存在（可能被删除，或模型目录没对上）。"
+                    "请重新选择模型；或在「模型」页确认平台已启动、模型已拉取。")
             raise RuntimeError(f"上游返回 {r.status_code}: {detail}")
         return r.json()
 
