@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from ..config import load_config, save_config
 from ..db import audit, execute, fetch_one
 from ..security import admin_user, current_user
-from ..services import attachments, kb
+from ..services import attachments, kb, kb_embed
 
 router = APIRouter(prefix="/api/kb", tags=["kb"])
 my_router = APIRouter(prefix="/api/my/kb", tags=["my-kb"])
@@ -80,7 +80,8 @@ async def overview(scope: str = "all", user_id: int | None = None, q: str = "",
     data = await kb.stats(scope, user_id, q)
     totals = await kb.totals()
     return {**data, **totals, "enabled": bool(cfg.get("kb_enabled")),
-            "top_k": cfg.get("kb_top_k", 3)}
+            "top_k": cfg.get("kb_top_k", 3),
+            **kb_embed.current(cfg)}
 
 
 @router.post("/text")
@@ -211,14 +212,37 @@ async def search(q: str, user: dict = Depends(admin_user)):
     return {"items": await kb.search(q, top_k, include_global=True, include_personal=True)}
 
 
-@router.post("/settings")
-async def settings(enabled: bool, top_k: int = 3, user: dict = Depends(admin_user)):
+@router.get("/embeddings")
+async def embedding_options(user: dict = Depends(admin_user)):
+    """知识库可选的向量模型；只返回当前平台健康、能调用的 embedding 模型。"""
     cfg = load_config()
+    options = await kb_embed.available(cfg)
+    return {**kb_embed.current(cfg), "options": options}
+
+
+@router.post("/settings")
+async def settings(enabled: bool, top_k: int = 3, vector_enabled: bool = False,
+                   embedding_platform: str = "", embedding_model: str = "",
+                   user: dict = Depends(admin_user)):
+    cfg = load_config()
+    platform = str(embedding_platform or "").strip()[:40]
+    model = str(embedding_model or "").strip()[:200]
+    if vector_enabled:
+        options = await kb_embed.available(cfg)
+        hit = next((x for x in options
+                    if x["platform"] == platform and x["model"] == model), None)
+        if not hit:
+            raise HTTPException(400, "所选向量模型当前不可用：请先启动对应平台并加载 embedding 模型，再刷新重试")
+        cfg["kb_embedding_platform"] = platform
+        cfg["kb_embedding_model"] = model
+    cfg["kb_vector_rerank"] = bool(vector_enabled)
     cfg["kb_enabled"] = enabled
     cfg["kb_top_k"] = max(1, min(top_k, 10))
     save_config(cfg)
-    await audit(user, "kb.settings", detail=f"enabled={enabled}, top_k={top_k}")
-    return {"ok": True}
+    await audit(user, "kb.settings",
+                detail=f"enabled={enabled}, top_k={top_k}, vector={vector_enabled}, "
+                       f"model={platform + '::' + model if platform and model else ''}")
+    return {"ok": True, **kb_embed.current(cfg)}
 
 
 # ------------------------------------------------------------------ 个人库
@@ -245,7 +269,8 @@ async def my_overview(user: dict = Depends(current_user)):
     return {**data, **await _read_my_kb_state(user["id"], cfg),
             "enabled": bool(cfg.get("kb_enabled")),
             "max_docs": MAX_PERSONAL_DOCS,
-            "top_k": int(cfg.get("kb_top_k") or 3)}
+            "top_k": int(cfg.get("kb_top_k") or 3),
+            **kb_embed.current(cfg)}
 
 
 @my_router.post("/settings")

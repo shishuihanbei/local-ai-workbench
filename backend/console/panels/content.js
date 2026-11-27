@@ -404,8 +404,39 @@ function closeKbDocument() {
   $("kbDocContent").textContent = "";
 }
 
+function applyKbVectorState(d) {
+  const sel = $("kbVectorModel");
+  if (!sel) return;
+  const options = Array.isArray(d.options) ? d.options : [];
+  S.kbVectorOptions = options;
+  const current = String(d.id || "");
+  const rows = options.map((x) => ({
+    id: String(x.id || ""),
+    label: String(x.label || `${x.model || ""} · ${x.platform_name || x.platform || ""}`),
+  }));
+  if (current && !rows.some((x) => x.id === current)) {
+    rows.push({ id: current, label: `${d.embedding_model || "当前模型"}（服务未启动，暂不可用）` });
+  }
+  sel.innerHTML = `<option value="">不使用（纯关键词）</option>` +
+    rows.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("");
+  sel.value = current;
+  $("kbVectorOn").checked = !!d.vector_enabled;
+  $("kbVectorHint").textContent = options.length
+    ? `检测到 ${options.length} 个可用向量模型；开启后只用于知识库/资料库检索排序，不会进聊天模型下拉。`
+    : "本机没有可用向量模型：先启动 LM Studio / Ollama，并加载一个 embedding 模型，再点“重新扫描”。";
+}
+
+async function refreshKbVector() {
+  $("kbVectorHint").textContent = "正在扫描本机平台上的向量模型…";
+  const d = await api("/api/kb/embeddings");
+  applyKbVectorState(d);
+}
+
 async function loadKbPage() {
-  const d = await api("/api/kb?scope=all");
+  const [d, embedding] = await Promise.all([
+    api("/api/kb?scope=all"),
+    api("/api/kb/embeddings").catch(() => null),
+  ]);
   S.kb = d;
   const docs = d.docs || [];
   const enabled = !!d.enabled;
@@ -425,6 +456,10 @@ async function loadKbPage() {
   $("kbSettingsHint").textContent = enabled
     ? `当前每次返回 ${topK} 段。段数太多会占用上下文，太少可能漏掉关键信息。`
     : "知识库检索已关闭；入库文档仍保留，重新开启后继续使用。";
+  applyKbVectorState(embedding || {
+    vector_enabled: !!d.vector_enabled, embedding_platform: d.embedding_platform || "",
+    embedding_model: d.embedding_model || "", id: d.id || "", options: [],
+  });
   S.kbPendingDelete = null;
   renderKbRows();
 }
@@ -518,9 +553,31 @@ async function deleteKbDocument(id) {
 async function saveKbSettings() {
   const enabled = $("kbEnabled").checked;
   const topk = Math.max(1, Math.min(10, Number($("kbTopK").value) || 3));
-  await api(`/api/kb/settings?enabled=${enabled}&top_k=${topk}`, { method: "POST" });
+  const vectorOn = $("kbVectorOn").checked;
+  const vectorId = String($("kbVectorModel").value || "");
+  if (vectorOn && !vectorId) {
+    $("kbVectorHint").textContent = "先选择一个向量模型，或取消“启用向量语义重排”。";
+    throw new Error("请选择向量模型");
+  }
+  let platform = "";
+  let model = "";
+  if (vectorId) {
+    const sep = vectorId.indexOf("::");
+    platform = sep > 0 ? vectorId.slice(0, sep) : "";
+    model = sep > 0 ? vectorId.slice(sep + 2) : "";
+  }
+  const q = new URLSearchParams({
+    enabled: String(enabled), top_k: String(topk), vector_enabled: String(vectorOn),
+    embedding_platform: platform, embedding_model: model,
+  });
+  const d = await api(`/api/kb/settings?${q.toString()}`, { method: "POST" });
   $("kbTopK").value = topk;
-  $("kbSettingsHint").textContent = `已保存：公共知识库检索${enabled ? "已开启" : "已关闭"}，每次返回 ${topk} 段。${enabled ? "用户仍需勾选「公共知识库」才会引用。" : "所有账号都不会引用公共库。"}`;
+  $("kbSettingsHint").textContent = `已保存：公共知识库检索${enabled ? "已开启" : "已关闭"}，每次返回 ${topk} 段，向量语义重排${d.vector_enabled ? "已开启（" + (d.embedding_model || "当前模型") + "）" : "已关闭"}。${enabled ? "用户仍需勾选「公共知识库」才会引用。" : "所有账号都不会引用公共库。"}`;
+  $("kbVectorHint").textContent = d.vector_enabled
+    ? `已启用：${d.embedding_model}。只参与检索排序，不进入聊天模型下拉。`
+    : (S.kbVectorOptions || []).length
+      ? "已关闭向量重排，当前使用纯关键词检索。"
+      : "本机没有可用向量模型：先启动 LM Studio / Ollama，并加载一个 embedding 模型，再点“重新扫描”。";
 }
 
 function libCategoryHtml(d) {

@@ -5,7 +5,9 @@ import re
 import time
 from typing import Any
 
+from ..config import load_config
 from ..db import connect, execute, fetch_all, fetch_one
+from . import kb_embed
 
 CHUNK = 420
 _TAG_SPLIT = re.compile(r"[,，;；、#\n]+")
@@ -128,23 +130,47 @@ async def add_document(user_id: int, title: str, source: str, text: str,
             "scope": scope, "module": module, "folder": folder, "tags": tags}
 
 
-def _rank_rows(rows: list[dict[str, Any]], terms: list[str], top_k: int) -> list[dict[str, Any]]:
-    """按关键词覆盖度排序；同样覆盖度再参考 FTS bm25。"""
+def _coverage(row: dict[str, Any], terms: list[str]) -> float:
+    title = str(row.get("title") or "")
+    content = str(row.get("content") or "")
+    score = 0.0
+    for term in terms:
+        weight = 2.0 if len(term) >= 4 else 1.0
+        if term in title:
+            score += weight * 3
+        elif term in content:
+            score += weight
+    return score
+
+
+def _pre_rank(rows: list[dict[str, Any]], terms: list[str], limit: int) -> list[dict[str, Any]]:
+    """先按关键词覆盖度收窄候选，避免把整库都送去做向量重排。"""
+    return sorted(rows, key=lambda row: (-_coverage(row, terms), float(row.get("score") or 0)))[:limit]
+
+
+def _rank_rows(rows: list[dict[str, Any]], terms: list[str], top_k: int,
+               sims: dict[int, float] | None = None) -> list[dict[str, Any]]:
+    """按关键词覆盖度排序；有向量相似度时，用语义分做主要排序、覆盖度做微调。"""
     ranked = []
-    for row in rows:
-        title = str(row.get("title") or "")
-        content = str(row.get("content") or "")
-        coverage = 0.0
-        for term in terms:
-            weight = 2.0 if len(term) >= 4 else 1.0
-            if term in title:
-                coverage += weight * 3
-            elif term in content:
-                coverage += weight
-        ranked.append((coverage, float(row.get("score") or 0), row))
-    ranked.sort(key=lambda x: (-x[0], x[1]))
+    coverages = [_coverage(row, terms) for row in rows]
+    max_cov = max(coverages) if coverages else 0.0
+    for row, coverage in zip(rows, coverages):
+        try:
+            doc_id = int(row.get("doc_id"))
+        except Exception:
+            doc_id = 0
+        sim = float((sims or {}).get(doc_id, 0.0))
+        if sims:
+            final = sim + 0.3 * (coverage / max_cov if max_cov else 0.0)
+        else:
+            final = coverage
+        ranked.append((final, sim, float(row.get("score") or 0), coverage, row))
+    if sims:
+        ranked.sort(key=lambda x: (-x[0], -x[1], x[2], -x[3]))
+    else:
+        ranked.sort(key=lambda x: (-x[0], x[2]))
     unique, seen = [], set()
-    for _, _, row in ranked:
+    for _, _, _, _, row in ranked:
         doc_id = row["doc_id"]
         if doc_id in seen:
             continue
@@ -198,6 +224,8 @@ async def search(query: str, top_k: int = 3, user_id: int | None = None,
     terms = _query_terms(query)
     if not terms:
         return []
+    cfg = load_config()
+    use_vector = bool(cfg.get("kb_vector_rerank"))
     module = "library" if module == "library" else "kb"
     scope_sql, scope_params = _scope_filter(user_id, include_global, include_personal)
     if scope_sql is None:
@@ -205,6 +233,8 @@ async def search(query: str, top_k: int = 3, user_id: int | None = None,
     scope_sql = " AND d.module=? " + scope_sql
     scope_params = (module, *scope_params)
     fts_query = " OR ".join('"' + t.replace('"', '""') + '"' for t in terms)
+    # 开向量重排时多取一些候选，让语义分有机会把“字面不完全一样但意思接近”的资料提上来。
+    limit = max(top_k * 8, 30) if use_vector else max(top_k * 5, 10)
     try:
         rows = await fetch_all(
             "SELECT kb_fts.doc_id, kb_fts.title, kb_fts.content, "
@@ -213,9 +243,11 @@ async def search(query: str, top_k: int = 3, user_id: int | None = None,
             "FROM kb_fts JOIN kb_docs d ON d.id=kb_fts.doc_id "
             "LEFT JOIN users u ON u.id=d.user_id "
             "WHERE kb_fts MATCH ?" + scope_sql + " ORDER BY score LIMIT ?",
-            (fts_query, *scope_params, max(top_k * 5, 10)))
+            (fts_query, *scope_params, limit))
         if rows:
-            ranked = _rank_rows(rows, terms, top_k)
+            picked = _pre_rank(rows, terms, kb_embed.MAX_CANDIDATES if use_vector else len(rows))
+            sims = await kb_embed.rerank(query, picked, cfg) if use_vector else None
+            ranked = _rank_rows(picked, terms, top_k, sims)
             if ranked:
                 return ranked
     except Exception:
@@ -248,7 +280,9 @@ async def search(query: str, top_k: int = 3, user_id: int | None = None,
             candidates.append(row)
     if not candidates:
         return []
-    return _rank_rows(candidates, terms, top_k)
+    picked = _pre_rank(candidates, terms, kb_embed.MAX_CANDIDATES if use_vector else len(candidates))
+    sims = await kb_embed.rerank(query, picked, cfg) if use_vector else None
+    return _rank_rows(picked, terms, top_k, sims)
 
 
 

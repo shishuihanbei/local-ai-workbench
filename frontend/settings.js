@@ -51,6 +51,12 @@
     $("#myKbUsePersonal").checked = personalOn && !!d.use_personal;
     $("#myKbUsePersonal").disabled = !personalOn;
     $("#myKbSourceState").textContent = personalOn ? "可多选" : "先开启个人知识库";
+    const vectorHint = $("#myKbVectorHint");
+    if (vectorHint) {
+      vectorHint.textContent = d.vector_enabled && d.embedding_model
+        ? `检索方式：关键词 + 向量语义重排（${d.embedding_model}）`
+        : "检索方式：关键词";
+    }
   }
 
   async function saveMyKbSettings(patch) {

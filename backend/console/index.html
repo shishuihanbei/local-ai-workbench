@@ -1977,8 +1977,12 @@ ollama pull qwen2.5:7b
       <div class="kb-settings">
         <label class="checkline"><input id="kbEnabled" type="checkbox"> 开启公共知识库检索</label>
         <label class="kb-topk">每次返回段落 <input id="kbTopK" type="number" min="1" max="10" step="1"></label>
+        <label class="checkline"><input id="kbVectorOn" type="checkbox"> 启用向量语义重排</label>
+        <label class="kb-topk">向量模型 <select id="kbVectorModel"><option value="">读取中…</option></select></label>
+        <button class="btn ghost small" id="kbVectorRefresh">重新扫描</button>
         <button class="btn primary small" id="kbSaveSettings">保存设置</button>
       </div>
+      <div class="hint" id="kbVectorHint">向量模型只用于知识库检索排序，不会出现在聊天模型下拉。</div>
       <div class="hint" id="kbSettingsHint">默认关闭，关闭时任何账号都不会引用公共库；个人库由用户自己开关。</div>
     </section>
 

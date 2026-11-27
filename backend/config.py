@@ -70,6 +70,9 @@ DEFAULTS: dict[str, Any] = {
     ),
     "kb_enabled": False,
     "kb_top_k": 3,
+    "kb_vector_rerank": False,          # 知识库向量语义重排；默认关闭，退回关键词
+    "kb_embedding_platform": "",        # 向量模型来源平台：ollama / lmstudio ...
+    "kb_embedding_model": "",           # 平台上的 embedding 模型 id
     "library_enabled": False,          # 总资料库默认关闭
     "library_max_chars": 12000,        # 一次对话最多带入的资料库正文字数
     "library_max_docs": 10,            # 一次对话最多选择 10 篇资料

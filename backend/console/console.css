@@ -981,7 +981,9 @@ body.guide-open { overflow: hidden; }
 .kb-settings .checkline { min-height: 34px; }
 .kb-topk { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .kb-topk input { width: 74px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; background: #fff; outline: none; }
+.kb-topk select { max-width: 320px; min-width: 220px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; background: #fff; outline: none; }
 .kb-topk input:focus { border-color: #b9c6f7; }
+.kb-topk select:focus { border-color: #b9c6f7; }
 .kb-source { display: inline-block; max-width: 230px; color: var(--muted); font-size: 12px; word-break: break-all; }
 .kb-owner { color: var(--muted); font-size: 11px; }
 #pane-kb .panel-head { flex-wrap: wrap; align-items: center; }

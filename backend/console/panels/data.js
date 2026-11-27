@@ -109,6 +109,9 @@ document.addEventListener("click", async (ev) => {
     else if (t.id === "kbRefresh") {
       try { await loadKbPage(); } catch (e) { $("kbDocHint").textContent = "刷新失败：" + e.message; }
     }
+    else if (t.id === "kbVectorRefresh") {
+      try { await refreshKbVector(); } catch (e) { $("kbVectorHint").textContent = "扫描失败：" + e.message; }
+    }
     else if (t.id === "kbNewBtn") openKbEditor();
     else if (t.id === "kbCancel") $("kbEditor").hidden = true;
     else if (t.id === "kbSave") {
@@ -423,6 +426,17 @@ document.addEventListener("change", (ev) => {
   }
   if (ev.target.id === "euRole") {
     syncAdminRoleSelect();
+    return;
+  }
+  if (ev.target.id === "kbVectorOn" || ev.target.id === "kbVectorModel") {
+    const on = $("kbVectorOn").checked;
+    const model = $("kbVectorModel").value;
+    const count = (S.kbVectorOptions || []).length;
+    if (on && !model) $("kbVectorHint").textContent = "先选择一个向量模型，或取消“启用向量语义重排”。";
+    else if (!on) $("kbVectorHint").textContent = count
+      ? `检测到 ${count} 个可用向量模型；勾选“启用向量语义重排”并保存后用于知识库检索排序。`
+      : "本机没有可用向量模型：先启动 LM Studio / Ollama，并加载一个 embedding 模型，再点“重新扫描”。";
+    else $("kbVectorHint").textContent = "已选择向量模型，点“保存设置”后生效；只用于知识库检索排序，不进聊天模型下拉。";
     return;
   }
   if (ev.target.id === "kbScopeFilter" || ev.target.id === "kbUserFilter") {
