@@ -827,7 +827,11 @@
       const expiry = fileExpiry(f);
       const extra = expiry.text ? ` · <span class="file-expiry">${esc(expiry.text)}</span>` : "";
       const action = expiry.download
-        ? `<a class="btn ghost sm" href="/api/files/generated/${f.id}" download="${esc(f.name)}">下载</a>`
+        ? `<span class="file-actions">
+             <button type="button" class="file-act" data-preview-file="${esc(f.id)}" data-file-name="${esc(f.name)}">
+               <svg><use href="#i-file"/></svg>预览</button>
+             <a class="btn ghost sm" href="/api/files/generated/${f.id}" download="${esc(f.name)}">下载</a>
+           </span>`
         : `<span class="badge ${expiry.state === "cleaned" ? "bad" : "warn"}">${esc(expiry.badge)}</span>`;
       return `<div class="wb-file-row ${expiry.state}" title="${esc(expiry.title)}">
         <span class="wb-ico">${wbShort(f.kind)}</span>

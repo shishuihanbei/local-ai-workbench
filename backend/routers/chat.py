@@ -20,8 +20,8 @@ from ..config import load_config
 from ..db import audit, execute, fetch_all, fetch_one, parse_meta
 from ..security import current_user, user_from_any_token
 from ..services import (access, admission, attachments, cluster, collab, docgen, kb,
-                        library, llama, memory, model_usage, moderation, prompts, quota,
-                        routing, skills, tts, websearch)
+                        library, llama, memory, model_fit, model_usage, moderation, prompts,
+                        quota, routing, skills, tts, websearch)
 
 router = APIRouter(prefix="/api", tags=["chat"])
 log = logging.getLogger(__name__)
@@ -381,6 +381,12 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             raise HTTPException(403, "管理员尚未给该用户分配可用模型")
         if first:
             body.model = first
+    fmt_pre = docgen.resolve_format(body.output_format, body.message)
+    model_switch = await model_fit.maybe_escalate(body, cfg, fmt_pre or "")
+    if model_switch and await access.can_use(user, model_switch["to"]):
+        body.model = model_switch["to"]
+    else:
+        model_switch = None
     guard = await moderation.guard_input(
         body.message, user=user, model=body.model or "", conversation_id=body.conversation_id)
     if guard["blocked"]:
@@ -441,6 +447,8 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
         user, body, cfg, att_rows if not body.regenerate else None,
         skill if not body.regenerate else skills.get(body.skill))
     ctx["decision"] = decision
+    if model_switch:
+        extra["model_switch"] = model_switch
     model_name = decision["model"]
     params = {
         "temperature": body.temperature if body.temperature is not None else 0.7,
@@ -568,7 +576,7 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             model_usage.begin(usage_model, str(user.get("username") or ""))
 
         try:
-            yield f"data: {json.dumps({'type':'meta','conversation_id':cid,'kb':extra.get('kb',[]),'web':extra.get('web') or None,'memory':extra.get('memory') or None,'model':model_name,'provider':decision['provider'],'trace_id':ctx['trace_id'],'route':decision['strategy'],'file_mode':bool(extra.get('file_mode')),'output_format':extra.get('output_format') or None}, ensure_ascii=False)}\n\n".encode()
+            yield f"data: {json.dumps({'type':'meta','conversation_id':cid,'kb':extra.get('kb',[]),'web':extra.get('web') or None,'memory':extra.get('memory') or None,'model':model_name,'provider':decision['provider'],'trace_id':ctx['trace_id'],'route':decision['strategy'],'file_mode':bool(extra.get('file_mode')),'output_format':extra.get('output_format') or None,'model_switch':extra.get('model_switch') or None}, ensure_ascii=False)}\n\n".encode()
             if extra.get("web_fallback"):
                 note = "原文档链接需要登录，无法直接读取；以下是按文档标题检索到的公开资料概要，并非原文档内容。\n\n"
                 content_buf.append(note)
@@ -678,7 +686,8 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
                                    "avatar": agent["avatar"]} if agent else None),
                         "memory": extra.get("memory") or None,
                         "output_format": file_fmt or None, "files": files,
-                        "file_error": file_error or None}
+                        "file_error": file_error or None,
+                        "model_switch": extra.get("model_switch") or None}
                 msg_id = await execute(
                     "INSERT INTO messages(conversation_id,role,content,reasoning,tokens,meta,created_at) "
                     "VALUES(?,?,?,?,?,?,?)",

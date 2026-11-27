@@ -540,7 +540,7 @@ async def install_status(user: dict = Depends(admin_user)):
 async def engine_home(user: dict = Depends(admin_user)):
     """所有下载/安装产物落在哪：给控制台“文件都在哪”面板用的目录清单。"""
     cfg = load_config()
-    rows = platform_store.summary(cfg)
+    rows = await run_in_threadpool(platform_store.summary, cfg)
     bat = BASE_DIR / "uninstall.bat"
     ps1 = BASE_DIR / "uninstall.ps1"
     return {"ok": True, "root": str(BASE_DIR), "dirs": rows,

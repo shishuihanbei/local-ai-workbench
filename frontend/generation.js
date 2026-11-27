@@ -154,6 +154,7 @@
               }
             }
             if (evt.kb && evt.kb.length) renderKbTags(assistant, evt.kb);
+            if (evt.model_switch) renderModelSwitch(assistant, evt.model_switch);
             if (evt.file_mode) {
               fileMode = true;
               setAssistantText(assistant, `正在整理 ${OUT_FORMATS[evt.output_format] || "文档"}…`, true);

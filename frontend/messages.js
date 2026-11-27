@@ -42,6 +42,8 @@
     const textEl = $(".msg-text", row);
     const reasonEl = $(".reasoning pre", row);
     if (opts.reasoning) reasonEl.textContent = opts.reasoning;
+    if (opts.model_switch) renderModelSwitch(row, opts.model_switch);
+    else if (isLightModel(opts.model)) renderLightWarning(row, opts.model);
     if (opts.content && !opts.streaming) {
       textEl.classList.remove("streaming");
       textEl.innerHTML = renderMarkdown(opts.content);
@@ -75,6 +77,33 @@
     const pre = $(".reasoning pre", row);
     if (box) box.hidden = false;
     if (pre) pre.textContent = text;
+  }
+
+  function isLightModel(name) {
+    return /(?:^|[^\d])(?:0\.5|1\.5)\s*b(?:[^a-z]|$)/i.test(String(name || ""));
+  }
+
+  function renderLightWarning(row, model) {
+    if (!row) return;
+    const text = $(".msg-text", row);
+    if (!text) return;
+    const el = document.createElement("div");
+    el.className = "msg-notice warn";
+    el.innerHTML = `<svg><use href="#i-refresh"/></svg><span>这条回复由轻量测试模型 <b>${esc(model)}</b> 生成，复杂任务容易答非所问；点“重新生成”会自动改用强模型并生成可预览文件。</span>`;
+    $(".body", row).insertBefore(el, text);
+  }
+
+  function renderModelSwitch(row, sw) {
+    if (!row || !sw || !sw.to) return;
+    let el = $(".msg-notice", row);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "msg-notice";
+      const text = $(".msg-text", row);
+      if (text) $(".body", row).insertBefore(el, text);
+      else $(".body", row).appendChild(el);
+    }
+    el.innerHTML = `<svg><use href="#i-refresh"/></svg><span>${esc(sw.reason || "已自动切换到更适合任务的模型")}：<b>${esc(sw.to)}</b></span>`;
   }
 
   function renderKbTags(row, names) {
@@ -150,10 +179,51 @@
         return `<div class="file-card ${expiry.state}" title="${esc(expiry.title)}">${body}
           <span class="file-dl">${esc(expiry.badge)}</span></div>`;
       }
-      return `<a class="file-card ${expiry.state}" data-kind="${esc(kind)}" href="${esc(f.url)}" download="${esc(f.name)}" title="${esc(expiry.title || `下载 ${f.name}`)}">${body}
-        <span class="file-dl"><svg><use href="#i-download"/></svg>下载</span>
-      </a>`;
+      return `<div class="file-card ${expiry.state}" data-kind="${esc(kind)}" title="${esc(expiry.title)}">${body}
+        <span class="file-actions">
+          <button type="button" class="file-act" data-preview-file="${esc(f.id)}" data-file-name="${esc(f.name)}">
+            <svg><use href="#i-file"/></svg>预览</button>
+          <a class="file-dl" href="${esc(f.url)}" download="${esc(f.name)}" title="${esc(expiry.title || `下载 ${f.name}`)}">
+            <svg><use href="#i-download"/></svg>下载</a>
+        </span></div>`;
     }).join("");
+  }
+
+  function openFilePreview(fileId, name) {
+    closeFilePreview();
+    const wrap = document.createElement("div");
+    wrap.className = "file-preview-wrap";
+    wrap.innerHTML = `
+      <div class="file-preview-scrim" data-close-preview></div>
+      <div class="file-preview-panel" role="dialog" aria-modal="true" aria-label="文件预览">
+        <div class="file-preview-head">
+          <span class="file-preview-title"><svg><use href="#i-file"/></svg><b>${esc(name || "文件预览")}</b></span>
+          <span class="file-preview-acts">
+            <a class="btn ghost sm" href="/api/files/generated/${esc(fileId)}" download>下载</a>
+            <button type="button" class="btn ghost sm" data-close-preview aria-label="关闭">关闭</button>
+          </span>
+        </div>
+        <div class="file-preview-body"><div class="file-preview-loading">正在打开预览…</div>
+          <iframe title="文件预览" src="/api/files/generated/${esc(fileId)}/preview?embed=1"></iframe>
+        </div>
+        <div class="file-preview-foot">看到排版不满意，直接回对话里点“重新生成”即可。</div>
+      </div>`;
+    document.body.appendChild(wrap);
+    const frame = $("iframe", wrap);
+    if (frame) frame.addEventListener("load", () => {
+      const loading = $(".file-preview-loading", wrap);
+      if (loading) loading.remove();
+    });
+    document.addEventListener("keydown", filePreviewEsc);
+  }
+
+  function closeFilePreview() {
+    $$(".file-preview-wrap").forEach((el) => el.remove());
+    document.removeEventListener("keydown", filePreviewEsc);
+  }
+
+  function filePreviewEsc(ev) {
+    if (ev.key === "Escape") closeFilePreview();
   }
 
   function renderActions(row, content) {

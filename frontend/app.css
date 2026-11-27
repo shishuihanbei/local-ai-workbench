@@ -545,6 +545,48 @@ html[data-theme="dark"] .avatar { background: linear-gradient(145deg, #253157, #
 .file-dl svg { width: 14px; height: 14px; }
 .file-card:hover .file-dl { background: color-mix(in srgb, var(--brand) 86%, #000); }
 .file-meta .file-expiry { color: var(--muted); font-size: 10px; }
+.file-actions { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
+.file-act {
+  display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--line)); border-radius: 8px;
+  background: var(--panel); color: var(--brand-ink); font-size: 11.5px; font-weight: 650; cursor: pointer;
+}
+.file-act svg { width: 14px; height: 14px; }
+.file-act:hover { background: var(--brand-soft); border-color: var(--brand); }
+.file-preview-wrap { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.file-preview-scrim { position: absolute; inset: 0; background: rgba(10,14,24,.55); backdrop-filter: blur(3px); }
+.file-preview-panel {
+  position: relative; z-index: 1; width: min(1180px, 96vw); height: min(880px, 92vh);
+  display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px;
+  background: var(--panel); box-shadow: 0 28px 90px rgba(0,0,0,.36); overflow: hidden;
+}
+.file-preview-head {
+  display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+  border-bottom: 1px solid var(--line); background: var(--panel-soft);
+}
+.file-preview-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.file-preview-title svg { width: 16px; height: 16px; flex: none; color: var(--brand); }
+.file-preview-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.file-preview-acts { display: flex; gap: 8px; margin-left: auto; flex: none; }
+.file-preview-body { flex: 1; position: relative; background: #fff; }
+.file-preview-body iframe { width: 100%; height: 100%; border: 0; display: block; }
+.file-preview-loading {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: var(--muted); font-size: 12.5px; background: #fff;
+}
+.file-preview-foot { padding: 8px 14px; border-top: 1px solid var(--line); background: var(--panel-soft); color: var(--muted); font-size: 11px; }
+.msg-notice {
+  display: flex; align-items: center; gap: 6px; margin: 0 0 9px; padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--line)); border-radius: 9px;
+  background: color-mix(in srgb, var(--brand) 6%, var(--panel)); color: var(--muted); font-size: 11.5px; line-height: 1.5;
+}
+.msg-notice svg { width: 13px; height: 13px; flex: none; color: var(--brand); }
+.msg-notice b { color: var(--brand-ink); }
+.msg-notice.warn {
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
+  background: color-mix(in srgb, var(--warn) 8%, var(--panel));
+}
+.msg-notice.warn svg, .msg-notice.warn b { color: var(--warn); }
 .file-card.soon { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
 .file-card.soon .file-expiry { color: var(--warn); font-weight: 650; }
 .file-card.expired, .file-card.cleaned { border-style: dashed; background: var(--panel-soft); opacity: .78; }

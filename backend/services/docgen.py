@@ -35,7 +35,7 @@ DETECT_ACTION = re.compile(r"(写|生成|做|制作|整理|输出|导出|上传|
 DETECT = [
     (re.compile(r"(?i)word|docx|\.doc(?:$|\W)"), "docx"),
     (re.compile(r"(?i)excel|xlsx|csv|电子表格|表格文件"), "xlsx"),
-    (re.compile(r"(?i)\bppt\b|pptx|幻灯片|演示文稿|slides?"), "pptx"),
+    (re.compile(r"(?i)ppt(?:x)?|幻灯片|演示文稿|slides?"), "pptx"),
     (re.compile(r"(?i)pdf"), "pdf"),
     (re.compile(r"(?i)markdown|\.md(?:$|\W)"), "md"),
     (re.compile(r"(?i)纯文本|txt文件|\.txt(?:$|\W)"), "txt"),
@@ -69,6 +69,7 @@ def default_prompt_hint(fmt: str) -> str:
     common = (
         "这次要直接生成可下载文件，不是在聊天里贴正文。请只输出适合排版的文档内容，"
         "不要寒暄、不要说明“我可以帮你生成”、不要提文件操作，也不要用一个代码块包住整篇文档。"
+        "不要反问用户、不要等待用户补充信息：信息不足时按常见做法自行合理补全，直接交付完整版本。"
         "内容必须完整、事实准确；不确定的信息标明“待核实”，不要编造政策、数据、图片或参考文献。"
     )
     if fmt == "docx":
@@ -87,6 +88,7 @@ def default_prompt_hint(fmt: str) -> str:
         return common + (
             "按幻灯片组织：第一行 `# 演示标题`；每页用 `## 页面标题`；页面内容用 `-` 短句，"
             "每页 3–6 条，每条不超过 40 字。需要对比时用 Markdown 表格。"
+            "不要写“配图：……”“图像：……”这类占位文字，也不要假装已经插入图片。"
             "不要写大段连续文字，不要超过 12 页。"
         )
     if fmt == "pdf":
@@ -295,6 +297,7 @@ def public(file_id: int, name: str, size: int, fmt: str, expires: float = 0) -> 
         "mime": FORMATS[fmt]["mime"],
         "short": FORMATS[fmt]["short"],
         "url": f"/api/files/generated/{file_id}",
+        "preview_url": f"/api/files/generated/{file_id}/preview",
     }
     data.update(retention.expiry_fields(expires))
     return data
@@ -345,7 +348,8 @@ async def enrich_file_list(files: list[dict[str, Any]], user_id: int | None = No
 
 
 def summary(file: dict[str, Any]) -> str:
-    return f"已生成{file['label']}《{file['name']}》，点击下方文件卡片可直接下载。"
+    return (f"已生成{file['label']}《{file['name']}》。"
+            "点文件卡片上的“预览”先看排版，满意再下载；不满意可直接点“重新生成”。")
 
 
 def _render_file(fmt: str, path: Path, title: str, markdown: str) -> None:
@@ -757,6 +761,57 @@ def _render_xlsx(path: Path, title: str, markdown: str) -> None:
 
 # ------------------------------------------------------------------ PPT
 
+def _cover_visual(title: str) -> Path:
+    """给 PPT 封面画一张主题示意图，避免整份演示只有干巴巴的文字。"""
+    import tempfile
+    from PIL import Image, ImageDraw
+
+    width, height = 720, 900
+    img = Image.new("RGB", (width, height), (79, 110, 247))
+    draw = ImageDraw.Draw(img, "RGBA")
+    for y in range(height):
+        t = y / max(1, height - 1)
+        r = int(79 + (123 - 79) * t)
+        g = int(110 + (97 - 110) * t)
+        b = int(247 + (255 - 247) * t)
+        draw.line([(0, y), (width, y)], fill=(r, g, b, 255))
+    for cx, cy, rad, alpha in ((590, 90, 260, 26), (110, 760, 300, 22),
+                               (640, 660, 170, 30), (160, 160, 120, 20)):
+        draw.ellipse([cx - rad, cy - rad, cx + rad, cy + rad], fill=(255, 255, 255, alpha))
+    for x in range(0, width, 72):
+        draw.line([(x, 0), (x, height)], fill=(255, 255, 255, 13), width=1)
+    for y in range(0, height, 72):
+        draw.line([(0, y), (width, y)], fill=(255, 255, 255, 13), width=1)
+
+    text = str(title or "")
+    math_like = any(k in text for k in ("方程", "函数", "数学", "几何", "代数", "公式", "抛物线"))
+    if math_like:
+        ox, oy = 120, 560
+        draw.line([(ox, oy), (ox + 500, oy)], fill=(255, 255, 255, 190), width=3)
+        draw.line([(ox + 250, oy - 250), (ox + 250, oy + 180)], fill=(255, 255, 255, 190), width=3)
+        pts = []
+        for i in range(-230, 231, 4):
+            x = ox + 250 + i
+            y = oy - int((i * i) / 420) + 120
+            pts.append((x, y))
+        draw.line(pts, fill=(255, 255, 255, 235), width=7)
+        for px in (-180, 0, 180):
+            x = ox + 250 + px
+            y = oy - int((px * px) / 420) + 120
+            draw.ellipse([x - 9, y - 9, x + 9, y + 9], fill=(255, 255, 255, 245))
+    else:
+        nodes = [(180, 230), (360, 160), (540, 300), (250, 520), (470, 600), (620, 470)]
+        for a, b in ((0, 1), (1, 2), (0, 3), (3, 4), (4, 5), (2, 5), (1, 4)):
+            draw.line([nodes[a], nodes[b]], fill=(255, 255, 255, 120), width=3)
+        for i, (x, y) in enumerate(nodes):
+            rad = 30 if i % 2 == 0 else 20
+            draw.ellipse([x - rad, y - rad, x + rad, y + rad], fill=(255, 255, 255, 210))
+    tmp = tempfile.NamedTemporaryFile(prefix="ppt-cover-", suffix=".png", delete=False)
+    tmp.close()
+    img.save(tmp.name)
+    return Path(tmp.name)
+
+
 def _render_pptx(path: Path, title: str, markdown: str) -> None:
     from pptx import Presentation
     from pptx.dml.color import RGBColor
@@ -771,6 +826,7 @@ def _render_pptx(path: Path, title: str, markdown: str) -> None:
     brand2 = RGBColor(0x7B, 0x61, 0xFF)
     ink = RGBColor(0x17, 0x20, 0x33)
     muted = RGBColor(0x6B, 0x75, 0x86)
+    visual_path = _cover_visual(title)
 
     def add_cover(text: str) -> None:
         slide = prs.slides.add_slide(blank)
@@ -782,13 +838,18 @@ def _render_pptx(path: Path, title: str, markdown: str) -> None:
         bar.fill.solid()
         bar.fill.fore_color.rgb = brand
         bar.line.fill.background()
-        box = slide.shapes.add_textbox(Inches(0.8), Inches(2.0), Inches(11.6), Inches(2.2))
+        try:
+            slide.shapes.add_picture(str(visual_path), Inches(8.05), Inches(1.1),
+                                     width=Inches(4.55), height=Inches(5.65))
+        except Exception:
+            pass
+        box = slide.shapes.add_textbox(Inches(0.8), Inches(1.7), Inches(6.95), Inches(2.2))
         tf = box.text_frame
         tf.word_wrap = True
         p = tf.paragraphs[0]
         p.text = text
         p.font.name = "微软雅黑"
-        p.font.size = Pt(40)
+        p.font.size = Pt(40 if len(text) <= 13 else 32)
         p.font.bold = True
         p.font.color.rgb = ink
         accent = slide.shapes.add_shape(1, Inches(0.85), Inches(4.32), Inches(2.2), Inches(0.06))
@@ -873,7 +934,8 @@ def _render_pptx(path: Path, title: str, markdown: str) -> None:
     add_cover(deck_title)
     for sec in sections:
         heading = sec["title"]
-        bullets = sec["bullets"] or []
+        bullets = [b for b in (sec["bullets"] or [])
+                   if not re.match(r"^(?:配图|图像|图片|示意图|图示)\s*[:：]", b)]
         table = sec["table"]
         if not bullets and not table:
             continue
@@ -898,7 +960,13 @@ def _render_pptx(path: Path, title: str, markdown: str) -> None:
     prs.core_properties.title = deck_title
     prs.core_properties.author = ""
     prs.core_properties.last_modified_by = ""
-    prs.save(str(path))
+    try:
+        prs.save(str(path))
+    finally:
+        try:
+            visual_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 # ------------------------------------------------------------------ PDF

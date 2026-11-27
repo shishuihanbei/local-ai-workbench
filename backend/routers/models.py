@@ -16,7 +16,7 @@ from ..db import (MODEL_CATALOG_EXTRAS, MODEL_SEED, OLLAMA_MODEL_CATALOG, audit,
                   fetch_all, fetch_one, model_repo, model_url)
 from ..security import admin_user, current_user
 from ..services import (access, engine_install, engines, hardware, hf_models, llama,
-                        model_usage, platform_deploy, platform_models, platforms)
+                        model_fit, model_usage, platform_deploy, platform_models, platforms)
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -287,6 +287,11 @@ async def catalog(user: dict = Depends(current_user)):
                 continue
             items.append(platform_model)
     for m in items:
+        m["params_b"] = model_fit.params_b(m.get("key") or "", m.get("label") or "",
+                                           m.get("filename") or "")
+        m["light"] = bool(m["params_b"] and m["params_b"] <= model_fit.LIGHT_MAX_B)
+        if m["light"]:
+            m["light_warning"] = "轻量测试模型：只适合短问答，写报告/做 PPT 等任务会自动切到更强的默认模型"
         if not m.get("pros") or not m.get("cons"):
             g = model_guides.guide_for(
                 m.get("key") or "", m.get("category") or "text", m.get("note") or "",

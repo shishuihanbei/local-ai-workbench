@@ -38,6 +38,8 @@ def test_format_resolve():
     assert docgen.resolve_format("word", "") == "docx"
     assert docgen.resolve_format(None, "帮我写一份教学计划，上传word格式") == "docx"
     assert docgen.resolve_format(None, "把数据整理成 excel 表格") == "xlsx"
+    assert docgen.resolve_format(None, "初中二次方程生成一个ppt，内容要全") == "pptx"
+    assert docgen.resolve_format(None, "做一份幻灯片，讲二次函数") == "pptx"
     assert docgen.resolve_format(None, "Word 文档怎么打开") is None
     assert docgen.resolve_format(None, "今天天气怎么样") is None
 
@@ -99,6 +101,33 @@ def test_build_all_formats(client, admin_token):
     assert "二次方程教学计划" in text and "一、教学目标" in text
     assert "本地 AI 工作台" not in text and "生成于" not in text
     pdf.close()
+
+
+def test_preview_every_format(client, admin_token):
+    from backend.services import docgen
+
+    async def build(fmt):
+        return await docgen.build(1, 1, SAMPLE, fmt)
+
+    for fmt in ("docx", "pptx", "xlsx", "pdf", "md"):
+        made = asyncio.run(build(fmt))
+        res = client.get(made["preview_url"], headers=auth(admin_token))
+        assert res.status_code == 200, (fmt, res.text[:300])
+        assert res.headers["content-type"].startswith("text/html")
+        assert "二次方程教学计划" in res.text
+        assert "下载原文件" in res.text
+        assert "只读预览" in res.text
+    # 预览是 HTML，不把压缩包当网页吐出来
+    made = asyncio.run(build("docx"))
+    res = client.get(made["preview_url"], headers=auth(admin_token))
+    assert "<!doctype html>" in res.text.lower()
+    assert "PK" not in res.text[:20]
+    # PDF 预览用 inline，不触发下载
+    made = asyncio.run(build("pdf"))
+    raw = client.get(made["url"] + "?inline=1", headers=auth(admin_token))
+    assert raw.status_code == 200
+    assert "inline" in raw.headers.get("content-disposition", "")
+    assert "attachment" not in raw.headers.get("content-disposition", "")
 
 
 def test_download_generated_requires_owner(client, admin_token):

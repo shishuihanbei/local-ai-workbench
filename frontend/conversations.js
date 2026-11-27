@@ -113,6 +113,7 @@
             kb: meta.kb || [],
             web: meta.web || null,
             files: meta.files || [],
+            model_switch: meta.model_switch || null,
             actions: true,
           });
         }

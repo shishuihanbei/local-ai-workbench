@@ -3,7 +3,8 @@
   /* ------------------------------------------------------------------ 模型 */
   function modelLabel(m) {
     const base = String(m.label || m.key || "").trim() || m.key;
-    return m.source_platform ? `${base} · ${m.source_platform}` : base;
+    const tag = m.light ? "（轻量测试）" : "";
+    return (m.source_platform ? `${base} · ${m.source_platform}` : base) + tag;
   }
 
   function modelRunnable(m) {
@@ -49,8 +50,19 @@
     const opts = S.models.map((m) => `<option value="${esc(m.key)}">${esc(modelLabel(m))}</option>`).join("");
     select.innerHTML = opts || `<option value="">暂无可用模型</option>`;
     let current = (S.prefs && S.prefs.model) || "";
+    const currentObj = S.models.find((m) => m.key === current);
+    if (currentObj && currentObj.light) {
+      const better = S.models.find((m) => modelRunnable(m) && !m.light)
+        || S.models.find((m) => m.downloaded !== false && !m.light);
+      if (better) {
+        current = better.key;
+        savePrefs({ model: current });
+      }
+    }
     if (!current || !S.models.some((m) => m.key === current)) {
-      const fallback = S.models.find((m) => modelRunnable(m))
+      const fallback = S.models.find((m) => modelRunnable(m) && !m.light)
+        || S.models.find((m) => modelRunnable(m))
+        || S.models.find((m) => m.downloaded !== false && !m.light)
         || S.models.find((m) => m.downloaded !== false)
         || S.models[0];
       current = (fallback && fallback.key) || S.serverModel || "";
@@ -64,6 +76,8 @@
     if (!S.models.some((m) => m.key === key)) return;
     $("#modelSelect").value = key;
     if (persist) savePrefs({ model: key });
+    const picked = S.models.find((m) => m.key === key);
+    if (picked && picked.light) toast("轻量测试模型只适合短问答，复杂任务会自动切换到默认强模型");
     updateWelcome();
   }
 

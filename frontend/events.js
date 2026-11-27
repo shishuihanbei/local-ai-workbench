@@ -104,6 +104,15 @@
       if (item) setSkill(item.dataset.skillId);
     });
     document.addEventListener("click", (ev) => {
+      const preview = ev.target.closest("[data-preview-file]");
+      if (preview) {
+        openFilePreview(preview.dataset.previewFile, preview.dataset.fileName || "");
+        return;
+      }
+      if (ev.target.closest("[data-close-preview]")) {
+        closeFilePreview();
+        return;
+      }
       if (!ev.target.closest(".skill-wrap")) setSkillMenu(false);
       if (!ev.target.closest("#libBtn") && !ev.target.closest("#libMenu")) setLibMenu(false);
     });

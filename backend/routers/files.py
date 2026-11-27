@@ -5,12 +5,12 @@ from pathlib import Path
 import time
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from ..config import EXPORT_DIR, UPLOAD_DIR
 from ..db import audit, fetch_all, fetch_one
 from ..security import current_user
-from ..services import attachments, docgen, library, retention
+from ..services import attachments, docgen, library, preview, retention
 
 router = APIRouter(prefix="/api/chat/files", tags=["chat-files"])
 exports_router = APIRouter(prefix="/api/files", tags=["files"])
@@ -60,25 +60,45 @@ async def remove(file_id: int, user: dict = Depends(current_user)):
     return {"ok": True}
 
 
-@exports_router.get("/generated/{file_id}")
-async def download_generated(file_id: int, user: dict = Depends(current_user)):
+async def _generated(user: dict, file_id: int) -> tuple[dict, Path]:
     row = await fetch_one(
-        "SELECT id,user_id,name,stored_name,mime,size,expires_at,deleted_at FROM generated_files "
-        "WHERE id=? AND user_id=?", (file_id, user["id"]))
+        "SELECT id,user_id,name,kind,stored_name,mime,size,expires_at,deleted_at "
+        "FROM generated_files WHERE id=? AND user_id=?", (file_id, user["id"]))
     if not row:
         raise HTTPException(404, "文件不存在")
     status = retention.expiry_fields(row.get("expires_at"), row.get("deleted_at") or 0)
     if status["cleaned"]:
-        raise HTTPException(
-            410, f"文件 {status['deleted_text'] or '已'} 自动清理，请重新生成")
+        raise HTTPException(410, f"文件 {status['deleted_text'] or '已'} 自动清理，请重新生成")
     if status["expired"]:
-        raise HTTPException(
-            410, f"文件已于 {status['expires_text'] or '到期时间'} 到期，请重新生成")
+        raise HTTPException(410, f"文件已于 {status['expires_text'] or '到期时间'} 到期，请重新生成")
     stored = Path(str(row["stored_name"] or "")).name
     path = EXPORT_DIR / stored
     if not stored or not path.exists():
         raise HTTPException(404, "文件已清理，请重新生成")
-    return FileResponse(path, filename=row["name"], media_type=row.get("mime") or None)
+    return row, path
+
+
+@exports_router.get("/generated/{file_id}")
+async def download_generated(file_id: int, inline: bool = False,
+                             user: dict = Depends(current_user)):
+    row, path = await _generated(user, file_id)
+    return FileResponse(path, filename=row["name"], media_type=row.get("mime") or None,
+                        content_disposition_type="inline" if inline else "attachment")
+
+
+@exports_router.get("/generated/{file_id}/preview")
+async def preview_generated(file_id: int, embed: bool = False,
+                            user: dict = Depends(current_user)):
+    row, path = await _generated(user, file_id)
+    html = preview.html_for(path, str(row.get("kind") or path.suffix.lstrip(".")),
+                            str(row.get("name") or path.name),
+                            f"/api/files/generated/{file_id}", embed=embed)
+    return HTMLResponse(html, headers={
+        "Cache-Control": "no-store",
+        "X-Frame-Options": "SAMEORIGIN",
+        "Content-Security-Policy": ("default-src 'none'; img-src data:; style-src 'unsafe-inline'; "
+                                    "frame-src 'self'; frame-ancestors 'self'"),
+    })
 
 
 @exports_router.get("/generated")
