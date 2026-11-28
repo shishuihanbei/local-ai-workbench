@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -174,7 +175,10 @@ async def test_chat_universal_falls_back_to_semi_plan(client, admin_token, monke
     async def fake_run(message, **kw):
         return semi_dict
 
+    captured: dict[str, Any] = {}
+
     async def fake_agent(**kw):
+        captured["messages"] = kw["messages"]
         return {
             "content": "按兜底材料回答。",
             "reasoning": "",
@@ -201,6 +205,8 @@ async def test_chat_universal_falls_back_to_semi_plan(client, admin_token, monke
     assert meta["agent_plan"] == "semi"
     assert meta["agent_tools"][0] == "search_knowledge_base"
     assert meta["kb"] == ["报销制度"]
+    system_message = next(m for m in captured["messages"] if m["role"] == "system")
+    assert semi_dict["prompt"] not in system_message["content"]
 
 
 def _auth(token):

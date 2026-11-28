@@ -542,19 +542,35 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             semi_state["result"] = None
         return semi_state["result"]
 
-    await ensure_semi()
-    semi_result = semi_state["result"]
-    msgs, max_tokens, extra = await _build_context(
-        user, body, cfg, att_rows if not body.regenerate else None,
-        skill if not body.regenerate else skills.get(body.skill), semi_result)
-    if semi_result:
-        extra["agent_tools"] = [s["tool"] for s in (semi_result.get("steps") or [])]
     agent_ctx: dict[str, Any] = {
         "user": user, "cfg": cfg, "body": body,
-        "attachments": att_rows, "extra": extra,
+        "attachments": att_rows, "extra": {},
     }
     agent_tools: list[dict[str, Any]] = []
-    if use_agent:
+    candidate_agent = use_agent
+    if candidate_agent:
+        agent_tools = agent_runtime.build_tools(agent_ctx)
+        if not agent_tools:
+            candidate_agent = False
+
+    semi_result = await ensure_semi()
+    if candidate_agent:
+        # 工具闭环路径保留兜底来源/轨迹用于控制台记录，但首轮不把检索材料塞进系统提示，
+        # 避免弱模型被过长预检索材料拖垮；模型不调用工具时再由 fallback 注入材料。
+        context_semi: dict[str, Any] | None
+        if semi_result:
+            context_semi = {**semi_result, "prompt": ""}
+        else:
+            context_semi = {"handles_kb": True, "handles_web": True}
+    else:
+        context_semi = semi_result
+
+    msgs, max_tokens, extra = await _build_context(
+        user, body, cfg, att_rows if not body.regenerate else None,
+        skill if not body.regenerate else skills.get(body.skill), context_semi)
+    agent_ctx["extra"] = extra
+
+    if candidate_agent:
         agent_rules = prompts.get(
             "function.agent_rules",
             "你现在处于只读工具模式。必要时可以调用系统提供的检索工具；工具结果不足时明确说明，不要编造。")
@@ -562,12 +578,13 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             msgs[0]["content"] = (str(msgs[0].get("content") or "") + "\n\n" + agent_rules).strip()
         else:
             msgs.insert(0, {"role": "system", "content": agent_rules})
-        agent_tools = agent_runtime.build_tools(agent_ctx)
-        if not agent_tools:
-            use_agent = False
-        else:
-            extra["agent_mode"] = True
-            extra["agent_tools"] = [t["function"]["name"] for t in agent_tools]
+        use_agent = True
+        extra["agent_mode"] = True
+        extra["agent_tools"] = [t["function"]["name"] for t in agent_tools]
+    else:
+        use_agent = False
+        if semi_result:
+            extra["agent_tools"] = [s["tool"] for s in (semi_result.get("steps") or [])]
     if semi_result and not extra.get("agent_plan"):
         extra["agent_plan"] = "semi"
     ctx["decision"] = decision
