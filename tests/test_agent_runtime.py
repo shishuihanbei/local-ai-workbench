@@ -78,16 +78,18 @@ def test_agent_settings_are_saved_and_exposed(client, admin_token):
     before = {k: v for k, v in load_config().items() if k.startswith("agent_")}
     try:
         r = client.put("/api/system/settings", headers=auth(admin_token),
-                       json={"agent_mode_enabled": False, "agent_max_turns": 5,
+                       json={"agent_mode_enabled": False, "agent_semi_enabled": False,
+                             "agent_max_turns": 5,
                              "agent_tool_kb": False, "agent_tool_library": True,
                              "agent_tool_web": False, "agent_tool_attachments": True})
         assert r.status_code == 200, r.text
         assert set(r.json()["changed"]) >= {
-            "agent_mode_enabled", "agent_max_turns", "agent_tool_kb",
+            "agent_mode_enabled", "agent_semi_enabled", "agent_max_turns", "agent_tool_kb",
             "agent_tool_library", "agent_tool_web", "agent_tool_attachments"}
 
         body = client.get("/api/system/settings", headers=auth(admin_token)).json()
         assert body["agent_mode_enabled"] is False
+        assert body["agent_semi_enabled"] is False
         assert body["agent_max_turns"] == 5
         assert body["agent_tool_kb"] is False
         assert body["agent_tool_web"] is False
@@ -125,6 +127,8 @@ def test_run_agent_executes_tool_then_final_answer():
         params={"temperature": 0.7, "max_tokens": 2048}, ctx=ctx, caller=caller))
 
     assert result["content"] == "附件里只有一句测试文本。"
+    assert result["plan"] == "tools"
+    assert result["used_tools"] is True
     assert len(result["trace"]) == 1
     assert result["trace"][0]["tool"] == "read_attachments"
     assert result["trace"][0]["status"] == "ok"
@@ -158,6 +162,82 @@ def test_run_agent_unknown_tool_returns_error_message():
     assert result["trace"][0]["status"] == "error"
     tool_msg = next(m for m in result["messages"] if m["role"] == "tool")
     assert "未知工具" in tool_msg["content"]
+
+
+def test_run_agent_falls_back_to_semi_when_model_does_not_call_tools():
+    ctx = _ctx()
+    tools = agent.build_tools(ctx)
+    payloads: list[dict] = []
+
+    async def caller(payload: dict) -> dict:
+        payloads.append(payload)
+        if len(payloads) == 1:
+            return {"choices": [{"message": {"content": "先直接答一句。"}}]}
+        return {"choices": [{"message": {"content": "按兜底材料回答。"}}]}
+
+    async def fallback() -> dict:
+        return {
+            "prompt": "已检索到附件与知识库材料，请据此回答。",
+            "steps": [{"tool": "read_attachments", "summary": "附件 1 篇"}],
+            "meta": {"kb": [{"id": "kb-1"}]},
+        }
+
+    result = asyncio.run(agent.run_agent(
+        messages=[{"role": "user", "content": "帮我查一下"}],
+        tools=tools, base="http://127.0.0.1:8000", key="", model="test-model",
+        params={}, ctx=ctx, caller=caller, fallback=fallback))
+
+    assert result["plan"] == "semi"
+    assert result["used_tools"] is False
+    assert result["content"] == "按兜底材料回答。"
+    assert result["fallback"]["meta"]["kb"][0]["id"] == "kb-1"
+    assert result["trace"][0]["tool"] == "read_attachments"
+    assert payloads[0]["tools"]
+    assert "tools" not in payloads[1]
+    assert "已检索到附件与知识库材料" in result["messages"][0]["content"]
+
+
+def test_run_agent_does_not_duplicate_fallback_prompt():
+    ctx = _ctx()
+    tools = agent.build_tools(ctx)
+    fallback_prompt = "已检索到附件与知识库材料，请据此回答。"
+    messages = [{"role": "system", "content": fallback_prompt},
+                {"role": "user", "content": "帮我查一下"}]
+
+    async def caller(payload: dict) -> dict:
+        if len(caller.payloads) == 0:
+            caller.payloads.append(payload)
+            return {"choices": [{"message": {"content": "先直接答一句。"}}]}
+        caller.payloads.append(payload)
+        return {"choices": [{"message": {"content": "按兜底材料回答。"}}]}
+
+    async def fallback() -> dict:
+        return {"prompt": fallback_prompt, "steps": [], "meta": {}}
+
+    caller.payloads = []
+    result = asyncio.run(agent.run_agent(
+        messages=messages, tools=tools, base="http://127.0.0.1:8000", key="",
+        model="test-model", params={}, ctx=ctx, caller=caller, fallback=fallback))
+
+    system_message = next(m for m in result["messages"] if m["role"] == "system")
+    assert system_message["content"].count(fallback_prompt) == 1
+    assert result["plan"] == "semi"
+
+
+def test_run_agent_marks_direct_answer_without_fallback():
+    ctx = _ctx()
+
+    async def caller(payload: dict) -> dict:
+        return {"choices": [{"message": {"content": "不需要检索。"}}]}
+
+    result = asyncio.run(agent.run_agent(
+        messages=[{"role": "user", "content": "你好"}],
+        tools=[], base="http://127.0.0.1:8000", key="", model="test-model",
+        params={}, ctx=ctx, caller=caller))
+
+    assert result["plan"] == "direct"
+    assert result["used_tools"] is False
+    assert result["fallback"] is None
 
 
 def test_run_agent_stops_after_max_turns_and_forces_final_answer():

@@ -22,6 +22,7 @@ MAX_TOOL_RESULT_CHARS = 3000
 MAX_TOOL_QUERY_CHARS = 180
 
 ToolCaller = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
+AgentFallback = Callable[[], Awaitable[dict[str, Any]]]
 
 
 def _clean_text(value: Any, limit: int = MAX_TOOL_QUERY_CHARS) -> str:
@@ -255,12 +256,19 @@ def _add_usage(total: dict[str, Any], usage: dict[str, Any]) -> None:
 
 async def run_agent(*, messages: list[dict[str, Any]], tools: list[dict[str, Any]],
                     base: str, key: str, model: str, params: dict[str, Any],
-                    ctx: dict[str, Any], caller: ToolCaller | None = None) -> dict[str, Any]:
-    """执行只读工具闭环，返回最终回答、推理内容、用量和工具轨迹。"""
+                    ctx: dict[str, Any], caller: ToolCaller | None = None,
+                    fallback: AgentFallback | None = None) -> dict[str, Any]:
+    """执行通用助手闭环。
+
+    支持 Function Calling 的模型会按需调用工具；模型首轮不调用工具时，
+    可由 `fallback` 提供不依赖工具调用的半自主检索材料，再做最终回答。
+    """
     cfg = ctx["cfg"]
     max_turns = max(1, min(int(cfg.get("agent_max_turns") or 4), 6))
     usage: dict[str, Any] = {}
     trace: list[dict[str, Any]] = []
+    used_tools = False
+    fallback_result: dict[str, Any] | None = None
     final_content = ""
     final_reasoning = ""
 
@@ -283,7 +291,7 @@ async def run_agent(*, messages: list[dict[str, Any]], tools: list[dict[str, Any
 
     call_llm = caller or default_caller
 
-    async def call_once() -> dict[str, Any]:
+    async def call_once(with_tools: bool = True) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -291,7 +299,7 @@ async def run_agent(*, messages: list[dict[str, Any]], tools: list[dict[str, Any
             "temperature": params.get("temperature", 0.7),
             "max_tokens": params.get("max_tokens", 2048),
         }
-        if tools:
+        if with_tools and tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
         data = await call_llm(payload)
@@ -315,8 +323,25 @@ async def run_agent(*, messages: list[dict[str, Any]], tools: list[dict[str, Any
 
     first = await call_once()
     if not first["calls"]:
-        await finish_with(first)
+        if fallback is not None:
+            fallback_result = await fallback()
+            fallback_steps = fallback_result.get("steps") or fallback_result.get("trace") or []
+            trace.extend(fallback_steps)
+            fallback_prompt = str(fallback_result.get("prompt") or "").strip()
+            if fallback_prompt:
+                system_msg = next((m for m in messages if m.get("role") == "system"), None)
+                existing = str(system_msg.get("content") or "") if system_msg else ""
+                if fallback_prompt not in existing:
+                    if system_msg is not None:
+                        system_msg["content"] = (existing + "\n\n" + fallback_prompt).strip()
+                    else:
+                        messages.insert(0, {"role": "system", "content": fallback_prompt})
+            final = await call_once(with_tools=False)
+            await finish_with(final)
+        else:
+            await finish_with(first)
     else:
+        used_tools = True
         current = first
         for turn in range(1, max_turns + 1):
             assistant_message: dict[str, Any] = {
@@ -365,10 +390,14 @@ async def run_agent(*, messages: list[dict[str, Any]], tools: list[dict[str, Any
             current = await call_once()
             await finish_with(current)
 
+    plan = "tools" if used_tools else ("semi" if fallback_result else "direct")
     return {
         "content": final_content.strip(),
         "reasoning": final_reasoning.strip(),
         "usage": usage,
         "trace": trace,
         "messages": messages,
+        "used_tools": used_tools,
+        "plan": plan,
+        "fallback": fallback_result,
     }

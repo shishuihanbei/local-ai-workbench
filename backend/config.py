@@ -123,13 +123,13 @@ DEFAULTS: dict[str, Any] = {
     "moderation_min_chars": 1,            # 单词长度下限，避免单字误伤
     "websearch_enabled": True,           # 管理员总开关：关闭后网页检索和定时任务都不联网
     "websearch_max_sources": 5,          # 一次联网最多取多少条搜索结果
-    "agent_mode_enabled": True,          # 只读工具 Agent 闭环：模型可自主检索知识库/资料库/网页/附件
+    "agent_mode_enabled": True,          # 通用助手总开关：工具闭环 + 不支持工具时的固定顺序兜底
     "agent_max_turns": 4,                # 一次回答最多允许模型调用几轮只读工具
-    "agent_tool_kb": True,               # 自动工具里是否暴露知识库检索
-    "agent_tool_library": True,          # 自动工具里是否暴露资料库检索
-    "agent_tool_web": True,              # 自动工具里是否暴露联网检索（仍需用户本轮开启联网）
-    "agent_tool_attachments": True,      # 自动工具里是否暴露读取本轮附件
-    "agent_semi_enabled": True,           # 半自主编排：不依赖模型发工具调用，按固定顺序检索并逐级降级
+    "agent_tool_kb": True,               # 通用助手里是否暴露知识库检索
+    "agent_tool_library": True,          # 通用助手里是否暴露资料库检索
+    "agent_tool_web": True,              # 通用助手里是否暴露联网检索（仍需用户本轮开启联网）
+    "agent_tool_attachments": True,      # 通用助手里是否暴露读取本轮附件
+    "agent_semi_enabled": True,           # 兜底编排：不依赖模型发工具调用，按固定顺序检索并逐级降级
     "chat_max_active": 4,                # 同时进行的对话生成数，超出排队/拒绝
     "chat_rpm": 30,                      # 每账号每分钟最多发送消息条数
     "websearch_max_pages": 2,            # 最多抓取前几篇网页正文

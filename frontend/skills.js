@@ -110,8 +110,8 @@
     btn.setAttribute("aria-pressed", String(S.agentMode));
     const locked = btn.disabled || btn.classList.contains("disabled");
     btn.title = locked
-      ? "当前为算力池模型，暂不支持自动工具，已按普通对话生成"
-      : S.agentMode ? "自动工具已开启：模型可按需检索资料、网页和附件" : "自动工具关闭：本轮按普通对话生成";
+      ? "当前为算力池模型，暂不支持通用助手工具闭环，已按普通对话生成"
+      : S.agentMode ? "通用助手已开启：自动检索资料、附件；支持工具调用的模型可按需联网" : "通用助手关闭：本轮按普通对话生成";
   }
 
   function syncAgentModelLock() {
@@ -134,9 +134,9 @@
     docgen: { desc: "把回答整理成 Word、Excel、PPT、PDF", go: "选格式", run: () => { $("#formatSelect")?.focus(); } },
     attach: { desc: "上传文档、图片并解析或 OCR", go: "上传", run: () => { $("#attachBtn")?.click(); } },
     agent: { desc: "在输入框左侧切换智能体", go: "切换", run: () => { const s = $("#agentSelect"); if (s) { s.focus(); try { s.showPicker?.(); } catch {} } } },
-    agent_tools: { desc: "模型按需自主检索资料、网页和附件后再回答", go: "开启", run: () => {
-      if (!modelSupportsAgentTools()) { toast("当前为算力池模型，暂不支持自动工具"); return; }
-      setAgentMode(true); toast("自动工具已开启");
+    agent_tools: { desc: "通用助手自动检索资料、网页和附件；不支持工具调用时按固定顺序兜底", go: "开启", run: () => {
+      if (!modelSupportsAgentTools()) { toast("当前为算力池模型，暂不支持通用助手工具闭环"); return; }
+      setAgentMode(true); toast("通用助手已开启");
     } },
     library: { desc: "长期保存资料，可挑选后随消息反复使用", go: "打开", run: () => openSettings("library") },
     kb: { desc: "个人知识库资料与检索", go: "打开", run: () => openSettings("kb") },

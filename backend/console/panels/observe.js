@@ -61,7 +61,7 @@ async function loadRequests() {
     : `<tr><td colspan="11" style="color:var(--muted)">没有匹配的记录</td></tr>`;
 }
 
-/* 列表里标出这条回答是否走了自动工具 Agent，以及调了几次工具 */
+/* 列表里标出这条回答走的是通用助手工具闭环，还是半自主兜底检索 */
 function agentCell(r) {
   let attrs = {};
   try {
@@ -71,12 +71,12 @@ function agentCell(r) {
   }
   const tools = Number(r.tool_count || 0);
   if (attrs && attrs.agent_plan === "semi") {
-    return `<span class="badge ${tools ? "good" : "ok"}">半自主${tools ? " · " + tools + " 步" : ""}</span>`
+    return `<span class="badge ${tools ? "good" : "ok"}">兜底检索${tools ? " · " + tools + " 步" : ""}</span>`
       + `<div class="sub">固定顺序检索${(attrs.agent_tools || []).length ? " · " + (attrs.agent_tools || []).length + " 级" : ""}</div>`;
   }
   if (!attrs || attrs.agent_mode !== true) return '<span class="sub">—</span>';
   const names = (attrs.agent_tools || []).length;
-  return `<span class="badge ${tools ? "good" : "ok"}">Agent${tools ? " · " + tools + " 次工具" : ""}</span>`
+  return `<span class="badge ${tools ? "good" : "ok"}">通用助手${tools ? " · " + tools + " 次工具" : ""}</span>`
     + `<div class="sub">${names} 个工具可用${attrs.agent_turns ? " · " + attrs.agent_turns + " 轮" : ""}</div>`;
 }
 
@@ -99,11 +99,11 @@ async function loadRequestDetail(rid) {
     ["Prompt Hash", r.prompt_hash || "—"], ["路由决策", r.decision_json || "—"],
     ["参数", r.params_json || "—"], ["错误", r.error || "—"],
   ];
-  kv.push(["自动工具", llmAttrs.agent_mode === true
+  kv.push(["通用助手", llmAttrs.agent_mode === true
     ? `开启 · ${(llmAttrs.agent_tools || []).length} 个工具可用 · ${toolSpans.length} 次调用`
       + `${llmAttrs.agent_turns ? " · " + llmAttrs.agent_turns + " 轮" : ""}`
     : (llmAttrs.agent_plan === "semi"
-        ? `半自主 · 固定顺序 · ${toolSpans.length} 步` : "未启用")],
+        ? `兜底检索 · 固定顺序 · ${toolSpans.length} 步` : "未启用")],
   ["可用工具", (llmAttrs.agent_tools || []).map(toolLabel).join("、") || "—"]);
   const spans = d.spans.map((s) => `<span class="badge off">${esc(s.kind)} · ${esc(s.name || "")} ${fmtMs(s.dur_ms)}</span>`).join(" ");
   const toolList = toolSpans.length

@@ -91,7 +91,7 @@ async function loadAgentsPage() {
   await loadAgentConfig();
 }
 
-/* 自动工具 Agent 的全局配置：总开关、最大轮次、每个只读工具是否暴露 */
+/* 通用助手全局配置：总开关、最大轮次、每个只读工具是否暴露，以及半自主兜底开关 */
 async function loadAgentConfig() {
   const d = await api("/api/system/settings");
   const c = d || {};
@@ -104,19 +104,12 @@ async function loadAgentConfig() {
   if ($("agentSemiOn")) $("agentSemiOn").checked = c.agent_semi_enabled !== false;
 }
 
-/* 半自主检索：固定顺序、逐级降级，后端不依赖模型发 tool_calls */
-async function saveAgentSemi() {
-  const body = { agent_semi_enabled: $("agentSemiOn").checked };
-  await api("/api/system/settings", { method: "PUT", body: JSON.stringify(body) });
-  uiToast("半自主设置已保存，下一条消息生效");
-  await loadAgentConfig();
-}
-
 async function saveAgentConfig() {
   const turns = Number($("agentMaxTurns").value);
   if (!Number.isInteger(turns) || turns < 1 || turns > 6) throw new Error("最多工具轮次只支持 1–6");
   const body = {
     agent_mode_enabled: $("agentModeOn").checked,
+    agent_semi_enabled: $("agentSemiOn").checked,
     agent_tool_kb: $("agentToolKb").checked,
     agent_tool_library: $("agentToolLibrary").checked,
     agent_tool_web: $("agentToolWeb").checked,
@@ -124,7 +117,7 @@ async function saveAgentConfig() {
     agent_max_turns: turns,
   };
   await api("/api/system/settings", { method: "PUT", body: JSON.stringify(body) });
-  uiToast("自动工具设置已保存，下一条消息生效");
+  uiToast("通用助手设置已保存，下一条消息生效");
   await loadAgentConfig();
 }
 
@@ -422,9 +415,6 @@ if ($("refreshAgents")) {
   $("resetAgent").addEventListener("click", resetAgentEditor);
   if ($("saveAgentConfig")) {
     $("saveAgentConfig").addEventListener("click", () => saveAgentConfig().catch((e) => uiToast(e.message, "bad")));
-  }
-  if ($("saveAgentSemi")) {
-    $("saveAgentSemi").addEventListener("click", () => saveAgentSemi().catch((e) => uiToast(e.message, "bad")));
   }
   $("refreshPartners").addEventListener("click", () => loadPartnersPage().catch((e) => uiToast(e.message, "bad")));
   $("refreshSquads").addEventListener("click", () => loadSquadsPage().catch((e) => uiToast(e.message, "bad")));

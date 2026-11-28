@@ -156,5 +156,52 @@ async def test_chat_marks_agent_plan_semi(client, admin_token, monkeypatch):
     assert meta["kb"] == ["报销制度"]
 
 
+@pytest.mark.asyncio
+async def test_chat_universal_falls_back_to_semi_plan(client, admin_token, monkeypatch):
+    """开启通用助手但模型未调工具时，后端记录兜底检索计划。"""
+    from backend.routers import chat as chat_mod
+
+    semi_dict = {
+        "steps": [{"tool": "search_knowledge_base", "status": "ok",
+                   "arguments": {"query": "报销怎么走"}, "count": 1,
+                   "summary": "命中 1 条", "sources": [], "error": "", "dur_ms": 30}],
+        "prompt": "【材料】报销走线上流程。",
+        "meta": {"kb": ["报销制度"], "library": None, "web": None},
+        "handles_kb": True,
+        "handles_web": True,
+    }
+
+    async def fake_run(message, **kw):
+        return semi_dict
+
+    async def fake_agent(**kw):
+        return {
+            "content": "按兜底材料回答。",
+            "reasoning": "",
+            "usage": {},
+            "trace": semi_dict["steps"],
+            "messages": kw["messages"],
+            "used_tools": False,
+            "plan": "semi",
+            "fallback": semi_dict,
+        }
+
+    monkeypatch.setattr(chat_mod.agent_semi, "run", fake_run)
+    monkeypatch.setattr(chat_mod.agent_runtime, "build_tools",
+                        lambda ctx: [{"function": {"name": "search_knowledge_base"}}])
+    monkeypatch.setattr(chat_mod.agent_runtime, "run_agent", fake_agent)
+
+    with client.stream("POST", "/api/chat/stream", headers=_auth(admin_token),
+                       json={"message": "报销怎么走", "agent_mode": True}) as r:
+        assert r.status_code == 200
+        body = "\n".join(r.iter_lines())
+    meta = next(json.loads(line[5:]) for line in body.splitlines()
+                if line.startswith("data:") and '"type": "meta"' in line)
+    assert meta["agent_mode"] is True
+    assert meta["agent_plan"] == "semi"
+    assert meta["agent_tools"][0] == "search_knowledge_base"
+    assert meta["kb"] == ["报销制度"]
+
+
 def _auth(token):
     return {"Authorization": "Bearer " + token}

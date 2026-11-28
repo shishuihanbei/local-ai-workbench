@@ -2824,26 +2824,18 @@ ollama pull qwen2.5:7b
       </div>
     </section>
     <section class="panel">
-      <div class="panel-head"><h2>自动工具 Agent</h2><span class="hint">只读工具 · 保存即生效 · 需要模型支持 Function Calling</span></div>
+      <div class="panel-head"><h2>通用助手</h2><span class="hint">豆包式自动检索 · 支持 Function Calling 时多轮调用工具；不支持时自动固定顺序兜底</span></div>
       <div class="form-grid">
-        <label class="checkline"><input type="checkbox" id="agentModeOn"> 开启自动工具闭环</label>
+        <label class="checkline"><input type="checkbox" id="agentModeOn"> 开启通用助手</label>
+        <label class="checkline"><input type="checkbox" id="agentSemiOn"> 模型不支持工具调用时，启用半自主检索兜底</label>
         <label class="checkline"><input type="checkbox" id="agentToolKb"> 知识库检索</label>
         <label class="checkline"><input type="checkbox" id="agentToolLibrary"> 资料库检索</label>
         <label class="checkline"><input type="checkbox" id="agentToolWeb"> 联网检索</label>
         <label class="checkline"><input type="checkbox" id="agentToolAttach"> 读取本轮附件</label>
         <input id="agentMaxTurns" type="number" min="1" max="6" step="1" placeholder="最多工具轮次，1–6">
-        <button class="btn primary" id="saveAgentConfig">保存自动工具设置</button>
+        <button class="btn primary" id="saveAgentConfig">保存通用助手设置</button>
       </div>
-      <p class="hint" id="agentCfgHint">给模型暴露的工具越多，一次回答耗时越长；本机 CPU 推理建议只开知识库与附件。算力池模型暂不支持自动工具。</p>
-    </section>
-
-    <section class="panel">
-      <div class="panel-head"><h2>半自主检索</h2><span class="hint">固定顺序 · 逐级降级 · 不需要模型 Function Calling</span></div>
-      <div class="form-grid">
-        <label class="checkline"><input type="checkbox" id="agentSemiOn"> 开启半自主检索</label>
-        <button class="btn primary" id="saveAgentSemi">保存半自主设置</button>
-      </div>
-      <p class="hint">每轮按「附件 → 知识库 → 资料库 → 联网」的顺序自动检索，本地资料够用就不联网；模型只负责最终措辞。与上面的自动工具二选一，同时开启时自动工具优先。</p>
+      <p class="hint" id="agentCfgHint">支持工具调用的模型会按需检索知识库、资料库、网页和附件；首轮不调用工具时，后端自动按「附件 → 知识库 → 资料库 → 联网」逐级检索。工具越多耗时越长，本机 CPU 建议只开知识库与附件；算力池模型不走工具闭环。</p>
     </section>
 </div>
 

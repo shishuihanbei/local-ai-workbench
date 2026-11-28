@@ -525,20 +525,29 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
              json.dumps(user_meta, ensure_ascii=False) if user_meta else None, now))
     await execute("UPDATE conversations SET updated_at=? WHERE id=?", (now, cid))
 
-    semi_result: dict[str, Any] | None = None
-    if not use_agent and cfg.get("agent_semi_enabled", True):
+    semi_state: dict[str, Any] = {"result": None}
+
+    async def ensure_semi() -> dict[str, Any] | None:
+        """通用助手的不依赖 Function Calling 兜底材料，只跑一次并复用。"""
+        if semi_state["result"] is not None:
+            return semi_state["result"]
+        if not cfg.get("agent_semi_enabled", True):
+            return None
         try:
-            semi_result = await agent_semi.run(
+            semi_state["result"] = await agent_semi.run(
                 body.message, user=user, cfg=cfg, body=body,
                 attachments=[] if body.regenerate else att_rows)
         except Exception as exc:  # 编排失败就退回原来的检索路径，不能挡住对话
             log.warning("半自主检索编排失败，回退默认检索：%s", exc)
-            semi_result = None
+            semi_state["result"] = None
+        return semi_state["result"]
+
+    await ensure_semi()
+    semi_result = semi_state["result"]
     msgs, max_tokens, extra = await _build_context(
         user, body, cfg, att_rows if not body.regenerate else None,
         skill if not body.regenerate else skills.get(body.skill), semi_result)
     if semi_result:
-        extra["agent_plan"] = "semi"
         extra["agent_tools"] = [s["tool"] for s in (semi_result.get("steps") or [])]
     agent_ctx: dict[str, Any] = {
         "user": user, "cfg": cfg, "body": body,
@@ -559,6 +568,8 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
         else:
             extra["agent_mode"] = True
             extra["agent_tools"] = [t["function"]["name"] for t in agent_tools]
+    if semi_result and not extra.get("agent_plan"):
+        extra["agent_plan"] = "semi"
     ctx["decision"] = decision
     if model_switch:
         extra["model_switch"] = model_switch
@@ -701,16 +712,33 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
                 note = "原文档链接需要登录，无法直接读取；以下是按文档标题检索到的公开资料概要，并非原文档内容。\n\n"
                 content_buf.append(note)
                 yield f"data: {json.dumps({'type':'delta','text':note}, ensure_ascii=False)}\n\n".encode()
-            if semi_result:
-                # 半自主的来源在回答前先算完，这里把每一步摊给前端看
-                agent_trace = semi_result.get("steps") or []
+            if semi_state["result"] and not use_agent:
+                # 非工具闭环路径：半自主来源在回答前先算完，这里把每一步摊给前端看
+                agent_trace = semi_state["result"].get("steps") or []
                 for action in agent_trace:
                     yield f"data: {json.dumps({'type':'agent_action','action':action}, ensure_ascii=False)}\n\n".encode()
             if use_agent:
                 agent_result = await agent_runtime.run_agent(
                     messages=msgs, tools=agent_tools, base=base, key=key,
-                    model=model_name, params=params, ctx=agent_ctx)
-                agent_trace = agent_result.get("trace") or []
+                    model=model_name, params=params, ctx=agent_ctx,
+                    fallback=ensure_semi)
+                fallback_result = agent_result.get("fallback")
+                if fallback_result:
+                    semi_state["result"] = fallback_result
+                    s_meta = fallback_result.get("meta") or {}
+                    if s_meta.get("kb"):
+                        extra["kb"] = s_meta["kb"]
+                    if s_meta.get("library"):
+                        extra["library"] = s_meta["library"]
+                    if s_meta.get("web"):
+                        extra["web"] = s_meta["web"]
+                baseline_steps = semi_state["result"].get("steps") or [] if semi_state["result"] else []
+                tool_trace = agent_result.get("trace") or []
+                if agent_result.get("used_tools"):
+                    agent_trace = baseline_steps + tool_trace
+                else:
+                    agent_trace = tool_trace or baseline_steps
+                extra["agent_plan"] = agent_result.get("plan") or "direct"
                 extra["agent_trace"] = agent_trace
                 usage = agent_result.get("usage") or {}
                 for action in agent_trace:
