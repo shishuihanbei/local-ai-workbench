@@ -245,6 +245,27 @@ def _normalize_call(call: dict[str, Any], index: int) -> dict[str, Any]:
     return {"id": call_id, "name": name, "args": args}
 
 
+_TOOL_UNSUPPORTED_HINTS = (
+    "does not support tools",
+    "doesn't support tools",
+    "do not support tools",
+    "not support tools",
+    "tools are not supported",
+    "tool calls are not supported",
+    "function calling is not supported",
+    "unsupported tools",
+    "tools not supported",
+)
+
+
+def _tool_unsupported(exc: Exception) -> bool:
+    """上游是否明确拒绝 tools 参数（模型不支持 Function Calling）。"""
+    text = str(exc or "").lower()
+    if not text:
+        return False
+    return any(hint in text for hint in _TOOL_UNSUPPORTED_HINTS)
+
+
 def _add_usage(total: dict[str, Any], usage: dict[str, Any]) -> None:
     if not isinstance(usage, dict):
         return
@@ -290,8 +311,10 @@ async def run_agent(*, messages: list[dict[str, Any]], tools: list[dict[str, Any
         return r.json()
 
     call_llm = caller or default_caller
+    tools_supported = True
 
     async def call_once(with_tools: bool = True) -> dict[str, Any]:
+        nonlocal tools_supported
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -299,10 +322,31 @@ async def run_agent(*, messages: list[dict[str, Any]], tools: list[dict[str, Any
             "temperature": params.get("temperature", 0.7),
             "max_tokens": params.get("max_tokens", 2048),
         }
-        if with_tools and tools:
+        if with_tools and tools and tools_supported:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
-        data = await call_llm(payload)
+        try:
+            data = await call_llm(payload)
+        except Exception as exc:
+            if payload.get("tools") and _tool_unsupported(exc):
+                # 模型不支持 Function Calling：去掉 tools 重试，交给兜底检索继续回答。
+                tools_supported = False
+                trace.append({
+                    "tool": "function_calling",
+                    "turn": 0,
+                    "arguments": {},
+                    "status": "skip",
+                    "summary": "当前模型不支持工具调用，改走兜底检索",
+                    "count": 0,
+                    "sources": [],
+                    "error": "",
+                    "dur_ms": 0,
+                })
+                payload.pop("tools", None)
+                payload.pop("tool_choice", None)
+                data = await call_llm(payload)
+            else:
+                raise
         _add_usage(usage, data.get("usage") or {})
         choices = data.get("choices") or [{}]
         message = (choices[0] or {}).get("message") or {}

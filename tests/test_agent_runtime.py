@@ -240,6 +240,60 @@ def test_run_agent_marks_direct_answer_without_fallback():
     assert result["fallback"] is None
 
 
+def test_run_agent_retries_without_tools_when_model_rejects_tools():
+    ctx = _ctx()
+    tools = agent.build_tools(ctx)
+    payloads: list[dict] = []
+
+    async def caller(payload: dict) -> dict:
+        if "tools" in payload:
+            raise RuntimeError(
+                "上游返回 400: {\"error\":{\"message\":\"registry.ollama.ai/library/"
+                "qwen2.5vl:3b does not support tools\",\"type\":\"invalid_request_error\"}}")
+        payloads.append(payload)
+        return {"choices": [{"message": {"content": "图里有红色圆形和蓝色方块。"}}]}
+
+    result = asyncio.run(agent.run_agent(
+        messages=[{"role": "user", "content": "描述这张图片"}],
+        tools=tools, base="http://127.0.0.1:8000", key="", model="vision-model",
+        params={}, ctx=ctx, caller=caller))
+
+    assert payloads and "tools" not in payloads[0]
+    assert result["content"] == "图里有红色圆形和蓝色方块。"
+    assert result["plan"] == "direct"
+    assert result["trace"][0]["tool"] == "function_calling"
+    assert result["trace"][0]["status"] == "skip"
+
+
+def test_run_agent_retries_without_tools_then_falls_back_to_semi():
+    ctx = _ctx()
+    tools = agent.build_tools(ctx)
+    payloads: list[dict] = []
+
+    async def caller(payload: dict) -> dict:
+        if "tools" in payload:
+            raise RuntimeError("上游返回 400: model does not support tools")
+        payloads.append(payload)
+        if len(payloads) == 1:
+            return {"choices": [{"message": {"content": "我没看到图片内容。"}}]}
+        return {"choices": [{"message": {"content": "按附件材料回答：红色圆形在左上角。"}}]}
+
+    async def fallback() -> dict:
+        return {"prompt": "已读取附件文字。", "steps": [{"tool": "read_attachments", "summary": "附件 1"}],
+                "meta": {}}
+
+    result = asyncio.run(agent.run_agent(
+        messages=[{"role": "user", "content": "图里有什么"}],
+        tools=tools, base="http://127.0.0.1:8000", key="", model="vision-model",
+        params={}, ctx=ctx, caller=caller, fallback=fallback))
+
+    assert len(payloads) == 2 and all("tools" not in p for p in payloads)
+    assert result["content"] == "按附件材料回答：红色圆形在左上角。"
+    assert result["plan"] == "semi"
+    assert result["trace"][0]["tool"] == "function_calling"
+    assert any(step["tool"] == "read_attachments" for step in result["trace"])
+
+
 def test_run_agent_stops_after_max_turns_and_forces_final_answer():
     ctx = _ctx(cfg={"agent_max_turns": 1})
     tools = agent.build_tools(ctx)
