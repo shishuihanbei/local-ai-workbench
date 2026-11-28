@@ -93,7 +93,17 @@
     if (!btn) return;
     btn.classList.toggle("active", S.web);
     btn.setAttribute("aria-pressed", String(S.web));
-    btn.title = S.web ? "联网已开启：发送时会先搜索网页" : "联网检索实时网页（中文 360 / 英文 Bing），默认关闭";
+    btn.title = S.web ? "强制联网已开启：发送时会先搜索网页" : "强制联网检索实时网页，默认关闭";
+    const state = $("#webState");
+    if (state) state.textContent = S.web ? "本条已开启" : "关闭";
+  }
+
+  function setToolMenu(open) {
+    const menu = $("#toolMenu");
+    const btn = $("#moreBtn");
+    if (!menu) return;
+    menu.hidden = !open;
+    if (btn) btn.setAttribute("aria-expanded", String(!!open));
   }
 
   function setDeep(on) {
@@ -274,6 +284,9 @@
       if (S.wbTab === "caps" && $("#workbenchDrawer") && !$("#workbenchDrawer").hidden) setWbTab("overview");
     }
     if (!frontOn("web") && S.web) setWeb(false);
+    const moreBtn = $("#moreBtn");
+    if (moreBtn) moreBtn.hidden = !frontOn("web");
+    if (!frontOn("web") && $("#toolMenu") && !$("#toolMenu").hidden) setToolMenu(false);
     if (!frontOn("agent_tools") && S.agentMode) setAgentMode(false);
     if (!frontOn("docgen") && S.outputFormat) {
       setOutputFormat("", true);

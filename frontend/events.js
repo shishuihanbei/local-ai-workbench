@@ -78,10 +78,11 @@
     $("#skillBtn").addEventListener("click", (ev) => {
       ev.stopPropagation();
       setSkillMenu($("#skillMenu").hidden);
-      if (!$("#skillMenu").hidden) setLibMenu(false);
+      if (!$("#skillMenu").hidden) { setLibMenu(false); setToolMenu(false); }
     });
     $("#libBtn").addEventListener("click", (ev) => {
       ev.stopPropagation();
+      if ($("#libMenu").hidden) setToolMenu(false);
       openLibMenu();
     });
     $("#libPickerSearch").addEventListener("input", () => {
@@ -98,9 +99,16 @@
       ev.stopPropagation();
       clearLibSelection();
     });
-    $("#webBtn").addEventListener("click", () => {
+    $("#moreBtn").addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const opening = $("#toolMenu").hidden;
+      if (opening) { setSkillMenu(false); setLibMenu(false); }
+      setToolMenu(opening);
+    });
+    $("#webBtn").addEventListener("click", (ev) => {
+      ev.stopPropagation();
       setWeb(!S.web);
-      toast(S.web ? "联网已开启：发送时先搜索网页" : "联网已关闭");
+      toast(S.web ? "强制联网已开启：本条先搜索网页" : "强制联网已关闭");
     });
     $("#agentBtn").addEventListener("click", () => {
       setAgentMode(!S.agentMode);
@@ -130,6 +138,7 @@
       }
       if (!ev.target.closest(".skill-wrap")) setSkillMenu(false);
       if (!ev.target.closest("#libBtn") && !ev.target.closest("#libMenu")) setLibMenu(false);
+      if (!ev.target.closest(".more-wrap")) setToolMenu(false);
     });
     $("#refreshConv").addEventListener("click", () => loadConversations($("#convSearch").value.trim()));
     $("#convSearch").addEventListener("input", () => {
@@ -342,6 +351,7 @@
       if (ev.key === "Escape") {
         if (!$("#featureCenter")?.hidden) closeFeatureCenter();
         else if (!$("#skillMenu").hidden) setSkillMenu(false);
+        else if (!$("#toolMenu").hidden) setToolMenu(false);
         else if (!$("#settingsDrawer").hidden) closeSettings();
         else if (window.innerWidth <= 900 && $("#appView").classList.contains("side-open")) closeSidebar();
       }

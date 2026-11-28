@@ -290,9 +290,6 @@
                 </div>
               </div>
             </div>
-            <button class="toolbtn web-btn" id="webBtn" data-front="web" type="button" title="联网检索实时网页（Bing），默认关闭" aria-pressed="false">
-              <svg><use href="#i-search"/></svg><span>联网</span>
-            </button>
             <button class="toolbtn agent-tool-btn" id="agentBtn" data-front="agent_tools" type="button" title="通用助手：自动检索知识库、资料库、附件；支持工具调用的模型可按需联网" aria-pressed="false">
               <svg><use href="#i-brain"/></svg><span>通用助手</span>
             </button>
@@ -301,18 +298,33 @@
             </button>
             <label class="fmt-pick" id="fmtPick" data-front="docgen" title="选择输出文件格式；选好后本条及后续回答会直接生成可下载文件">
               <svg><use href="#i-file"/></svg>
+              <span class="fmt-label">输出格式</span>
               <select id="formatSelect" aria-label="输出文件格式">
                 <option value="">自动</option>
-                <option value="docx">Word 文档</option>
-                <option value="xlsx">Excel 表格</option>
-                <option value="pptx">PPT 演示</option>
-                <option value="pdf">PDF 文档</option>
+                <option value="docx">Word</option>
+                <option value="xlsx">Excel</option>
+                <option value="pptx">PPT</option>
+                <option value="pdf">PDF</option>
                 <option value="md">Markdown</option>
-                <option value="txt">纯文本</option>
+                <option value="txt">文本</option>
               </select>
             </label>
           </div>
           <div class="composer-buttons">
+            <div class="more-wrap">
+              <button class="toolbtn more-btn" id="moreBtn" type="button" title="更多工具：强制联网" aria-haspopup="true" aria-expanded="false" aria-controls="toolMenu">
+                <svg><use href="#i-settings"/></svg>
+              </button>
+              <div class="tool-menu" id="toolMenu" hidden>
+                <div class="pop-head"><b>更多</b><span>只作用于本条消息</span></div>
+                <button class="menu-item" id="webBtn" data-front="web" type="button" title="强制联网检索实时网页，默认关闭" aria-pressed="false">
+                  <svg><use href="#i-search"/></svg>
+                  <span class="menu-copy"><b>强制联网</b><em id="webState">关闭</em></span>
+                  <span class="menu-switch" aria-hidden="true"><i></i></span>
+                </button>
+                <div class="menu-note">通用助手会自动判断新闻、价格、时效类问题并联网；这里用于手动强制搜索。</div>
+              </div>
+            </div>
             <button class="toolbtn attach-btn" id="attachBtn" data-front="attach" type="button" title="上传文件或粘贴截图（文档解析和图片 OCR 后存入个人资料库）"><svg><use href="#i-paperclip"/></svg></button>
             <button class="sendbtn" id="sendBtn" title="发送"><svg><use href="#i-send"/></svg></button>
             <button class="sendbtn stop" id="stopBtn" title="停止生成" hidden><svg><use href="#i-stop"/></svg></button>
