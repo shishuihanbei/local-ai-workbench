@@ -18,10 +18,25 @@
     document.querySelector("#consoleEntry")?.addEventListener("click", () => { window.location.href = "/console/"; });
 
     $("#newChatBtn").addEventListener("click", newChat);
+    $("#newTaskBtn")?.addEventListener("click", () => {
+      openWorkbench("tasks");
+      setTimeout(() => $("#wbNewTask")?.click(), 0);
+    });
+    $("#sideSearchBtn")?.addEventListener("click", () => {
+      const wrap = $("#sideSearchWrap");
+      const open = wrap.hidden;
+      wrap.hidden = !open;
+      $("#sideSearchBtn").setAttribute("aria-expanded", String(open));
+      if (open) $("#convSearch").focus();
+    });
     $("#allFeaturesBtn")?.addEventListener("click", openFeatureCenter);
     $("#featureCenter")?.addEventListener("click", (ev) => {
       if (ev.target.closest("[data-close-feature-center]")) {
         closeFeatureCenter();
+        return;
+      }
+      if (ev.target.closest("[data-console-link]")) {
+        window.location.href = "/console/";
         return;
       }
       const item = ev.target.closest("[data-feature-run]");
@@ -352,6 +367,10 @@
         if (!$("#featureCenter")?.hidden) closeFeatureCenter();
         else if (!$("#skillMenu").hidden) setSkillMenu(false);
         else if (!$("#toolMenu").hidden) setToolMenu(false);
+        else if ($("#sideSearchWrap") && !$("#sideSearchWrap").hidden) {
+          $("#sideSearchWrap").hidden = true;
+          $("#sideSearchBtn")?.setAttribute("aria-expanded", "false");
+        }
         else if (!$("#settingsDrawer").hidden) closeSettings();
         else if (window.innerWidth <= 900 && $("#appView").classList.contains("side-open")) closeSidebar();
       }

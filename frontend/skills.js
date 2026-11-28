@@ -212,7 +212,12 @@
         + `<span class="fc-copy"><b>${esc(item.name)}</b><small>${esc(meta.desc)}</small></span>`
         + `<span class="fc-go">${esc(meta.go)} ›</span>`
         + `</button>`;
-    }).join("");
+    }).join("") + (S.user && S.user.role === "admin"
+      ? `<button class="fc-item" type="button" data-console-link>`
+        + `<span class="fc-ic blue"><svg><use href="#i-grid"/></svg></span>`
+        + `<span class="fc-copy"><b>管理控制台</b><small>模型、账号、功能开关与系统设置</small></span>`
+        + `<span class="fc-go">打开 ›</span></button>`
+      : "");
   }
 
   function openFeatureCenter() {
@@ -266,7 +271,7 @@
       const key = el.dataset.front;
       const on = !S.frontFeatures || map.has(key);
       el.toggleAttribute("data-front-off", !on);
-      if (on && map.get(key)) paintFrontIcon(el, map.get(key));
+      if (on && map.get(key) && !el.hasAttribute("data-keep-icon")) paintFrontIcon(el, map.get(key));
       else if (!on && el.querySelector(":scope > .front-icon-slot")) {
         const slot = el.querySelector(":scope > .front-icon-slot");
         slot.innerHTML = slot.dataset.defaultSvg || "";
@@ -274,6 +279,10 @@
     });
     const sideTools = document.querySelector(".side-tools");
     if (sideTools) sideTools.hidden = !sideTools.querySelector(":scope > button:not([data-front-off])");
+    const sideProjects = $("#sideProjects");
+    if (sideProjects) {
+      sideProjects.hidden = ![...sideProjects.querySelectorAll("[data-front]")].some((el) => !el.hasAttribute("data-front-off"));
+    }
     if (!frontOn("workbench") && $("#workbenchDrawer") && !$("#workbenchDrawer").hidden) closeWorkbench();
     if (!frontOn("skills")) {
       S.skill = null;

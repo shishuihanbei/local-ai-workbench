@@ -7,15 +7,21 @@
 <meta name="description" content="本地 AI 工作台：多模型对话、账号与 API 管理">
 <title>本地 AI 工作台</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/app.css?v=__ASSET_VERSION__">
-<link rel="stylesheet" href="/app.ui.css?v=__ASSET_VERSION__">
+<link rel="stylesheet" href="/app.css?v=__ASSET_VERSION__&r=sidebar">
+<link rel="stylesheet" href="/app.ui.css?v=__ASSET_VERSION__&r=sidebar">
 </head>
 <body>
 
 <svg class="sprite" aria-hidden="true">
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-task" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l2.4 2.4L16 9"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="6.5" ry="2.8"/><path d="M5.5 6v6c0 1.6 2.9 2.8 6.5 2.8s6.5-1.2 6.5-2.8v-6"/><path d="M5.5 12v6c0 1.6 2.9 2.8 6.5 2.8s6.5-1.2 6.5-2.8v-6"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
   <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h8M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.5"/><circle cx="8" cy="17" r="2.5"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></symbol>
   <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="M20 11.5l-8.2 8.2a4.6 4.6 0 0 1-6.5-6.5l8.4-8.4a3.1 3.1 0 0 1 4.4 4.4l-8.3 8.3a1.7 1.7 0 0 1-2.4-2.4l7.7-7.7"/></symbol>
   <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="5" cy="6" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="18" r="1"/></symbol>
@@ -148,14 +154,31 @@
 <section id="appView" class="app-view" hidden>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-head">
-      <div class="brand-lockup">
+      <div class="brand-lockup sidebar-brand">
         <span class="logo" data-brand-logo-box><svg data-brand-logo-default viewBox="0 0 48 48" aria-hidden="true"><path d="M24 6l4.6 11.4L40 22l-11.4 4.6L24 38l-4.6-11.4L8 22l11.4-4.6L24 6z"/><circle cx="24" cy="22" r="3.2"/></svg><img data-brand-logo alt="" hidden></span>
-        <span><b data-brand-short-name>AI 工作台</b><small id="sidebarUser">未登录</small></span>
+        <span class="brand-name"><b data-brand-short-name>AI 工作台</b><svg class="brand-chev" aria-hidden="true"><use href="#i-chevron-right"/></svg><small id="sidebarUser">未登录</small></span>
       </div>
-      <button class="iconbtn sidebar-close" id="closeSidebar" title="收起侧栏"><svg><use href="#i-close"/></svg></button>
+      <div class="side-head-actions">
+        <button class="iconbtn side-search-btn" id="sideSearchBtn" type="button" title="搜索对话" aria-expanded="false" aria-controls="sideSearchWrap"><svg><use href="#i-search"/></svg></button>
+        <button class="iconbtn sidebar-close" id="closeSidebar" title="收起侧栏"><svg><use href="#i-close"/></svg></button>
+      </div>
     </div>
 
-    <button class="new-chat" id="newChatBtn"><svg><use href="#i-plus"/></svg><span>新建对话</span></button>
+    <div class="side-tools side-nav" id="sideNav">
+      <button class="side-nav-item" id="newTaskBtn" type="button" title="新建工作任务"><svg><use href="#i-task"/></svg><span>新工作任务</span></button>
+      <button class="side-nav-item" id="newChatBtn" type="button" title="开始新对话"><svg><use href="#i-chat"/></svg><span>新对话</span></button>
+      <button class="side-nav-item" id="workbenchBtn" type="button" data-front="workbench"><svg><use href="#i-grid"/></svg><span>工作台</span><b class="side-badge" id="workbenchBadge" hidden>0</b></button>
+      <button class="side-nav-item" id="sideScheduleBtn" type="button" data-front="schedule"><svg><use href="#i-clock"/></svg><span>定时任务</span></button>
+      <button class="side-nav-item" id="capsBtn" type="button" data-front="skills"><svg><use href="#i-spark"/></svg><span>插件 · 技能 · 伙伴</span></button>
+      <button class="side-nav-item" id="sideLibraryBtn" type="button" data-front="library"><svg><use href="#i-database"/></svg><span>资料库</span></button>
+      <button class="side-nav-item side-more" id="allFeaturesBtn" type="button" aria-haspopup="dialog" aria-controls="featureCenter"><svg><use href="#i-more"/></svg><span>更多</span><svg class="nav-chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+    </div>
+
+    <div class="side-projects" id="sideProjects">
+      <div class="side-section-title">项目</div>
+      <button class="side-project-item" id="squadsBtn" type="button" data-front="collab" data-keep-icon><svg><use href="#i-folder"/></svg><span>小队与共享</span></button>
+      <button class="side-project-item" id="sideFilesBtn" type="button" data-front="files" data-keep-icon><svg><use href="#i-folder"/></svg><span>生成文件</span></button>
+    </div>
 
     <div class="side-active-wb" id="sideActiveWb" hidden>
       <button type="button" class="side-active-main" id="sideActiveWbOpen" title="打开当前工作台">
@@ -165,30 +188,12 @@
       <button type="button" class="side-active-close" id="sideActiveWbClose" title="关闭当前工作台" aria-label="关闭当前工作台"><svg><use href="#i-close"/></svg></button>
     </div>
 
-    <div class="side-label">工作区</div>
-    <div class="side-chat active" aria-current="page">
-      <svg><use href="#i-chat"/></svg><span>对话</span><em>当前</em>
-    </div>
-    <div class="side-tools">
-      <button id="workbenchBtn" type="button" class="side-workbench" data-front="workbench"><svg><use href="#i-grid"/></svg><span>工作台</span><b class="side-badge" id="workbenchBadge" hidden>0</b></button>
-      <button id="capsBtn" type="button" class="side-caps" data-front="skills"><svg><use href="#i-spark"/></svg><span>插件 · 技能</span></button>
-      <button id="squadsBtn" type="button" data-front="collab"><svg><use href="#i-list"/></svg><span>小队与共享</span></button>
-      <button id="deskBtn" type="button" data-front="desk"><svg><use href="#i-help"/></svg><span>服务台</span></button>
-      <div class="side-label sub">内容与效率</div>
-      <button id="sideLibraryBtn" type="button" data-front="library"><svg><use href="#i-book"/></svg><span>资料库</span></button>
-      <button id="sideScheduleBtn" type="button" data-front="schedule"><svg><use href="#i-clock"/></svg><span>定时任务</span></button>
-      <button id="sideFilesBtn" type="button" data-front="files"><svg><use href="#i-file"/></svg><span>生成文件</span></button>
-    </div>
-    <button class="all-features" id="allFeaturesBtn" type="button" aria-haspopup="dialog" aria-controls="featureCenter">
-      <svg><use href="#i-grid"/></svg><span>全部功能</span><em id="frontEnabledCount">11</em>
-    </button>
-
-    <div class="side-search">
+    <div class="side-search" id="sideSearchWrap" hidden>
       <svg><use href="#i-search"/></svg>
       <input id="convSearch" placeholder="搜索对话" autocomplete="off">
     </div>
 
-    <div class="conv-head"><span>最近对话</span><button class="linkbtn" id="refreshConv">刷新</button></div>
+    <div class="conv-head"><span>最近</span><button class="side-refresh" id="refreshConv" type="button" title="刷新对话列表"><svg><use href="#i-refresh"/></svg></button></div>
     <nav class="conv-list" id="convList"></nav>
 
     <div class="sidebar-foot">
@@ -196,10 +201,7 @@
         <button class="user-chip" id="userChip" type="button" title="账号与设置">
           <span class="avatar" id="userAvatar">A</span>
           <span class="user-meta"><b id="userName">admin</b><small id="userRole">管理员</small></span>
-          <svg><use href="#i-settings"/></svg>
-        </button>
-        <button class="console-entry" id="consoleEntry" type="button" hidden title="进入管理控制台">
-          <svg><use href="#i-grid"/></svg><span>控制台</span>
+          <svg><use href="#i-gear"/></svg>
         </button>
       </div>
     </div>
@@ -868,13 +870,13 @@
 <script src="/core.js?v=__ASSET_VERSION__"></script>
 <script src="/auth.js?v=__ASSET_VERSION__"></script>
 <script src="/models.js?v=__ASSET_VERSION__"></script>
-<script src="/skills.js?v=__ASSET_VERSION__"></script>
+<script src="/skills.js?v=__ASSET_VERSION__&r=sidebar"></script>
 <script src="/attachments.js?v=__ASSET_VERSION__"></script>
 <script src="/conversations.js?v=__ASSET_VERSION__"></script>
 <script src="/messages.js?v=__ASSET_VERSION__"></script>
 <script src="/generation.js?v=__ASSET_VERSION__"></script>
 <script src="/settings.js?v=__ASSET_VERSION__"></script>
-<script src="/events.js?v=__ASSET_VERSION__"></script>
+<script src="/events.js?v=__ASSET_VERSION__&r=sidebar"></script>
 <script src="/collab.js?v=__ASSET_VERSION__"></script>
 <script src="/workbench.js?v=__ASSET_VERSION__"></script>
 </body>
