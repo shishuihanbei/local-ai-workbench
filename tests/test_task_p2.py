@@ -176,6 +176,38 @@ def test_emit_event_matches_only_same_kind_and_user(client, admin_token, monkeyp
         asyncio.run(execute("DELETE FROM scheduled_tasks WHERE title IN ('事件冒烟','不相关事件')"))
 
 
+def test_budget_stops_automatic_run(client, admin_token, monkeypatch):
+    from backend.db import execute, fetch_one
+    from backend.services import scheduler
+
+    cfg = {"task_daily_limit": 1, "task_max_concurrent": 2,
+           "task_auto_disable_failures": 0, "task_heavy_night_only": False}
+    monkeypatch.setattr(scheduler, "load_config", lambda: cfg)
+    now = time.time()
+    uid = 1
+    tid = asyncio.run(execute(
+        "INSERT INTO scheduled_tasks(user_id,title,prompt,frequency,enabled,"
+        "created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+        (uid, "预算任务", "写一句话", "daily", 1, now, now)))
+    marker = asyncio.run(execute(
+        "INSERT INTO task_runs(task_id,user_id,trigger,status,started_at) "
+        "VALUES(?,?,?,?,?)", (0, uid, "schedule", "ok", now)))
+    run_id = asyncio.run(execute(
+        "INSERT INTO task_runs(task_id,user_id,trigger,status,started_at) "
+        "VALUES(?,?,?,?,?)", (tid, uid, "schedule", "running", now)))
+    try:
+        task = asyncio.run(fetch_one("SELECT * FROM scheduled_tasks WHERE id=?", (tid,)))
+        asyncio.run(scheduler._run_task(dict(task), int(run_id), "schedule"))
+        run = asyncio.run(fetch_one("SELECT * FROM task_runs WHERE id=?", (run_id,)))
+        assert run["status"] == "budget"
+        assert "上限" in (run["summary"] or "")
+        assert run["verdict"] == "budget"
+    finally:
+        asyncio.run(execute("DELETE FROM task_runs WHERE task_id=? OR id IN (?,?)",
+                            (tid, run_id, marker)))
+        asyncio.run(execute("DELETE FROM scheduled_tasks WHERE id=?", (tid,)))
+
+
 def test_daily_budget_counts_only_automatic_runs(client, admin_token):
     from backend.db import execute, fetch_one
     from backend.services import scheduler
