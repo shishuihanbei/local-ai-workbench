@@ -1291,6 +1291,17 @@ async def _migration_023_front_features(db: aiosqlite.Connection) -> None:
         "created_by TEXT NOT NULL DEFAULT '')")
 
 
+async def _migration_024_task_agent(db: aiosqlite.Connection) -> None:
+    """任务 Agent：任务档案、执行轨迹、自检结论与重试次数。"""
+    await _add_column(db, "scheduled_tasks", "memory", "memory TEXT NOT NULL DEFAULT ''")
+    await _add_column(db, "scheduled_tasks", "goal", "goal TEXT NOT NULL DEFAULT ''")
+    await _add_column(db, "scheduled_tasks", "last_verdict",
+                      "last_verdict TEXT NOT NULL DEFAULT ''")
+    await _add_column(db, "task_runs", "steps", "steps TEXT NOT NULL DEFAULT ''")
+    await _add_column(db, "task_runs", "verdict", "verdict TEXT NOT NULL DEFAULT ''")
+    await _add_column(db, "task_runs", "attempts", "attempts INTEGER NOT NULL DEFAULT 0")
+
+
 MIGRATIONS: list[tuple[int, str, Any]] = [
     (1, "model_columns_and_permissions", _migration_001_model_columns),
     (2, "chat_uploads", _migration_002_chat_uploads),
@@ -1315,6 +1326,7 @@ MIGRATIONS: list[tuple[int, str, Any]] = [
     (21, "generated_file_expiry", _migration_021_generated_file_expiry),
     (22, "prompt_center", _migration_022_prompt_center),
     (23, "front_features", _migration_023_front_features),
+    (24, "task_agent_fields", _migration_024_task_agent),
 ]
 
 

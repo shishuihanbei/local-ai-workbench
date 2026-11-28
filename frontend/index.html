@@ -704,6 +704,7 @@
           <div class="wb-form-title"><b id="wbTaskFormTitle">新建定时任务</b><button class="iconbtn small" type="button" id="wbTaskCancel" title="取消"><svg><use href="#i-close"/></svg></button></div>
           <label class="wb-field"><span>任务名称</span><input id="wbTaskTitle" maxlength="80" placeholder="例如：每天早上生成行业简报"></label>
           <label class="wb-field"><span>要执行的内容</span><textarea id="wbTaskPrompt" rows="4" maxlength="3000" placeholder="写清楚要模型做什么，例如：整理今天的 AI 行业动态，输出 5 条，带来源链接。"></textarea></label>
+          <label class="wb-field"><span>成功标准（可选）</span><input id="wbTaskGoal" maxlength="600" placeholder="例如：每条都要有来源链接，少于 5 条算不合格"></label>
           <div class="wb-form-grid">
             <label class="wb-field"><span>重复方式</span>
               <select id="wbTaskFreq">

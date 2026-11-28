@@ -17,7 +17,7 @@ def test_migration_creates_task_tables(client, admin_token):
         assert {"scheduled_tasks", "task_runs", "workbench_active"} <= names
         row = await fetch_one(
             "SELECT version,name FROM schema_migrations ORDER BY version DESC LIMIT 1")
-        assert row["version"] == 23 and row["name"] == "front_features"
+        assert row["version"] == 24 and row["name"] == "task_agent_fields"
 
     asyncio.run(check())
 

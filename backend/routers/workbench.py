@@ -51,6 +51,7 @@ class TemplateShareBody(TemplateBody):
 class TaskBody(BaseModel):
     title: str = Field(min_length=1, max_length=80)
     prompt: str = Field(min_length=1, max_length=3000)
+    goal: str = Field(default="", max_length=600)
     frequency: str = "once"
     time_of_day: str = "09:00"
     weekdays: list[int] = Field(default_factory=lambda: [1])
@@ -99,6 +100,7 @@ def _clean(body: TaskBody) -> dict[str, Any]:
     return {
         "title": body.title.strip(),
         "prompt": body.prompt.strip(),
+        "goal": (body.goal or "").strip(),
         "frequency": frequency,
         "run_at": run_at if frequency == "once" else None,
         "time_of_day": f"{hh:02d}:{mm:02d}",
@@ -356,7 +358,16 @@ async def list_tasks(user: dict = Depends(current_user)):
     rows = await fetch_all(
         "SELECT * FROM scheduled_tasks WHERE user_id=? "
         "ORDER BY enabled DESC, next_run_at ASC, id DESC", (int(user["id"]),))
-    return {"items": [scheduler.public(r) for r in rows]}
+    items = []
+    for r in rows:
+        item = scheduler.public(r)
+        # 附带最近一次运行的步骤轨迹，前端不用再单独拉一次运行记录。
+        last = await fetch_one(
+            "SELECT * FROM task_runs WHERE task_id=? ORDER BY id DESC LIMIT 1",
+            (int(r["id"]),))
+        item["last_run"] = scheduler.public_run(last) if last else None
+        items.append(item)
+    return {"items": items}
 
 
 @router.post("/tasks")
@@ -367,10 +378,12 @@ async def create_task(body: TaskBody, user: dict = Depends(current_user)):
         raise HTTPException(400, "这个时间已经过去，请重新选择")
     now = time.time()
     tid = await execute(
-        "INSERT INTO scheduled_tasks(user_id,title,prompt,frequency,run_at,time_of_day,weekdays,"
-        "day_of_month,model,agent_id,output_format,web_enabled,enabled,next_run_at,created_at,updated_at) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (int(user["id"]), data["title"], data["prompt"], data["frequency"], data["run_at"],
+        "INSERT INTO scheduled_tasks(user_id,title,prompt,goal,frequency,run_at,time_of_day,"
+        "weekdays,day_of_month,model,agent_id,output_format,web_enabled,enabled,next_run_at,"
+        "created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (int(user["id"]), data["title"], data["prompt"], data["goal"], data["frequency"],
+         data["run_at"],
          data["time_of_day"], data["weekdays"], data["day_of_month"], data["model"],
          data["agent_id"], data["output_format"], data["web_enabled"], data["enabled"],
          nxt if data["enabled"] else None, now, now))
@@ -389,14 +402,16 @@ async def update_task(task_id: int, body: TaskBody, user: dict = Depends(current
     if data["enabled"] and not nxt:
         raise HTTPException(400, "这个时间已经过去，请重新选择")
     now = time.time()
+    # 目标被改写后旧档案就是干扰项，直接清空，让任务从新目标重新积累。
+    reset_memory = 1 if str(row.get("prompt") or "").strip() != data["prompt"] else 0
     await execute(
-        "UPDATE scheduled_tasks SET title=?,prompt=?,frequency=?,run_at=?,time_of_day=?,"
+        "UPDATE scheduled_tasks SET title=?,prompt=?,goal=?,frequency=?,run_at=?,time_of_day=?,"
         "weekdays=?,day_of_month=?,model=?,agent_id=?,output_format=?,web_enabled=?,enabled=?,"
-        "next_run_at=?,updated_at=? WHERE id=?",
-        (data["title"], data["prompt"], data["frequency"], data["run_at"], data["time_of_day"],
-         data["weekdays"], data["day_of_month"], data["model"], data["agent_id"],
-         data["output_format"], data["web_enabled"], data["enabled"],
-         nxt if data["enabled"] else None, now, task_id))
+        "next_run_at=?,memory=CASE WHEN ?=1 THEN '' ELSE memory END,updated_at=? WHERE id=?",
+        (data["title"], data["prompt"], data["goal"], data["frequency"], data["run_at"],
+         data["time_of_day"], data["weekdays"], data["day_of_month"], data["model"],
+         data["agent_id"], data["output_format"], data["web_enabled"], data["enabled"],
+         nxt if data["enabled"] else None, reset_memory, now, task_id))
     updated = await fetch_one("SELECT * FROM scheduled_tasks WHERE id=?", (task_id,))
     return scheduler.public(updated or {})
 

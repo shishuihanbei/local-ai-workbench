@@ -864,6 +864,38 @@
     return ["未运行", "idle"];
   }
 
+  function wbVerdictTag(task) {
+    const run = task.last_run || null;
+    const verdict = String((run && run.verdict) || task.last_verdict || "");
+    if (!verdict) return "";
+    const map = {
+      ok: ["自检通过", "ok"],
+      weak: ["结论偏弱", "warn"],
+      failed: ["自检未通过", "error"],
+    };
+    const [label, cls] = map[verdict] || ["自检完成", "ok"];
+    const attempts = Number((run && run.attempts) || 0);
+    return `<span class="wb-verdict ${cls}">${label}${attempts > 1 ? ` · ${attempts} 轮` : ""}</span>`;
+  }
+
+  const WB_STEP_ICONS = { ok: "✓", error: "✕", skip: "–", retry: "↻", running: "…" };
+
+  function renderWbSteps(run) {
+    const steps = (run && run.steps) || [];
+    if (!steps.length) return "";
+    const rows = steps.map((s) => {
+      const icon = WB_STEP_ICONS[String(s.status || "ok")] || "·";
+      const dur = Number(s.dur_ms || 0);
+      return `<li class="wb-step ${esc(String(s.status || "ok"))}">
+        <span class="wb-step-icon">${icon}</span>
+        <b>${esc(String(s.title || s.step || ""))}</b>
+        ${dur ? `<small>${dur} ms</small>` : ""}
+        ${s.detail ? `<p>${esc(String(s.detail))}</p>` : ""}
+      </li>`;
+    }).join("");
+    return `<details class="wb-steps"><summary>执行步骤（${steps.length}）</summary><ol>${rows}</ol></details>`;
+  }
+
   function renderWbTasks() {
     const box = $("#wbTaskList");
     if (!box) return;
@@ -887,8 +919,11 @@
           <span>上次：${esc(t.last_run_text || "未运行")}</span>
           ${fmt ? `<span>输出：${esc(fmt)}</span>` : ""}
           ${t.web_enabled ? "<span>联网</span>" : ""}
+          ${wbVerdictTag(t)}
         </div>
         ${result ? `<div class="wb-task-result">${esc(result.length > 240 ? result.slice(0, 240) + "…" : result)}</div>` : ""}
+        ${renderWbSteps(t.last_run)}
+        ${t.memory ? `<details class="wb-memory"><summary>任务档案</summary><pre>${esc(t.memory)}</pre></details>` : ""}
         <div class="wb-task-actions">
           <button class="btn ghost sm" data-wb-run-task="${t.id}" ${t.last_status === "running" ? "disabled" : ""}>立即执行</button>
           ${t.last_conversation_id ? `<button class="btn ghost sm" data-wb-task-conv="${t.last_conversation_id}">打开结果</button>` : ""}
@@ -954,6 +989,7 @@
     $("#wbTaskFormTitle").textContent = task ? "编辑定时任务" : "新建定时任务";
     $("#wbTaskTitle").value = seed.title || "";
     $("#wbTaskPrompt").value = seed.prompt || "";
+    $("#wbTaskGoal").value = seed.goal || "";
     $("#wbTaskFreq").value = seed.frequency || "once";
     $("#wbTaskTime").value = seed.time_of_day || "09:00";
     $("#wbTaskMonthDay").value = String(seed.day_of_month || new Date().getDate());
@@ -1005,6 +1041,7 @@
     const body = {
       title,
       prompt,
+      goal: $("#wbTaskGoal").value.trim(),
       frequency,
       time_of_day: $("#wbTaskTime").value || "09:00",
       weekdays,

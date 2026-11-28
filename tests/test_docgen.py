@@ -184,7 +184,7 @@ def test_generated_table_and_list(client, admin_token):
     from backend.db import fetch_all, fetch_one
     row = asyncio.run(fetch_one(
         "SELECT version,name FROM schema_migrations ORDER BY version DESC LIMIT 1"))
-    assert row["version"] == 23 and row["name"] == "front_features"
+    assert row["version"] == 24 and row["name"] == "task_agent_fields"
     columns = {r["name"] for r in asyncio.run(fetch_all("PRAGMA table_info(generated_files)"))}
     assert {"expires_at", "deleted_at"} <= columns
     res = client.get("/api/files/generated", headers=auth(admin_token))

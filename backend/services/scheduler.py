@@ -19,6 +19,7 @@ import httpx
 from ..config import load_config
 from ..db import execute, fetch_all, fetch_one
 from ..security import create_access_token, create_session, revoke_session
+from . import task_agent
 
 log = logging.getLogger(__name__)
 
@@ -160,6 +161,9 @@ def public(task: dict[str, Any]) -> dict[str, Any]:
         "last_run_text": fmt_time(task.get("last_run_at")),
         "last_status": task.get("last_status") or "",
         "last_result": task.get("last_result") or "",
+        "last_verdict": task.get("last_verdict") or "",
+        "memory": (task.get("memory") or "")[:1200],
+        "goal": task.get("goal") or "",
         "last_conversation_id": task.get("last_conversation_id"),
         "created_at": task.get("created_at"),
         "updated_at": task.get("updated_at"),
@@ -179,6 +183,9 @@ def public_run(row: dict[str, Any]) -> dict[str, Any]:
         "conversation_id": row.get("conversation_id"),
         "summary": row.get("summary") or "",
         "error": row.get("error") or "",
+        "verdict": row.get("verdict") or "",
+        "attempts": int(row.get("attempts") or 0),
+        "steps": task_agent.parse_steps(row.get("steps")),
     }
 
 
@@ -227,6 +234,75 @@ async def _auto_model() -> str:
     return ""
 
 
+async def _stream_chat(client: httpx.AsyncClient, access: str, payload: dict[str, Any],
+                       task_id: int, run_id: int,
+                       on_action=None) -> dict[str, Any]:
+    """跑一轮对话，返回正文、文件、错误和工具轨迹。
+
+    正文要累积下来：任务 Agent 的自检和任务档案都靠它判断这一轮到底
+    有没有产出可用结论，只拿 done 里的 chars 是不够的。
+    """
+    content_parts: list[str] = []
+    trace: list[dict[str, Any]] = []
+    files: list[dict[str, Any]] = []
+    error = ""
+    summary = ""
+    conversation_id: int | None = None
+    async with client.stream(
+            "POST", _local_api_base() + "/api/chat/stream", json=payload,
+            headers={"Authorization": f"Bearer {access}"}) as resp:
+        if resp.status_code != 200:
+            body = (await resp.aread()).decode("utf-8", "replace")[:300]
+            raise RuntimeError(f"任务接口返回 {resp.status_code}: {body}")
+        async for line in resp.aiter_lines():
+            if not line or not line.startswith("data:"):
+                continue
+            raw = line[5:].strip()
+            try:
+                event = json.loads(raw)
+            except Exception:
+                continue
+            etype = event.get("type")
+            if etype == "meta":
+                conversation_id = int(event.get("conversation_id") or 0) or None
+                if conversation_id:
+                    await execute(
+                        "UPDATE task_runs SET conversation_id=? WHERE id=?",
+                        (conversation_id, run_id))
+            elif etype == "delta":
+                content_parts.append(str(event.get("text") or ""))
+            elif etype == "agent_action":
+                action = event.get("action") or {}
+                trace.append(action)
+                if on_action:
+                    try:
+                        await on_action(action)
+                    except Exception:
+                        log.debug("推送任务步骤失败", exc_info=True)
+            elif etype == "error":
+                error = str(event.get("message") or "生成失败")[:500]
+            elif etype == "done":
+                summary = str(event.get("summary") or "").strip()
+                files = list(event.get("files") or [])
+                if not summary:
+                    count = int(event.get("chars") or 0)
+                    summary = f"已生成回答（{count} 字）"
+                if event.get("file_error"):
+                    summary += "；" + str(event.get("file_error"))[:160]
+                if files:
+                    names = "、".join(str(f.get("name") or "") for f in files)
+                    summary = f"已生成文件：{names}"
+    return {
+        "content": "".join(content_parts),
+        "trace": trace,
+        "files": files,
+        "error": error,
+        "summary": summary,
+        "conversation_id": conversation_id,
+        "task_id": task_id,
+    }
+
+
 async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
     user_id = int(task["user_id"])
     sid = 0
@@ -235,6 +311,8 @@ async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
     error = ""
     status = "ok"
     started = time.time()
+    outcome: dict[str, Any] | None = None
+    tid = int(task["id"])
     try:
         token, sid = await create_session(user_id, "127.0.0.1", "workbench-scheduler")
         access, _ = create_access_token(
@@ -242,8 +320,7 @@ async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
         model = str(task.get("model") or "").strip() or await _auto_model()
         if not model:
             raise RuntimeError("没有可用模型：请先启动本机模型，或在控制台「算力」页准备一个在线节点")
-        payload = {
-            "message": task.get("prompt") or "",
+        base_payload = {
             "model": model,
             "agent_id": task.get("agent_id") or None,
             "output_format": task.get("output_format") or None,
@@ -251,41 +328,34 @@ async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
         }
         timeout = httpx.Timeout(connect=10, read=900, write=30, pool=30)
         async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream(
-                    "POST", _local_api_base() + "/api/chat/stream", json=payload,
-                    headers={"Authorization": f"Bearer {access}"}) as resp:
-                if resp.status_code != 200:
-                    body = (await resp.aread()).decode("utf-8", "replace")[:300]
-                    raise RuntimeError(f"任务接口返回 {resp.status_code}: {body}")
-                async for line in resp.aiter_lines():
-                    if not line or not line.startswith("data:"):
-                        continue
-                    raw = line[5:].strip()
-                    try:
-                        event = json.loads(raw)
-                    except Exception:
-                        continue
-                    etype = event.get("type")
-                    if etype == "meta":
-                        conversation_id = int(event.get("conversation_id") or 0) or None
-                        if conversation_id:
-                            await execute(
-                                "UPDATE task_runs SET conversation_id=? WHERE id=?",
-                                (conversation_id, run_id))
-                    elif etype == "error":
-                        error = str(event.get("message") or "生成失败")[:500]
-                        status = "error"
-                    elif etype == "done":
-                        summary = str(event.get("summary") or "").strip()
-                        if not summary:
-                            count = int(event.get("chars") or 0)
-                            summary = f"已生成回答（{count} 字）"
-                        if event.get("file_error"):
-                            summary += "；" + str(event.get("file_error"))[:160]
-                        files = event.get("files") or []
-                        if files:
-                            names = "、".join(str(f.get("name") or "") for f in files)
-                            summary = f"已生成文件：{names}"
+            async def call(message: str, attempt: int) -> dict[str, Any]:
+                payload = dict(base_payload, message=message)
+                return await _stream_chat(client, access, payload, tid, run_id,
+
+                                          on_action=push_action)
+            async def push_action(action: dict[str, Any]) -> None:
+                # 执行中就更新步骤，控制台不用等任务结束才看到进度。
+                live.append({
+                    "step": "tool",
+                    "title": str(action.get("tool") or "") or "工具",
+                    "status": str(action.get("status") or "ok"),
+                    "detail": str(action.get("summary") or action.get("error") or "")[:180],
+                    "dur_ms": int(action.get("dur_ms") or 0),
+                })
+                await _save_steps(run_id, live)
+
+            live: list[dict[str, Any]] = task_agent.build_plan(task)
+            await _save_steps(run_id, live)
+
+            async def on_steps(steps: list[dict[str, Any]]) -> None:
+                await _save_steps(run_id, steps)
+
+            outcome = await task_agent.run_task(
+                task, memory=str(task.get("memory") or ""), call=call, on_steps=on_steps)
+        status = str(outcome.get("status") or "ok")
+        summary = str(outcome.get("summary") or "")
+        error = str(outcome.get("error") or "")
+        conversation_id = outcome.get("conversation_id")
     except asyncio.CancelledError:
         status = "stopped"
         error = "服务停止"
@@ -296,7 +366,7 @@ async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
         log.warning("定时任务 %s 执行失败: %s", task.get("id"), error)
     finally:
         finished = time.time()
-        if status != "ok" and error:
+        if status != "ok" and error and not summary:
             # 失败时把真实原因带到任务列表，不要只显示“已生成回答（0 字）”。
             summary = error[:800]
         if sid:
@@ -306,17 +376,29 @@ async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
                 pass
         try:
             await execute(
-                "UPDATE task_runs SET status=?,finished_at=?,conversation_id=?,summary=?,error=? "
-                "WHERE id=?",
-                (status, finished, conversation_id, summary[:800], error, run_id))
+                "UPDATE task_runs SET status=?,finished_at=?,conversation_id=?,summary=?,error=?,"
+                "verdict=?,attempts=? WHERE id=?",
+                (status, finished, conversation_id, summary[:800], error,
+                 str((outcome or {}).get("verdict") or ""),
+                 int((outcome or {}).get("attempts") or 0), run_id))
+            memory = str((outcome or {}).get("memory") or task.get("memory") or "")
             await execute(
                 "UPDATE scheduled_tasks SET last_run_at=?,last_status=?,last_result=?,"
-                "last_conversation_id=?,updated_at=? WHERE id=?",
+                "last_conversation_id=?,memory=?,last_verdict=?,updated_at=? WHERE id=?",
                 (finished, status, (summary or error)[:800], conversation_id,
-                 finished, int(task["id"])))
+                 memory, str((outcome or {}).get("verdict") or ""), finished, int(task["id"])))
         except Exception:
             log.exception("更新定时任务状态失败")
         _running.discard(int(task["id"]))
+
+
+async def _save_steps(run_id: int, steps: list[dict[str, Any]]) -> None:
+    """步骤轨迹落库；超长时只保留最近的部分，避免把运行表撑大。"""
+    try:
+        await execute("UPDATE task_runs SET steps=? WHERE id=?",
+                      (json.dumps(steps, ensure_ascii=False)[:8000], run_id))
+    except Exception:
+        log.debug("保存任务步骤失败", exc_info=True)
 
 
 async def queue_task(task: dict[str, Any], trigger: str = "schedule") -> int:
