@@ -721,6 +721,29 @@
           <div id="wbTaskCondWrap" hidden>
             <label class="wb-field"><span>执行条件</span><textarea id="wbTaskCondition" rows="2" maxlength="600" placeholder="例如：只有当今天的动态里出现“降价”时才产出结果；不满足就跳过这一轮。"></textarea></label>
           </div>
+          <div class="wb-form-grid" id="wbTaskScheduleGrid">
+            <label class="wb-field"><span>重复方式</span>
+              <select id="wbTaskFreq">
+                <option value="once">只执行一次</option>
+                <option value="daily">每天</option>
+                <option value="weekly">每周</option>
+                <option value="monthly">每月</option>
+              </select>
+            </label>
+            <label class="wb-field" id="wbTaskOnceWrap"><span>执行时间</span><input id="wbTaskRunAt" type="datetime-local"></label>
+            <label class="wb-field" id="wbTaskTimeWrap" hidden><span>几点执行</span><input id="wbTaskTime" type="time" value="09:00"></label>
+            <label class="wb-field" id="wbTaskMonthWrap" hidden><span>每月几号</span><input id="wbTaskMonthDay" type="number" min="1" max="31" value="1"></label>
+          </div>
+          <div class="wb-weekdays" id="wbTaskWeekdays" hidden>
+            <span>每周哪几天</span>
+            <label><input type="checkbox" value="1">周一</label>
+            <label><input type="checkbox" value="2">周二</label>
+            <label><input type="checkbox" value="3">周三</label>
+            <label><input type="checkbox" value="4">周四</label>
+            <label><input type="checkbox" value="5">周五</label>
+            <label><input type="checkbox" value="6">周六</label>
+            <label><input type="checkbox" value="7">周日</label>
+          </div>
           <label class="wb-field"><span>结果投递</span>
             <select id="wbTaskNotify">
               <option value="">只放工作台</option>
@@ -746,29 +769,6 @@
                 </select>
               </label>
             </div>
-          </div>
-          <div class="wb-form-grid" id="wbTaskScheduleGrid">
-            <label class="wb-field"><span>重复方式</span>
-              <select id="wbTaskFreq">
-                <option value="once">只执行一次</option>
-                <option value="daily">每天</option>
-                <option value="weekly">每周</option>
-                <option value="monthly">每月</option>
-              </select>
-            </label>
-            <label class="wb-field" id="wbTaskOnceWrap"><span>执行时间</span><input id="wbTaskRunAt" type="datetime-local"></label>
-            <label class="wb-field" id="wbTaskTimeWrap" hidden><span>几点执行</span><input id="wbTaskTime" type="time" value="09:00"></label>
-            <label class="wb-field" id="wbTaskMonthWrap" hidden><span>每月几号</span><input id="wbTaskMonthDay" type="number" min="1" max="31" value="1"></label>
-          </div>
-          <div class="wb-weekdays" id="wbTaskWeekdays" hidden>
-            <span>每周哪几天</span>
-            <label><input type="checkbox" value="1">周一</label>
-            <label><input type="checkbox" value="2">周二</label>
-            <label><input type="checkbox" value="3">周三</label>
-            <label><input type="checkbox" value="4">周四</label>
-            <label><input type="checkbox" value="5">周五</label>
-            <label><input type="checkbox" value="6">周六</label>
-            <label><input type="checkbox" value="7">周日</label>
           </div>
           <div class="wb-form-grid">
             <label class="wb-field"><span>模型</span><select id="wbTaskModel"><option value="">自动选择</option></select></label>
