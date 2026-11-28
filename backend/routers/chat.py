@@ -23,7 +23,7 @@ from ..services import (access, admission, attachments, cluster, collab, docgen,
                         library, llama, memory, model_fit, model_usage, moderation,
                         prompts, quota, routing, skills, tts, websearch)
 from ..services import agent as agent_runtime
-from ..services import agent_semi
+from ..services import agent_semi, assist
 
 def _upstream_error(status: int, detail: str, model: str | None = None) -> str:
     """把上游错误翻成人能看懂的一句话，保留原始细节便于排查。"""
@@ -71,6 +71,9 @@ class ChatBody(BaseModel):
     agent_id: int | None = None
     agent_mode: bool | None = None
     output_format: str | None = None
+    assist: bool | None = None       # 单次请求是否允许云端补强，默认跟随全局配置
+    assist_reason: str = Field(default="", max_length=80)  # 内部调用标记，用于审计
+    task_id: int | None = None       # 定时任务内部调用，用于把云端成本归到任务运行上
 
 
 class TTSBody(BaseModel):
@@ -446,7 +449,12 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             body.system_prompt = (agent["system_prompt"].strip()
                                   + (("\n\n" + base) if base else ""))
     if body.model and not await access.can_use(user, body.model):
-        raise HTTPException(403, "该模型未对当前用户开放")
+        allowed = (bool(cfg.get("assist_enabled")) and bool(cfg.get("assist_open_to_all"))
+                   and await assist.is_assist_model(body.model))
+        if not allowed:
+            raise HTTPException(403, "该模型未对当前用户开放")
+    if body.assist_reason and assist.sensitivity(body.message, cfg):
+        raise HTTPException(403, "请求包含敏感信息，不能使用云端补强")
     if not body.model:
         # 受限用户未指定模型时，自动落到名单里的第一个模型；管理员仍走默认路由
         first = await access.first_model(user)
@@ -473,6 +481,46 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
     decision = await routing.resolve(body, cfg)
     if decision.get("disabled"):
         raise HTTPException(503, decision.get("reason") or "本地部署已关闭")
+    local_decision = decision
+    assist_target = await assist.target(cfg) if cfg.get("assist_enabled") else None
+    cloud_direct = bool(assist_target and decision.get("provider_id")
+                        and int(decision.get("provider_id")) == int(assist_target["provider_id"]))
+    if cloud_direct:
+        why = assist.sensitivity(body.message, cfg)
+        if why:
+            raise HTTPException(403, "请求包含敏感信息，不能使用云端补强")
+        if not await assist.budget_ok(user["id"], len(body.message), cfg):
+            raise HTTPException(429, "今日云端补强额度已用完，请改用本地模型")
+    assist_info: dict[str, Any] | None = None
+    if assist_target and body.assist is not False:
+        if decision.get("provider") == "local":
+            if body.vision:
+                assist_info = {"state": "local", "reason": "图片/视觉请求只在本地处理"}
+            elif body.attachments and not bool(cfg.get("assist_allow_attachments")):
+                assist_info = {"state": "local", "reason": "带附件的请求默认只在本地处理"}
+            else:
+                why = assist.sensitivity(body.message, cfg)
+                if why:
+                    assist_info = {"state": "local", "reason": why}
+                elif body.assist_reason:
+                    reason = body.assist_reason
+                    if await assist.budget_ok(user["id"], len(body.message), cfg):
+                        decision = assist.decision(assist_target, reason)
+                        assist_info = {"state": "assist", "reason": reason,
+                                       "provider": assist_target["provider"],
+                                       "model": assist_target["model"]}
+                else:
+                    threshold = int(cfg.get("assist_auto_threshold") or 0)
+                    score = assist.complexity(body.message, fmt_pre or "", len(body.attachments))
+                    if threshold > 0 and score >= threshold:
+                        if await assist.budget_ok(user["id"], len(body.message), cfg):
+                            reason = f"复杂任务（难度 {score}）自动使用云端补强"
+                            decision = assist.decision(assist_target, reason)
+                            assist_info = {"state": "assist", "reason": reason,
+                                           "provider": assist_target["provider"],
+                                           "model": assist_target["model"]}
+                        else:
+                            assist_info = {"state": "local", "reason": "今日云端补强额度已用完"}
     use_agent = bool(cfg.get("agent_mode_enabled", True)) and (
         body.agent_mode if body.agent_mode is not None else True)
     if decision.get("pool_id"):
@@ -588,6 +636,10 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
     if semi_result and not extra.get("agent_plan"):
         extra["agent_plan"] = "semi"
     ctx["decision"] = decision
+    # 预升级会改掉 decision 的目标，同步写回 ctx，避免后续钩子仍拿本地 base/model。
+    ctx["base"] = decision.get("base") or ""
+    ctx["key"] = decision.get("key") or ""
+    ctx["model"] = decision.get("model") or ""
     if model_switch:
         extra["model_switch"] = model_switch
     model_name = decision["model"]
@@ -596,6 +648,20 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
         "max_tokens": max_tokens,
     }
     prompt_text = "\n".join(_content_text(m) for m in msgs)[:12000]
+    # 当前消息已在入口拦过；这里再扫一遍会话历史与系统提示，避免旧消息里的证件号被带去云端。
+    if (decision.get("strategy") == "assist" or cloud_direct) and assist_target:
+        full_prompt = "\n".join(_content_text(m) for m in msgs)
+        why_full = assist.sensitivity(full_prompt, cfg)
+        if why_full:
+            if cloud_direct:
+                raise HTTPException(403, "会话历史包含敏感信息，不能使用云端补强")
+            decision = local_decision
+            model_name = decision["model"]
+            ctx["decision"] = decision
+            ctx["base"] = decision.get("base") or ""
+            ctx["key"] = decision.get("key") or ""
+            ctx["model"] = decision.get("model") or ""
+            assist_info = {"state": "local", "reason": "会话历史包含敏感信息，仅本地处理"}
     ctx["prompt"] = prompt_text
     ctx["prompt_hash"] = pipeline.prompt_hash(model_name, prompt_text, params)
     await pipeline.run("before_call", ctx)
@@ -632,6 +698,7 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
         words=mod_words, replacement=mod_cfg["replace_with"], min_chars=mod_cfg["min_chars"])
 
     async def event_stream() -> AsyncIterator[bytes]:
+        nonlocal assist_info
         content_buf: list[str] = []
         reason_buf: list[str] = []
         err = ""
@@ -724,7 +791,7 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             model_usage.begin(usage_model, str(user.get("username") or ""))
 
         try:
-            yield f"data: {json.dumps({'type':'meta','conversation_id':cid,'kb':extra.get('kb',[]),'web':extra.get('web') or None,'memory':extra.get('memory') or None,'model':model_name,'provider':decision['provider'],'trace_id':ctx['trace_id'],'route':decision['strategy'],'file_mode':bool(extra.get('file_mode')),'output_format':extra.get('output_format') or None,'model_switch':extra.get('model_switch') or None,'agent_mode':bool(use_agent),'agent_plan':extra.get('agent_plan') or None,'agent_tools':extra.get('agent_tools') or []}, ensure_ascii=False)}\n\n".encode()
+            yield f"data: {json.dumps({'type':'meta','conversation_id':cid,'kb':extra.get('kb',[]),'web':extra.get('web') or None,'memory':extra.get('memory') or None,'model':model_name,'provider':decision['provider'],'trace_id':ctx['trace_id'],'route':decision['strategy'],'file_mode':bool(extra.get('file_mode')),'output_format':extra.get('output_format') or None,'model_switch':extra.get('model_switch') or None,'agent_mode':bool(use_agent),'agent_plan':extra.get('agent_plan') or None,'agent_tools':extra.get('agent_tools') or [],'assist':assist_info}, ensure_ascii=False)}\n\n".encode()
             if extra.get("web_fallback"):
                 note = "原文档链接需要登录，无法直接读取；以下是按文档标题检索到的公开资料概要，并非原文档内容。\n\n"
                 content_buf.append(note)
@@ -852,6 +919,55 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
         except Exception as e:
             err = str(e)[:500]
             status = "error"
+            fallback_reason = ""
+            if (assist_target and not content_buf and not mod_blocked
+                    and body.assist is not False):
+                why = assist.sensitivity(
+                    "\n".join(_content_text(m) for m in msgs), cfg)
+                if why:
+                    fallback_reason = why
+                elif body.vision:
+                    fallback_reason = "图片/视觉请求只在本地处理"
+                elif body.attachments and not bool(cfg.get("assist_allow_attachments")):
+                    fallback_reason = "带附件的请求默认只在本地处理"
+                elif await assist.budget_ok(user["id"], len(prompt_text), cfg):
+                    fallback_reason = "本地调用失败，云端补强"
+                else:
+                    fallback_reason = "今日云端补强额度已用完"
+            if fallback_reason == "本地调用失败，云端补强":
+                try:
+                    res = await assist.complete(assist_target, msgs, params)
+                    text = str(res.get("content") or "")
+                    if text:
+                        safe_c = output_filter.feed(text) + output_filter.flush()
+                        if output_filter.blocked:
+                            raise RuntimeError("云端补强结果触发内容安全策略")
+                        assist_info = {"state": "fallback", "reason": fallback_reason,
+                                       "provider": assist_target["provider"],
+                                       "model": assist_target["model"]}
+                        decision.update(assist.decision(assist_target, fallback_reason))
+                        yield f"data: {json.dumps({'type':'assist',**assist_info}, ensure_ascii=False)}\n\n".encode()
+                        content_buf.append(safe_c)
+                        first_token = False
+                        ttft_ms = int((time.monotonic() - upstream_started) * 1000)
+                        usage = res.get("usage") or {}
+                        status = "ok"
+                        err = ""
+                        ptok = int(usage.get("prompt_tokens") or 0) or len(prompt_text) // 2
+                        ctok = int(usage.get("completion_tokens") or 0) or len(safe_c) // 2
+                        await assist.log(
+                            user_id=user["id"], provider=assist_target["provider"],
+                            model=assist_target["model"], reason=fallback_reason,
+                            conversation_id=cid, prompt_chars=len(prompt_text),
+                            tokens_in=ptok, tokens_out=ctok,
+                            latency_ms=int(res.get("latency_ms") or 0), task_id=body.task_id)
+                        if safe_c:
+                            yield f"data: {json.dumps({'type':'delta','text':safe_c}, ensure_ascii=False)}\n\n".encode()
+                except Exception as e2:
+                    status = "error"
+                    err = f"{err}；云端补强失败：{str(e2)[:160]}"
+            if fallback_reason and fallback_reason != "本地调用失败，云端补强" and "云端补强失败" not in err:
+                err = f"{err}（{fallback_reason}）"
             yield f"data: {json.dumps({'type':'error','message':err}, ensure_ascii=False)}\n\n".encode()
         finally:
             if admission_token:
@@ -925,6 +1041,15 @@ async def chat_stream(body: ChatBody, request: Request, user: dict = Depends(cur
             price_in = float(decision.get("price_in") or 0)
             price_out = float(decision.get("price_out") or 0)
             cost = round((ptok * price_in + ctok * price_out) / 1_000_000, 6)
+            if assist_target and not (assist_info or {}).get("state") == "fallback" and (
+                    (assist_info or {}).get("state") == "assist"
+                    or (body.assist_reason and decision.get("provider_id") == assist_target.get("provider_id"))):
+                reason = ((assist_info or {}).get("reason") or body.assist_reason or "云端补强")
+                await assist.log(
+                    user_id=user["id"], provider=str(decision.get("provider") or ""),
+                    model=model_name, reason=reason, conversation_id=cid,
+                    prompt_chars=len(prompt_text), tokens_in=ptok, tokens_out=ctok,
+                    latency_ms=total_ms, status=status, error=err, task_id=body.task_id)
             await pipeline.run("after_call", ctx)
             tool_spans: list[dict[str, Any]] = []
             tool_cursor = retrieve_ms

@@ -159,7 +159,8 @@ def _tool_steps(trace: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 async def run_task(task: dict[str, Any], *, memory: str, call: CallFn,
-                   on_steps: StepHook | None = None) -> dict[str, Any]:
+                   on_steps: StepHook | None = None,
+                   max_attempts: int | None = None) -> dict[str, Any]:
     """执行一次任务：计划 → 执行 → 自检 → 必要时重试。
 
     `call(message, attempt)` 负责真正跑一轮对话，返回
@@ -183,7 +184,8 @@ async def run_task(task: dict[str, Any], *, memory: str, call: CallFn,
                 pass
 
     await flush()
-    while attempts < MAX_ATTEMPTS:
+    cap = max(1, min(int(max_attempts or MAX_ATTEMPTS), MAX_ATTEMPTS))
+    while attempts < cap:
         attempts += 1
         message = compose_message(task, memory, attempts)
         result = await call(message, attempts)

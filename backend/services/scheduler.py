@@ -19,7 +19,7 @@ import httpx
 from ..config import load_config
 from ..db import execute, fetch_all, fetch_one
 from ..security import create_access_token, create_session, revoke_session
-from . import task_agent
+from . import assist, task_agent
 
 log = logging.getLogger(__name__)
 
@@ -321,6 +321,8 @@ def public_run(row: dict[str, Any]) -> dict[str, Any]:
         "error": row.get("error") or "",
         "verdict": row.get("verdict") or "",
         "attempts": int(row.get("attempts") or 0),
+        "route": row.get("route") or "",
+        "route_reason": row.get("route_reason") or "",
         "event": row.get("event") or "",
         "notified": bool(row.get("notified") or 0),
         "steps": task_agent.parse_steps(row.get("steps")),
@@ -385,6 +387,7 @@ async def _stream_chat(client: httpx.AsyncClient, access: str, payload: dict[str
     files: list[dict[str, Any]] = []
     error = ""
     summary = ""
+    tokens = 0
     conversation_id: int | None = None
     async with client.stream(
             "POST", _local_api_base() + "/api/chat/stream", json=payload,
@@ -421,6 +424,7 @@ async def _stream_chat(client: httpx.AsyncClient, access: str, payload: dict[str
                 error = str(event.get("message") or "生成失败")[:500]
             elif etype == "done":
                 summary = str(event.get("summary") or "").strip()
+                tokens = int(event.get("tokens") or 0)
                 files = list(event.get("files") or [])
                 if not summary:
                     count = int(event.get("chars") or 0)
@@ -436,6 +440,8 @@ async def _stream_chat(client: httpx.AsyncClient, access: str, payload: dict[str
         "files": files,
         "error": error,
         "summary": summary,
+        "tokens": tokens,
+        "conversation_id": conversation_id,
         "conversation_id": conversation_id,
         "task_id": task_id,
     }
@@ -548,6 +554,8 @@ async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
     started = time.time()
     outcome: dict[str, Any] | None = None
     verdict = ""
+    route = ""
+    route_reason = ""
     notified = False
     cfg = load_config()
     slot_held = False
@@ -601,6 +609,43 @@ async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
             async def on_steps(steps: list[dict[str, Any]]) -> None:
                 await _save_steps(run_id, steps)
 
+            async def cloud_run(reason: str) -> dict[str, Any] | None:
+                """本地结果偏弱或失败时，用云端再跑一遍；敏感内容与超预算直接跳过。"""
+                target = await assist.target(cfg)
+                if not target:
+                    return None
+                probe = str(task.get("prompt") or "") + "\n" + str(task.get("memory") or "")
+                why = assist.sensitivity(probe, cfg)
+                if why:
+                    log.info("任务 %s 跳过云端补强：%s", tid, why)
+                    return None
+                if not await assist.budget_ok(user_id, len(probe), cfg):
+                    log.info("任务 %s 跳过云端补强：今日额度已用完", tid)
+                    return None
+                payload = {**base_payload, "model": target["model"],
+                           "conversation_id": conversation_id, "assist_reason": reason,
+                           "task_id": tid}
+
+                async def cloud_call(message: str, attempt: int) -> dict[str, Any]:
+                    if assist.sensitivity(message, cfg):
+                        raise RuntimeError("本轮内容包含敏感信息，跳过云端补强")
+                    async with httpx.AsyncClient(
+                            timeout=httpx.Timeout(connect=10, read=300, write=30, pool=30)) as cloud:
+                        return await _stream_chat(cloud, access, {**payload, "message": message},
+                                                  tid, run_id, on_action=push_action)
+
+                result = await task_agent.run_task(
+                    task, memory=str(task.get("memory") or ""), call=cloud_call,
+                    on_steps=on_steps)
+                result["steps"].append({
+                    "step": "assist", "title": f"云端补强 · {target['provider']}",
+                    "status": "ok" if result.get("verdict") == "ok" else "warn",
+                    "detail": f"{target['model']}：{reason}",
+                })
+                result["route"] = "assist"
+                result["route_reason"] = reason
+                return result
+
             cond = str(task.get("condition") or "").strip()
             gate_step: dict[str, Any] | None = None
             passed = True
@@ -631,16 +676,45 @@ async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
                     error = ""
 
             if passed:
-                outcome = await task_agent.run_task(
-                    task, memory=str(task.get("memory") or ""), call=call,
-                    on_steps=on_steps)
-                if gate_step:
-                    outcome["steps"].insert(0, gate_step)
-                status = str(outcome.get("status") or "ok")
-                verdict = str(outcome.get("verdict") or "")
-                summary = str(outcome.get("summary") or "")
-                error = str(outcome.get("error") or "")
-                conversation_id = outcome.get("conversation_id") or conversation_id
+                outcome = None
+                # 有云端补强时本地只跑一轮，偏弱立刻交给云端，不把两轮重试都耗在 8B 上。
+                fast_fail = bool(await assist.target(cfg))
+                try:
+                    outcome = await task_agent.run_task(
+                        task, memory=str(task.get("memory") or ""), call=call,
+                        on_steps=on_steps, max_attempts=1 if fast_fail else None)
+                except Exception as exc:
+                    status = "error"
+                    error = str(exc)[:400]
+                    log.warning("任务 %s 本地执行失败，准备云端补强: %s", tid, error)
+                if outcome is not None:
+                    if gate_step:
+                        outcome["steps"].insert(0, gate_step)
+                    status = str(outcome.get("status") or "ok")
+                    verdict = str(outcome.get("verdict") or "")
+                    summary = str(outcome.get("summary") or "")
+                    error = str(outcome.get("error") or "")
+                    conversation_id = outcome.get("conversation_id") or conversation_id
+                if status == "error" or verdict in ("weak", "failed"):
+                    why = "本地执行失败，云端补强" if status == "error" else "本地自检未通过，云端补强"
+                    try:
+                        cloud = await cloud_run(why)
+                    except Exception as exc:
+                        cloud = None
+                        log.warning("任务 %s 云端补强失败: %s", tid, str(exc)[:200])
+                    if cloud is not None:
+                        if gate_step and cloud.get("steps"):
+                            cloud["steps"].insert(0, gate_step)
+                        if (str(cloud.get("verdict") or "") == "ok"
+                                or (outcome is None and str(cloud.get("status") or "") == "ok")):
+                            outcome = cloud
+                            route = "assist"
+                            route_reason = why
+                            status = str(outcome.get("status") or "ok")
+                            verdict = str(outcome.get("verdict") or "")
+                            summary = str(outcome.get("summary") or "")
+                            error = str(outcome.get("error") or "")
+                            conversation_id = outcome.get("conversation_id") or conversation_id
     except _BudgetStop:
         verdict = "budget"
     except asyncio.CancelledError:
@@ -666,10 +740,12 @@ async def _run_task(task: dict[str, Any], run_id: int, trigger: str) -> None:
                       if status == "ok" else str(task.get("memory") or ""))
             await execute(
                 "UPDATE task_runs SET status=?,finished_at=?,conversation_id=?,summary=?,error=?,"
-                "verdict=?,attempts=? WHERE id=?",
+                "verdict=?,attempts=?,route=?,route_reason=? WHERE id=?",
                 (status, finished, conversation_id, summary[:800], error,
                  verdict or str((outcome or {}).get("verdict") or ""),
-                 int((outcome or {}).get("attempts") or 0), run_id))
+                 int((outcome or {}).get("attempts") or 0),
+                 route or str((outcome or {}).get("route") or ""),
+                 route_reason or str((outcome or {}).get("route_reason") or ""), run_id))
             await execute(
                 "UPDATE scheduled_tasks SET last_run_at=?,last_status=?,last_result=?,"
                 "last_conversation_id=?,memory=?,last_verdict=?,updated_at=? WHERE id=?",

@@ -138,6 +138,14 @@ DEFAULTS: dict[str, Any] = {
     "task_auto_disable_failures": 3,     # 连续失败几次自动暂停任务，0 表示不自动暂停
     "task_heavy_night_only": False,      # 重任务（带输出格式或长提示）只在夜间窗口跑；默认关，避免白天任务被推迟
     "task_night_window": "00:00-07:00",  # 夜间窗口，支持跨零点如 23:00-06:00
+    "assist_enabled": True,              # 云端补强总开关：本地为主，只在复杂/失败时用云端
+    "assist_provider_id": 0,             # 指定云端供应商 ID；0 表示自动选第一个云端供应商
+    "assist_model": "",                  # 补强使用的模型；留空取供应商模型列表第一个
+    "assist_auto_threshold": 4,          # 复杂任务预升级阈值（0 表示不预升级）
+    "assist_daily_tokens": 150000,       # 每账号每天云端补强 Token 上限，0 表示不限
+    "assist_allow_attachments": False,   # 带附件的请求是否允许上云（默认不允许）
+    "assist_open_to_all": True,           # 补强模型对所有账号开放，不受单用户模型白名单限制
+    "assist_sensitive_words": "",        # 额外敏感词，逗号分隔；命中只走本地
 }
 
 _SECRET_FILE = DATA_DIR / "secret.key"

@@ -175,6 +175,8 @@
     lastWeb: false,
     agentMode: true,
     lastAgentMode: true,
+    deep: false,
+    lastDeep: false,
     outputFormat: "",
     lastOutputFormat: "",
     libraryItems: [],

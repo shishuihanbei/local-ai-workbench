@@ -96,6 +96,15 @@
     btn.title = S.web ? "联网已开启：发送时会先搜索网页" : "联网检索实时网页（中文 360 / 英文 Bing），默认关闭";
   }
 
+  function setDeep(on) {
+    S.deep = !!on;
+    const btn = $("#deepBtn");
+    if (!btn) return;
+    btn.classList.toggle("active", S.deep);
+    btn.setAttribute("aria-pressed", String(S.deep));
+    btn.title = S.deep ? "深度模式已开启：复杂任务优先云端补强，未接入或超预算时留在本地" : "深度模式：本条允许调用云端补强（豆包 API），仍受预算、敏感词和附件策略约束";
+  }
+
   function modelSupportsAgentTools() {
     const m = selectedModel();
     return !!m && m.owned_by !== "cluster" && m.engine !== "cluster";

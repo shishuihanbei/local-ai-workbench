@@ -237,6 +237,22 @@ input, select, textarea { color: var(--text); }
 .form-grid input, .form-grid select { padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; font-size: 13px; background: #fff; outline: none; }
 .form-grid input:focus, .form-grid select:focus { border-color: #b9c6f7; box-shadow: 0 0 0 3px rgba(79,110,247,.1); }
 .form-grid .form-note { grid-column: 1 / -1; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.assist-form { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.assist-form .as-row { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
+.assist-form input, .assist-form select { flex: 1 1 190px; min-width: 0; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; font-size: 13px; background: #fff; outline: none; }
+.assist-form input:focus, .assist-form select:focus { border-color: #b9c6f7; box-shadow: 0 0 0 3px rgba(79,110,247,.1); }
+.assist-form #asSensitive { flex: 2 1 340px; }
+.assist-form .check-line { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; background: #fff; font-size: 12.5px; line-height: 1.35; white-space: nowrap; }
+.assist-form .check-line input { flex: 0 0 auto; width: 15px; height: 15px; padding: 0; margin: 0; }
+.assist-form .as-actions { align-items: center; }
+.assist-form .as-actions .spacer { flex: 1 1 auto; }
+.assist-form .as-actions .btn { flex: 0 0 auto; min-width: 132px; }
+.assist-form .form-note { color: var(--muted); font-size: 12px; line-height: 1.55; }
+@media (max-width: 900px) {
+  .assist-form .as-row { flex-direction: column; }
+  .assist-form .as-actions .spacer { display: none; }
+  .assist-form .as-actions .btn { width: 100%; }
+}
 .model-filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 8px; }
 .model-filter { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--muted); font-size: 12px; cursor: pointer; }
 .model-filter:hover { border-color: #b9c6f7; color: var(--text); }

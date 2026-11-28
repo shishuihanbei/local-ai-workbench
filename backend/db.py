@@ -1319,6 +1319,31 @@ async def _migration_025_task_p2(db: aiosqlite.Connection) -> None:
     await _add_column(db, "task_runs", "notified", "notified INTEGER NOT NULL DEFAULT 0")
 
 
+async def _migration_026_hybrid_assist(db: aiosqlite.Connection) -> None:
+    """云端补强：任务路由记录与云端调用审计。"""
+    await _add_column(db, "task_runs", "route", "route TEXT NOT NULL DEFAULT ''")
+    await _add_column(db, "task_runs", "route_reason", "route_reason TEXT NOT NULL DEFAULT ''")
+    await db.execute(
+        "CREATE TABLE IF NOT EXISTS assist_logs("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "user_id INTEGER NOT NULL DEFAULT 0,"
+        "conversation_id INTEGER,"
+        "task_id INTEGER,"
+        "provider TEXT NOT NULL DEFAULT '',"
+        "model TEXT NOT NULL DEFAULT '',"
+        "reason TEXT NOT NULL DEFAULT '',"
+        "prompt_chars INTEGER NOT NULL DEFAULT 0,"
+        "tokens_in INTEGER NOT NULL DEFAULT 0,"
+        "tokens_out INTEGER NOT NULL DEFAULT 0,"
+        "latency_ms INTEGER NOT NULL DEFAULT 0,"
+        "status TEXT NOT NULL DEFAULT 'ok',"
+        "error TEXT NOT NULL DEFAULT '',"
+        "created_at REAL NOT NULL DEFAULT 0)"
+    )
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_assist_user_date ON assist_logs(user_id, created_at DESC)")
+    await db.commit()
+
+
 MIGRATIONS: list[tuple[int, str, Any]] = [
     (1, "model_columns_and_permissions", _migration_001_model_columns),
     (2, "chat_uploads", _migration_002_chat_uploads),
@@ -1345,6 +1370,7 @@ MIGRATIONS: list[tuple[int, str, Any]] = [
     (23, "front_features", _migration_023_front_features),
     (24, "task_agent_fields", _migration_024_task_agent),
     (25, "task_p2_triggers", _migration_025_task_p2),
+    (26, "hybrid_assist", _migration_026_hybrid_assist),
 ]
 
 

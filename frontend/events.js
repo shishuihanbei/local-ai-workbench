@@ -106,6 +106,10 @@
       setAgentMode(!S.agentMode);
       toast(S.agentMode ? "通用助手已开启：自动检索资料后再回答" : "通用助手已关闭：本轮按普通对话生成");
     });
+    $("#deepBtn").addEventListener("click", () => {
+      setDeep(!S.deep);
+      toast(S.deep ? "深度模式已开启：复杂任务优先交给云端，未接入或超预算时留在本地" : "深度模式已关闭：恢复本地优先");
+    });
     $("#formatSelect").addEventListener("change", (ev) => {
       setOutputFormat(ev.target.value);
       ev.target.blur();

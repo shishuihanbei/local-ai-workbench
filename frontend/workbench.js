@@ -924,6 +924,7 @@
           ${t.web_enabled ? "<span>联网</span>" : ""}
           ${t.trigger_mode && t.trigger_mode !== "schedule" ? `<span class="wb-trigger">${esc(t.trigger_text)}</span>` : ""}
           ${t.notify_channel === "webhook" ? "<span>Webhook 投递</span>" : ""}
+          ${(t.last_run && t.last_run.route === "assist") ? `<span class="wb-trigger" title="${esc((t.last_run && t.last_run.route_reason) || "")}">云端补强</span>` : ""}
           ${wbVerdictTag(t)}
         </div>
         ${result ? `<div class="wb-task-result">${esc(result.length > 240 ? result.slice(0, 240) + "…" : result)}</div>` : ""}

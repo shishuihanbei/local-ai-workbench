@@ -32,6 +32,7 @@
     const skill = regen ? (S.lastSkill || S.skill) : S.skill;
     const web = regen ? S.lastWeb : S.web;
     const agentMode = regen ? S.lastAgentMode : S.agentMode;
+    const deep = regen ? S.lastDeep : S.deep;
     const outFormat = regen ? (S.lastOutputFormat || S.outputFormat) : S.outputFormat;
     const agent = S.agentId ? (S.agents.find((a) => Number(a.id) === Number(S.agentId)) || null) : null;
     if (!message && attachments.length) message = "请阅读这些附件并总结要点。";
@@ -90,10 +91,12 @@
       agent_mode: !!agentMode,
       agent_id: S.agentId || null,
       output_format: outFormat || null,
+      assist_reason: deep ? "用户开启深度模式" : "",
     };
     S.lastSkill = skill || null;
     S.lastWeb = !!web;
     S.lastAgentMode = !!agentMode;
+    S.lastDeep = !!deep;
     S.lastOutputFormat = outFormat || "";
     if (!regen) {
       S.attachments = [];
@@ -163,6 +166,15 @@
             }
             if (evt.kb && evt.kb.length) renderKbTags(assistant, evt.kb);
             if (evt.model_switch) renderModelSwitch(assistant, evt.model_switch);
+            if (evt.assist && evt.assist.state === "assist") {
+              renderModelSwitch(assistant, {
+                from: "本地模型",
+                to: `${evt.assist.provider || "云端"} · ${evt.assist.model || ""}`,
+                reason: evt.assist.reason,
+              });
+            } else if (evt.assist && evt.assist.state === "local" && deep) {
+              toast(evt.assist.reason || "本次没有上云");
+            }
             if (evt.file_mode) {
               fileMode = true;
               setAssistantText(assistant, `正在整理 ${OUT_FORMATS[evt.output_format] || "文档"}…`, true);
@@ -173,6 +185,12 @@
           } else if (evt.type === "agent_action") {
             renderAgentAction(assistant, evt.action);
             if (!content && !gotDelta) setAssistantText(assistant, "正在调用工具检索资料…", true);
+          } else if (evt.type === "assist") {
+            renderModelSwitch(assistant, {
+              from: "本地模型",
+              to: `${evt.provider || "云端"} · ${evt.model || ""}`,
+              reason: evt.reason || "本地失败，已由云端补强",
+            });
           } else if (evt.type === "reasoning") {
             reasoning += evt.text || "";
             setAssistantReasoning(assistant, reasoning);

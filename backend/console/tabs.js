@@ -1219,7 +1219,7 @@ async function refreshCurrent() {
   try {
     if (S.tab === "overview") await loadOverview();
     else if (S.tab === "requests") await loadRequests();
-    else if (S.tab === "providers") await loadProviders();
+    else if (S.tab === "providers") await Promise.all([loadProviders(), loadAssist()]);
     else if (S.tab === "routes") await loadRoutes();
     else if (S.tab === "users") await loadUsers();
     else if (S.tab === "org") await loadOrgPage();

@@ -22,7 +22,7 @@
     <span>导航</span>
   </button>
   <div class="top-actions">
-    <span class="api-tag" id="apiTag">API 0.8.1</span>
+    <span class="api-tag" id="apiTag">API 0.10.0</span>
     <button class="btn ghost guide-trigger" id="pageGuideBtn" type="button" title="查看当前页面的功能、步骤、案例和注意事项" aria-haspopup="dialog" aria-expanded="false">
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.7 9.2a2.4 2.4 0 0 1 4.7.8c0 1.6-2.4 1.7-2.4 3.2M12 16.8h.01"/></svg>
       <span>说明</span>
@@ -229,6 +229,36 @@
         <input id="pvOut" placeholder="输出价 / 百万 token" type="number" step="0.01">
         <button class="btn primary" id="addProvider">添 加</button>
         <div class="form-note" id="pvPresetNote">选择常见供应商会自动填入地址和模型，所有字段仍可修改；不在列表里就选最后一项“自定义”。</div>
+      </div>
+    </section>
+
+    <section class="panel" id="assistPanel">
+      <div class="panel-head"><h2>云端补强（豆包 API 为辅）</h2><span class="hint" id="assistState">本地优先；复杂任务与本地失败时自动升级云端，带预算、敏感词与审计</span></div>
+      <div class="assist-form">
+        <div class="as-row">
+          <label class="check-line"><input type="checkbox" id="asEnabled"> 启用云端补强</label>
+          <select id="asProvider"><option value="0">自动选择（优先豆包 / 火山方舟）</option></select>
+          <input id="asModel" placeholder="补强模型 / 接入点 ID（留空用供应商第一个）">
+        </div>
+        <div class="as-row">
+          <input id="asThreshold" type="number" min="0" max="10" placeholder="自动升级阈值 0-10（0=不自动）">
+          <input id="asDaily" type="number" min="0" placeholder="每日 Token 预算，如 150000">
+          <input id="asSensitive" placeholder="额外敏感词，逗号分隔（内置身份证/银行卡/薪酬/病历等）">
+        </div>
+        <div class="as-row as-actions">
+          <label class="check-line"><input type="checkbox" id="asAttach"> 允许带附件请求上云</label>
+          <label class="check-line"><input type="checkbox" id="asOpen"> 补强模型不受用户模型白名单限制</label>
+          <span class="spacer"></span>
+          <button class="btn primary" id="saveAssist">保存补强设置</button>
+          <button class="btn" id="refreshAssist">刷新用量</button>
+        </div>
+        <div class="form-note" id="asUsage">今日用量：0 次 / 0 tokens</div>
+      </div>
+      <div class="table-wrap" style="margin-top:12px">
+        <table class="tbl">
+          <thead><tr><th>时间</th><th>供应商 / 模型</th><th>原因</th><th>Token</th><th>耗时</th><th>状态</th></tr></thead>
+          <tbody id="assistLogRows"><tr><td colspan="6" class="hint">暂无补强记录</td></tr></tbody>
+        </table>
       </div>
     </section>
 

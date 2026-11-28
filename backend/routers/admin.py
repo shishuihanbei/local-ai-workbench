@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,7 @@ from pydantic import BaseModel, Field
 from ..db import audit, execute, fetch_all, fetch_one
 from ..config import load_config, save_config
 from ..security import admin_user
-from ..services import branding, moderation, secrets_store, skills
+from ..services import assist, branding, moderation, secrets_store, skills
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -262,6 +263,81 @@ async def test_provider(pid: int, user: dict = Depends(admin_user)):
                 "models": models[:30], "detail": "" if r.status_code < 400 else r.text[:200]}
     except Exception as e:
         return {"ok": False, "status": 0, "ms": int((time.monotonic() - t0) * 1000), "detail": str(e)[:200]}
+
+
+# ------------------------------------------------------------------ 云端补强
+class AssistBody(BaseModel):
+    enabled: bool = True
+    provider_id: int = 0
+    model: str = Field(default="", max_length=120)
+    auto_threshold: int = Field(default=4, ge=0, le=10)
+    daily_tokens: int = Field(default=150000, ge=0, le=1_000_000_000)
+    allow_attachments: bool = False
+    open_to_all: bool = True
+    sensitive_words: str = Field(default="", max_length=500)
+
+
+@router.get("/assist")
+async def get_assist(user: dict = Depends(admin_user)):
+    cfg = load_config()
+    providers = await fetch_all("SELECT * FROM providers ORDER BY id")
+    since = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    usage = await fetch_one(
+        "SELECT COUNT(*) n, COALESCE(SUM(tokens_in+tokens_out),0) t FROM assist_logs "
+        "WHERE created_at>=?", (since,)) or {}
+    logs = await fetch_all(
+        "SELECT provider,model,reason,tokens_in,tokens_out,latency_ms,status,error,created_at "
+        "FROM assist_logs ORDER BY id DESC LIMIT 12")
+    target = await assist.target(cfg)
+    return {
+        "enabled": bool(cfg.get("assist_enabled", True)),
+        "provider_id": int(cfg.get("assist_provider_id") or 0),
+        "model": str(cfg.get("assist_model") or ""),
+        "auto_threshold": int(cfg.get("assist_auto_threshold") or 0),
+        "daily_tokens": int(cfg.get("assist_daily_tokens") or 0),
+        "allow_attachments": bool(cfg.get("assist_allow_attachments")),
+        "open_to_all": bool(cfg.get("assist_open_to_all", True)),
+        "sensitive_words": str(cfg.get("assist_sensitive_words") or ""),
+        "active": bool(target),
+        "active_provider": (target or {}).get("provider") or "",
+        "active_model": (target or {}).get("model") or "",
+        "providers": [{"id": int(p["id"]), "name": p["name"],
+                       "base_url": p["base_url"], "models": p["models"],
+                       "enabled": bool(p["enabled"])} for p in providers],
+        "usage": {"requests": int(usage.get("n") or 0), "tokens": int(usage.get("t") or 0)},
+        "logs": logs,
+    }
+
+
+@router.put("/assist")
+async def put_assist(body: AssistBody, user: dict = Depends(admin_user)):
+    if body.provider_id:
+        row = await fetch_one("SELECT * FROM providers WHERE id=?", (body.provider_id,))
+        if not row:
+            raise HTTPException(404, "供应商不存在")
+        if not row["enabled"]:
+            raise HTTPException(400, "供应商已停用，请先启用")
+        models = [m.strip() for m in str(row["models"] or "").split(",") if m.strip()]
+        if not body.model and not models:
+            raise HTTPException(400, "这个供应商还没有模型，请先到供应商页补齐")
+    cfg = load_config()
+    cfg.update({
+        "assist_enabled": bool(body.enabled),
+        "assist_provider_id": int(body.provider_id),
+        "assist_model": body.model.strip(),
+        "assist_auto_threshold": int(body.auto_threshold),
+        "assist_daily_tokens": int(body.daily_tokens),
+        "assist_allow_attachments": bool(body.allow_attachments),
+        "assist_open_to_all": bool(body.open_to_all),
+        "assist_sensitive_words": body.sensitive_words.strip(),
+    })
+    save_config(cfg)
+    await audit(user, "assist.update", "cloud_assist",
+                f"provider={body.provider_id} model={body.model} daily={body.daily_tokens}")
+    target = await assist.target(load_config())
+    return {"ok": True, "active": bool(target),
+            "active_provider": (target or {}).get("provider") or "",
+            "active_model": (target or {}).get("model") or ""}
 
 
 # ------------------------------------------------------------------ 路由

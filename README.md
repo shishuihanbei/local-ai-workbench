@@ -145,6 +145,7 @@ docker run -d --name local-ai-workbench -p 9100:9100 \
 - **技能**：输入框左侧选择总结提炼、翻译、润色改写、代码助手、文件问答、方案规划；技能提示词由服务端注入，只作用于下一条消息。
 - **联网**：输入框左侧“联网”按钮默认关闭。开启后，服务端先做查询规划：附件/资料库总结和日常追问跳过联网，新闻类自动改写为“日期 + 新闻联播 + 主要内容”并抓取央视当日条目，普通问题去掉“帮我/查一下”等指令词。检索优先 360 HTML（中文命中更好），Bing RSS 兜底，只保留相关来源并抓取前两页正文。回复下方显示实际检索词和来源；跳过或检索失败都会明确提示，不会伪造来源。附件只有一个在线文档链接且正文需要登录时，会按文档标题检索公开同主题资料，并在回复开头注明“并非原文档”。
 - **通用助手（自动检索 + 工具闭环兜底）**：输入框「通用助手」开启后，后端先准备知识库、资料库、联网和附件四类只读材料；支持 Function Calling 的模型可按需多轮调用检索工具，工具结果回灌后再汇总最终回答。模型首轮不调用工具、或当前模型不支持工具调用时，后端自动降级到不依赖 Function Calling 的固定顺序检索：按「附件 → 知识库 → 资料库 → 联网」逐级命中，本地资料已命中 2 条以上且问题不含“今天/最新/新闻/股价”等时效词时跳过联网，新闻等时效问题例外。当前不开放本地文件写入、代码执行和浏览器/软件操作；工具轮次受 `agent_max_turns` 限制，未知工具或执行失败会作为错误结果回灌，不会让整条对话崩溃。控制台「智能体」页底部的「通用助手」面板可改总开关、兜底检索、四个工具是否暴露和 1–6 轮上限，保存后下一条消息生效；「调用记录」详情里会按轮次列出工具调用或兜底检索步骤，含检索词、命中数、耗时、失败原因和来源。
+- **混合补强（本地为主 + 豆包 API 为辅）**：日常对话仍走本地模型，只有三类情况才升级云端：用户打开输入框的「深度」模式、消息复杂度达到阈值（默认 4 分，按输出格式/长文本/多步/多附件计分）、或本地调用失败后自动补一次。带附件的请求默认不上云；命中身份证、银行卡、手机号、薪酬、病历、合同金额等敏感内容一律留在本地，会话历史里出现这类内容也会自动放弃本次上云。每日 Token 预算默认 15 万，超了自动回落本地；用户直接在模型下拉里选云端模型时同样受敏感词和预算拦截。云端调用（含定时任务的云端重跑）全部写入 `assist_logs` 并计入同一份每日预算，任务调用会带上任务 ID；控制台「供应商」页下方显示今日用量、预算和最近 12 条审计记录，聊天消息会显示「本地模型 → 云端 · 模型」的切换提示。定时任务同样受这套规则约束，任务 Agent 自检未通过或执行报错时会用云端重跑，任务卡上出现「云端补强」徽标，运行记录写入 `route/route_reason`；云端仍不达标就保留本地结果和真实原因。
 - **后台联网**：管理控制台「联网」页提供总开关、结果条数（1–10）和正文抓取页数（0–4），保存后立即生效并清空检索缓存。关闭总开关时，用户端联网按钮和定时任务都会跳过检索，回复里明确写“管理后台已关闭联网检索”，不会假装查过。页内还能直接输入查询跑真实检索，显示耗时、实际检索词和来源列表，方便验证当前网络和解析线路。
 - **后台附件解析**：管理控制台「解析」页列出全部上传记录，按文件名、上传者、正文状态筛选，显示字数、解析时间、耗时和报错原因；支持查看完整正文、下载原件、单条重新解析、勾选批量重解析，以及一键重跑所有空正文。OCR 引擎状态、扫描 PDF 页数上限和文档图片上限也在页内说明。任务在后台串行执行，避免多张图片同时 OCR 打满 CPU；页面用进度条显示当前文件、成功/空正文/失败数量和总耗时，完成后自动刷新列表。
 - **模型**：模型下拉框紧挨发送按钮；只显示现在真能调用的模型：已下载且本机装了 llama.cpp 的本地 GGUF、已勾选并连通的外部平台模型、启用的算力池。未下载、下载中、没装对应引擎或本机跑不起来的条目不会出现在下拉框；普通用户只能看到管理员分配的模型。
@@ -468,6 +469,14 @@ curl "http://127.0.0.1:9100/v1/chat/completions" \
 | `agent_tool_web` | 是否暴露「联网检索」工具，默认 `true`；仍需 `websearch_enabled` 且用户本轮开启联网 |
 | `agent_tool_attachments` | 是否暴露「读取本轮附件」工具，默认 `true` |
 | `agent_semi_enabled` | 通用助手兜底检索：模型不支持或未调用工具时，按固定顺序、逐级降级检索，默认 `true` |
+| `assist_enabled` | 云端补强总开关，默认 `true`；没有云端供应商时自动休眠 |
+| `assist_provider_id` | 指定补强供应商，`0` 表示自动选第一个云端供应商（优先豆包/火山方舟） |
+| `assist_model` | 补强模型或火山方舟推理接入点 ID，留空用供应商模型列表第一个 |
+| `assist_auto_threshold` | 自动升级复杂度阈值，默认 `4`，`0` 表示不自动升级 |
+| `assist_daily_tokens` | 每账号每日补强 Token 预算，默认 `150000`，`0` 不限 |
+| `assist_allow_attachments` | 是否允许带附件的请求上云，默认 `false` |
+| `assist_open_to_all` | 补强模型是否绕过用户模型白名单，默认 `true` |
+| `assist_sensitive_words` | 追加敏感词，逗号分隔；内置身份证、银行卡、薪酬、病历等词表始终生效 |
 | `cors_origins` | 允许跨域的前端来源，逗号分隔；空值表示只允许同源。默认不再使用 `*` |
 | `tunnel_target` | 穿透目标：`panel` / `api` / `frontend` |
 | `tunnel_domain` | 固定域名（可选） |
@@ -584,6 +593,7 @@ curl "http://127.0.0.1:9100/v1/chat/completions" \
 | GET | `/api/admin/overview` | 统计概览 |
 | GET | `/api/admin/requests` | 调用记录 |
 | GET/POST/PATCH/DELETE | `/api/admin/providers` | 供应商管理 |
+| GET/PUT | `/api/admin/assist` | 云端补强配置、今日用量与最近审计记录 |
 | GET | `/api/admin/auth-providers` | 登录方式配置项、供应商预设与教程 |
 | PUT | `/api/admin/auth-providers/{provider}` | 保存 QQ/微信/手机号/邮箱配置 |
 | POST | `/api/admin/auth-providers/{provider}/test` | 测试短信/邮件，或检查 QQ/微信配置 |
@@ -711,7 +721,15 @@ curl "http://127.0.0.1:9100/v1/chat/completions" \
 
 ## 数据库版本
 
-`data/workbench.db` 内有 `schema_migrations` 表，启动时按版本号执行迁移，不再依赖零散的 `ALTER TABLE`。新增迁移写在 `backend/db.py` 的 `MIGRATIONS` 列表里，必须按顺序追加，不改已执行过的迁移。当前最新是 22（`prompt_center`，提示词管理元数据、默认值与修订号）；21 是 `generated_file_expiry` 生成文件过期清理；20 是 `upload_parse_state`；19 是 `workbench_multi_skills` 工作台多技能；18 是 `workbench_capabilities`；17 是 `workbench_templates`；16 是 `task_web`；15 是 `workbench_tasks`；此前 14 是生成本地文件、13 是协作套件、12 是内容安全、11 是算力池。
+`data/workbench.db` 内有 `schema_migrations` 表，启动时按版本号执行迁移，不再依赖零散的 `ALTER TABLE`。新增迁移写在 `backend/db.py` 的 `MIGRATIONS` 列表里，必须按顺序追加，不改已执行过的迁移。当前最新是 26（`hybrid_assist`，任务运行路由字段与云端补强审计表 `assist_logs`）；25 是 `task_p2_triggers` 任务触发与投递；24 是 `task_agent_fields` 任务 Agent 自检与档案；23 是 `front_features` 前台功能开关；22 是 `prompt_center`；21 是 `generated_file_expiry`；20 是 `upload_parse_state`；19 是 `workbench_multi_skills`；18 是 `workbench_capabilities`；17 是 `workbench_templates`；16 是 `task_web`；15 是 `workbench_tasks`；此前 14 是生成本地文件、13 是协作套件、12 是内容安全、11 是算力池。
+
+评测云端补强和通用 Agent 时，先启动服务，再用同一批用例跑：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\eval_assist.py --password 管理员密码
+```
+
+用例在 `scripts/eval_cases.jsonl`，可自己加 `expect_any`、`forbid_any`、`sensitive` 和 `assist_reason`。脚本输出通过率、补强使用次数、平均耗时，并把逐条回答写进 `data/eval-assist.json`。
 
 ## 自动化测试
 

@@ -230,6 +230,76 @@ async function testProvider(id) {
   uiToast(r.ok ? `连通，${r.ms}ms，发现 ${r.models.length} 个模型` : `失败 ${r.status}：${r.detail || "无法连接"}`);
 }
 
+/* ---------------------------------------------------------------- 云端补强 */
+function renderAssistLogs(logs) {
+  const body = $("assistLogRows");
+  if (!body) return;
+  body.innerHTML = (logs && logs.length) ? logs.map((r) => {
+    const t = r.created_at ? new Date(Number(r.created_at) * 1000).toLocaleString("zh-CN", { hour12: false }) : "—";
+    const tok = `${Number(r.tokens_in || 0)} / ${Number(r.tokens_out || 0)}`;
+    return `<tr>
+      <td class="mono" style="font-size:12px">${esc(t)}</td>
+      <td>${esc(r.provider || "")}<div class="sub">${esc(r.model || "")}</div></td>
+      <td>${esc(r.reason || "")}${r.error ? `<div class="sub" style="color:#c0392b">${esc(r.error)}</div>` : ""}</td>
+      <td class="mono">${tok}</td><td class="mono">${Number(r.latency_ms || 0)}ms</td>
+      <td>${r.status === "ok" ? `<span class="badge good">成功</span>` : `<span class="badge off">${esc(r.status || "失败")}</span>`}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="6" class="hint">暂无补强记录</td></tr>`;
+}
+
+async function loadAssist() {
+  const d = await api("/api/admin/assist");
+  S.assist = d;
+  const sel = $("asProvider");
+  if (sel) {
+    const cur = String(d.provider_id || 0);
+    sel.innerHTML = `<option value="0">自动选择（优先豆包 / 火山方舟）</option>` +
+      (d.providers || []).map((p) => `<option value="${p.id}">${esc(p.name)}${p.enabled ? "" : "（停用）"} · ${esc(String(p.models || "未填模型").slice(0, 40))}</option>`).join("");
+    sel.value = [...sel.options].some((o) => o.value === cur) ? cur : "0";
+  }
+  $("asEnabled").checked = !!d.enabled;
+  $("asModel").value = d.model || "";
+  $("asThreshold").value = Number(d.auto_threshold || 0);
+  $("asDaily").value = Number(d.daily_tokens || 0);
+  $("asSensitive").value = d.sensitive_words || "";
+  $("asAttach").checked = !!d.allow_attachments;
+  $("asOpen").checked = !!d.open_to_all;
+  const usage = d.usage || {};
+  $("asUsage").textContent = `今日用量：${Number(usage.requests || 0)} 次 / ${Number(usage.tokens || 0)} tokens`
+    + (d.daily_tokens ? `（预算 ${Number(d.daily_tokens)}）` : "（不限预算）");
+  $("assistState").textContent = d.active
+    ? `当前补强目标：${d.active_provider} · ${d.active_model}；复杂任务与本地失败会自动升级`
+    : "还没有可用的补强目标：先在上面添加云端供应商并启用，再选择供应商与模型";
+  $("assistState").className = "hint" + (d.active ? " ok" : " warn");
+  renderAssistLogs(d.logs || []);
+  if (!$("saveAssist").dataset.ready) {
+    $("saveAssist").dataset.ready = "1";
+    $("saveAssist").addEventListener("click", saveAssist);
+    $("refreshAssist").addEventListener("click", () => loadAssist().catch((e) => uiToast(e.message, true)));
+  }
+}
+
+async function saveAssist() {
+  const pid = Number($("asProvider").value || 0);
+  const body = {
+    enabled: $("asEnabled").checked,
+    provider_id: pid,
+    model: $("asModel").value.trim(),
+    auto_threshold: Number($("asThreshold").value || 0),
+    daily_tokens: Number($("asDaily").value || 0),
+    allow_attachments: $("asAttach").checked,
+    open_to_all: $("asOpen").checked,
+    sensitive_words: $("asSensitive").value.trim(),
+  };
+  try {
+    const r = await api("/api/admin/assist", { method: "PUT", body: JSON.stringify(body) });
+    uiToast(r.active ? `已保存，补强目标：${r.active_provider} · ${r.active_model}` : "已保存，但还没有可用的补强目标");
+    await loadAssist();
+  } catch (e) {
+    uiToast(e.message, true);
+  }
+}
+
 /* ---------------------------------------------------------------- 路由 */
 const ROUTE_FAMILIES = ["deepseek", "qwen", "llama", "mistral", "mixtral", "gemma", "phi", "glm", "yi", "command", "gpt"];
 

@@ -141,7 +141,7 @@ def test_collaboration_tables_and_permissions(admin_token):
         assert {"agents", "squads", "squad_members", "squad_agents", "squad_conversations",
                 "announcements", "tickets", "ticket_messages", "conversation_shares"} <= names
         row = await fetch_one("SELECT version,name FROM schema_migrations ORDER BY version DESC LIMIT 1")
-        assert row["version"] == 25 and row["name"] == "task_p2_triggers"
+        assert row["version"] == 26 and row["name"] == "hybrid_assist"
     asyncio.run(check())
     from backend.security import PERMISSION_MODULES
     assert {"agents", "partners", "squads", "announcements", "tickets", "conv_shares"} <= set(PERMISSION_MODULES)
