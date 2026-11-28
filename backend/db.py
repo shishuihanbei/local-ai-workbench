@@ -1302,6 +1302,23 @@ async def _migration_024_task_agent(db: aiosqlite.Connection) -> None:
     await _add_column(db, "task_runs", "attempts", "attempts INTEGER NOT NULL DEFAULT 0")
 
 
+async def _migration_025_task_p2(db: aiosqlite.Connection) -> None:
+    """任务 Agent P2：触发方式（定时/事件/条件）、条件判断与结果投递。"""
+    for column, ddl in (
+        ("trigger_mode", "trigger_mode TEXT NOT NULL DEFAULT 'schedule'"),
+        ("event_key", "event_key TEXT NOT NULL DEFAULT ''"),
+        ("event_filter", "event_filter TEXT NOT NULL DEFAULT ''"),
+        ("condition", "condition TEXT NOT NULL DEFAULT ''"),
+        ("notify_channel", "notify_channel TEXT NOT NULL DEFAULT ''"),
+        ("notify_url", "notify_url TEXT NOT NULL DEFAULT ''"),
+        ("notify_format", "notify_format TEXT NOT NULL DEFAULT 'json'"),
+        ("notify_on", "notify_on TEXT NOT NULL DEFAULT 'ok'"),
+    ):
+        await _add_column(db, "scheduled_tasks", column, ddl)
+    await _add_column(db, "task_runs", "event", "event TEXT NOT NULL DEFAULT ''")
+    await _add_column(db, "task_runs", "notified", "notified INTEGER NOT NULL DEFAULT 0")
+
+
 MIGRATIONS: list[tuple[int, str, Any]] = [
     (1, "model_columns_and_permissions", _migration_001_model_columns),
     (2, "chat_uploads", _migration_002_chat_uploads),
@@ -1327,6 +1344,7 @@ MIGRATIONS: list[tuple[int, str, Any]] = [
     (22, "prompt_center", _migration_022_prompt_center),
     (23, "front_features", _migration_023_front_features),
     (24, "task_agent_fields", _migration_024_task_agent),
+    (25, "task_p2_triggers", _migration_025_task_p2),
 ]
 
 

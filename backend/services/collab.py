@@ -118,6 +118,14 @@ async def create_ticket(*, user: dict[str, Any], title: str, content: str,
         "INSERT INTO ticket_messages(ticket_id,user_id,username,role,content,created_at) "
         "VALUES(?,?,?,?,?,?)",
         (tid, user["id"], user.get("username", ""), "user", content, now))
+    try:
+        # 新工单可触发事件任务，比如"有新工单就让模型先出一版回复草稿"。
+        from . import scheduler
+        await scheduler.emit_event(
+            "ticket.created", user_id=int(user["id"]),
+            text=f"{title} {category} {content[:80]}")
+    except Exception:
+        pass
     return await ticket_detail(tid, user) or {}
 
 

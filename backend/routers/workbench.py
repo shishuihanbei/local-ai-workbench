@@ -62,6 +62,14 @@ class TaskBody(BaseModel):
     output_format: str | None = None
     web_enabled: bool = False
     enabled: bool = True
+    trigger_mode: str = "schedule"
+    event_key: str = ""
+    event_filter: str = Field(default="", max_length=80)
+    condition: str = Field(default="", max_length=600)
+    notify_channel: str = ""
+    notify_url: str = Field(default="", max_length=500)
+    notify_format: str = "json"
+    notify_on: str = "ok"
 
 
 class ToggleBody(BaseModel):
@@ -87,11 +95,32 @@ def _clean(body: TaskBody) -> dict[str, Any]:
     frequency = str(body.frequency or "once").strip().lower()
     if frequency not in scheduler.FREQUENCIES:
         raise HTTPException(400, "不支持的重复方式")
+    mode = str(body.trigger_mode or "schedule").strip().lower()
+    if mode not in scheduler.TRIGGER_MODES:
+        raise HTTPException(400, "不支持的触发方式")
+    event_key = str(body.event_key or "").strip()
+    if mode == "event" and event_key not in scheduler.EVENT_LABELS:
+        raise HTTPException(400, "不支持的事件类型")
+    condition = str(body.condition or "").strip()
+    if mode == "condition" and len(condition) < 4:
+        raise HTTPException(400, "条件触发需要写清判断条件")
+    channel = str(body.notify_channel or "").strip().lower()
+    if channel not in ("", "webhook"):
+        raise HTTPException(400, "不支持的结果投递渠道")
+    notify_url = str(body.notify_url or "").strip()
+    notify_format = str(body.notify_format or "json").strip().lower()
+    if notify_format not in scheduler.NOTIFY_FORMATS:
+        raise HTTPException(400, "不支持的投递格式")
+    notify_on = str(body.notify_on or "ok").strip().lower()
+    if notify_on not in ("ok", "always"):
+        raise HTTPException(400, "投递时机只能是成功时或每次都发")
+    if channel == "webhook" and not scheduler.valid_notify_url(notify_url):
+        raise HTTPException(400, "投递地址需要是完整的 http/https 链接")
     weekdays = scheduler._parse_weekdays(body.weekdays)
     day = max(1, min(31, int(body.day_of_month or 1)))
     hh, mm = scheduler._parse_hhmm(body.time_of_day)
     run_at = _parse_run_at(body.run_at)
-    if frequency == "once":
+    if mode != "event" and frequency == "once":
         if not run_at:
             raise HTTPException(400, "一次性任务需要选择执行时间")
         if run_at <= time.time() + 60:
@@ -101,6 +130,14 @@ def _clean(body: TaskBody) -> dict[str, Any]:
         "title": body.title.strip(),
         "prompt": body.prompt.strip(),
         "goal": (body.goal or "").strip(),
+        "trigger_mode": mode,
+        "event_key": event_key if mode == "event" else "",
+        "event_filter": str(body.event_filter or "").strip(),
+        "condition": condition if mode == "condition" else "",
+        "notify_channel": channel,
+        "notify_url": notify_url if channel == "webhook" else "",
+        "notify_format": notify_format,
+        "notify_on": notify_on,
         "frequency": frequency,
         "run_at": run_at if frequency == "once" else None,
         "time_of_day": f"{hh:02d}:{mm:02d}",
@@ -115,6 +152,9 @@ def _clean(body: TaskBody) -> dict[str, Any]:
 
 
 def _next_for(data: dict[str, Any]) -> float | None:
+    if str(data.get("trigger_mode") or "schedule") == "event":
+        # 事件任务没有计划时间，等事件发生才跑。
+        return None
     return scheduler.next_run(data, after=time.time() + 2)
 
 
@@ -374,19 +414,21 @@ async def list_tasks(user: dict = Depends(current_user)):
 async def create_task(body: TaskBody, user: dict = Depends(current_user)):
     data = _clean(body)
     nxt = _next_for(data)
-    if data["enabled"] and not nxt:
+    if data["enabled"] and data["trigger_mode"] != "event" and not nxt:
         raise HTTPException(400, "这个时间已经过去，请重新选择")
     now = time.time()
     tid = await execute(
-        "INSERT INTO scheduled_tasks(user_id,title,prompt,goal,frequency,run_at,time_of_day,"
+        "INSERT INTO scheduled_tasks(user_id,title,prompt,goal,trigger_mode,event_key,event_filter,"
+        "condition,notify_channel,notify_url,notify_format,notify_on,frequency,run_at,time_of_day,"
         "weekdays,day_of_month,model,agent_id,output_format,web_enabled,enabled,next_run_at,"
         "created_at,updated_at) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (int(user["id"]), data["title"], data["prompt"], data["goal"], data["frequency"],
-         data["run_at"],
-         data["time_of_day"], data["weekdays"], data["day_of_month"], data["model"],
-         data["agent_id"], data["output_format"], data["web_enabled"], data["enabled"],
-         nxt if data["enabled"] else None, now, now))
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (int(user["id"]), data["title"], data["prompt"], data["goal"], data["trigger_mode"],
+         data["event_key"], data["event_filter"], data["condition"], data["notify_channel"],
+         data["notify_url"], data["notify_format"], data["notify_on"], data["frequency"],
+         data["run_at"], data["time_of_day"], data["weekdays"], data["day_of_month"],
+         data["model"], data["agent_id"], data["output_format"], data["web_enabled"],
+         data["enabled"], nxt if data["enabled"] else None, now, now))
     row = await fetch_one("SELECT * FROM scheduled_tasks WHERE id=?", (tid,))
     return scheduler.public(row or {})
 
@@ -399,16 +441,20 @@ async def update_task(task_id: int, body: TaskBody, user: dict = Depends(current
         raise HTTPException(404, "任务不存在")
     data = _clean(body)
     nxt = _next_for(data)
-    if data["enabled"] and not nxt:
+    if data["enabled"] and data["trigger_mode"] != "event" and not nxt:
         raise HTTPException(400, "这个时间已经过去，请重新选择")
     now = time.time()
     # 目标被改写后旧档案就是干扰项，直接清空，让任务从新目标重新积累。
     reset_memory = 1 if str(row.get("prompt") or "").strip() != data["prompt"] else 0
     await execute(
-        "UPDATE scheduled_tasks SET title=?,prompt=?,goal=?,frequency=?,run_at=?,time_of_day=?,"
-        "weekdays=?,day_of_month=?,model=?,agent_id=?,output_format=?,web_enabled=?,enabled=?,"
-        "next_run_at=?,memory=CASE WHEN ?=1 THEN '' ELSE memory END,updated_at=? WHERE id=?",
-        (data["title"], data["prompt"], data["goal"], data["frequency"], data["run_at"],
+        "UPDATE scheduled_tasks SET title=?,prompt=?,goal=?,trigger_mode=?,event_key=?,"
+        "event_filter=?,condition=?,notify_channel=?,notify_url=?,notify_format=?,notify_on=?,"
+        "frequency=?,run_at=?,time_of_day=?,weekdays=?,day_of_month=?,model=?,agent_id=?,"
+        "output_format=?,web_enabled=?,enabled=?,next_run_at=?,"
+        "memory=CASE WHEN ?=1 THEN '' ELSE memory END,updated_at=? WHERE id=?",
+        (data["title"], data["prompt"], data["goal"], data["trigger_mode"], data["event_key"],
+         data["event_filter"], data["condition"], data["notify_channel"], data["notify_url"],
+         data["notify_format"], data["notify_on"], data["frequency"], data["run_at"],
          data["time_of_day"], data["weekdays"], data["day_of_month"], data["model"],
          data["agent_id"], data["output_format"], data["web_enabled"], data["enabled"],
          nxt if data["enabled"] else None, reset_memory, now, task_id))
@@ -423,8 +469,9 @@ async def toggle_task(task_id: int, body: ToggleBody, user: dict = Depends(curre
     if not row:
         raise HTTPException(404, "任务不存在")
     enabled = 1 if body.enabled else 0
-    nxt = _next_for(row) if enabled else None
-    if enabled and not nxt:
+    mode = str(row.get("trigger_mode") or "schedule")
+    nxt = _next_for({**row, "trigger_mode": mode}) if enabled else None
+    if enabled and mode != "event" and not nxt:
         raise HTTPException(400, "任务时间已过，请先编辑时间")
     await execute(
         "UPDATE scheduled_tasks SET enabled=?,next_run_at=?,updated_at=? WHERE id=?",
@@ -442,6 +489,12 @@ async def delete_task(task_id: int, user: dict = Depends(current_user)):
     await execute("DELETE FROM task_runs WHERE task_id=?", (task_id,))
     await execute("DELETE FROM scheduled_tasks WHERE id=?", (task_id,))
     return {"ok": True}
+
+
+@router.get("/events")
+async def event_catalog(user: dict = Depends(current_user)):
+    """可用的事件触发类型，前端下拉直接用。"""
+    return {"items": [{"key": k, "label": v} for k, v in scheduler.EVENT_LABELS.items()]}
 
 
 @router.post("/tasks/{task_id}/run")

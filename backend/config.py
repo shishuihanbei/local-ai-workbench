@@ -133,6 +133,11 @@ DEFAULTS: dict[str, Any] = {
     "chat_max_active": 4,                # 同时进行的对话生成数，超出排队/拒绝
     "chat_rpm": 30,                      # 每账号每分钟最多发送消息条数
     "websearch_max_pages": 2,            # 最多抓取前几篇网页正文
+    "task_daily_limit": 40,              # 每账号每天自动运行任务的次数上限，0 表示不限
+    "task_max_concurrent": 2,            # 同时运行的任务数，满了排队等槽位
+    "task_auto_disable_failures": 3,     # 连续失败几次自动暂停任务，0 表示不自动暂停
+    "task_heavy_night_only": False,      # 重任务（带输出格式或长提示）只在夜间窗口跑；默认关，避免白天任务被推迟
+    "task_night_window": "00:00-07:00",  # 夜间窗口，支持跨零点如 23:00-06:00
 }
 
 _SECRET_FILE = DATA_DIR / "secret.key"

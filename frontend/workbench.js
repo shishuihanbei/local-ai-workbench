@@ -3,6 +3,7 @@
   /* ---------------------------------------------------------------- 工作台 */
   const WB_STATUS = {
     ok: ["已完成", "ok"], error: ["失败", "error"], running: ["执行中", "running"],
+    skipped: ["条件未满足", "idle"], budget: ["超出预算", "idle"], stopped: ["已停止", "idle"],
   };
 
   const WB_QUICK_DEFAULT = [
@@ -801,7 +802,7 @@
     $("#wbUpcoming").innerHTML = upcoming.length ? upcoming.map((t) => `
       <button type="button" class="wb-item" data-wb-task-open="${t.id}">
         <span class="wb-ico">${t.frequency === "once" ? "1" : "↻"}</span>
-        <span class="wb-main"><b>${esc(t.title)}</b><small>${esc(t.schedule)} · 下次 ${esc(t.next_run_text || "待计算")}</small></span>
+        <span class="wb-main"><b>${esc(t.title)}</b><small>${esc(t.schedule)}${t.trigger_mode === "event" ? "" : ` · 下次 ${esc(t.next_run_text || "待计算")}`}</small></span>
         <span class="wb-go">›</span>
       </button>`).join("") : `<div class="wb-empty">还没有启用的定时任务</div>`;
 
@@ -872,6 +873,8 @@
       ok: ["自检通过", "ok"],
       weak: ["结论偏弱", "warn"],
       failed: ["自检未通过", "error"],
+      skipped: ["条件未满足", "idle"],
+      budget: ["超出预算", "warn"],
     };
     const [label, cls] = map[verdict] || ["自检完成", "ok"];
     const attempts = Number((run && run.attempts) || 0);
@@ -908,7 +911,7 @@
       const [statusText, statusClass] = wbTaskStatus(t);
       const result = String(t.last_result || "").trim();
       const fmt = t.output_format ? wbFormatLabel(t.output_format) : "";
-      const next = t.enabled ? (t.next_run_text || "待计算") : "已暂停";
+      const next = !t.enabled ? "已暂停" : (t.trigger_mode === "event" ? "等待事件" : (t.next_run_text || "待计算"));
       return `<div class="wb-task ${t.enabled ? "" : "off"}" data-wb-task-card="${t.id}">
         <div class="wb-task-top">
           <div><b>${esc(t.title)}</b><small>${esc(t.schedule)}</small></div>
@@ -919,6 +922,8 @@
           <span>上次：${esc(t.last_run_text || "未运行")}</span>
           ${fmt ? `<span>输出：${esc(fmt)}</span>` : ""}
           ${t.web_enabled ? "<span>联网</span>" : ""}
+          ${t.trigger_mode && t.trigger_mode !== "schedule" ? `<span class="wb-trigger">${esc(t.trigger_text)}</span>` : ""}
+          ${t.notify_channel === "webhook" ? "<span>Webhook 投递</span>" : ""}
           ${wbVerdictTag(t)}
         </div>
         ${result ? `<div class="wb-task-result">${esc(result.length > 240 ? result.slice(0, 240) + "…" : result)}</div>` : ""}
@@ -976,11 +981,28 @@
   }
 
   function updateWbFreqFields() {
+    const mode = $("#wbTaskTrigger").value;
+    $("#wbTaskEventWrap").hidden = mode !== "event";
+    $("#wbTaskCondWrap").hidden = mode !== "condition";
+    $("#wbTaskNotifyWrap").hidden = $("#wbTaskNotify").value !== "webhook";
+    $("#wbTaskScheduleGrid").hidden = mode === "event";
+    if ($("#wbTaskWeekdays")) $("#wbTaskWeekdays").hidden = mode === "event";
+    if (mode === "event") return;
     const freq = $("#wbTaskFreq").value;
     $("#wbTaskOnceWrap").hidden = freq !== "once";
     $("#wbTaskTimeWrap").hidden = freq === "once";
     $("#wbTaskWeekdays").hidden = freq !== "weekly";
     $("#wbTaskMonthWrap").hidden = freq !== "monthly";
+  }
+
+  function fillWbEventOptions() {
+    const box = $("#wbTaskEvent");
+    if (!box || box.dataset.ready === "1") return;
+    api("/api/workbench/events").then((d) => {
+      const items = d.items || [];
+      box.innerHTML = items.map((x) => `<option value="${esc(x.key)}">${esc(x.label)}</option>`).join("");
+      box.dataset.ready = "1";
+    }).catch(() => {});
   }
 
   function openWbTaskForm(task = null, preset = null) {
@@ -1011,6 +1033,15 @@
     fillWbModelOptions(task);
     $("#wbTaskFormat").value = seed.output_format || "";
     $("#wbTaskWeb").checked = !!seed.web_enabled;
+    fillWbEventOptions();
+    $("#wbTaskTrigger").value = seed.trigger_mode || "schedule";
+    $("#wbTaskEvent").value = seed.event_key || "";
+    $("#wbTaskEventFilter").value = seed.event_filter || "";
+    $("#wbTaskCondition").value = seed.condition || "";
+    $("#wbTaskNotify").value = seed.notify_channel || "";
+    $("#wbTaskNotifyUrl").value = seed.notify_url || "";
+    $("#wbTaskNotifyFormat").value = seed.notify_format || "json";
+    $("#wbTaskNotifyOn").value = seed.notify_on || "ok";
     $("#wbTaskHint").textContent = task
       ? (task.frequency === "once" && !savedFuture
         ? "这个一次性任务已经结束；要再执行一次，请选一个将来的时间，或改成每天/每周。"
@@ -1032,16 +1063,34 @@
     const prompt = $("#wbTaskPrompt").value.trim();
     if (!title) return toast("任务名称不能为空");
     if (!prompt) return toast("要执行的内容不能为空");
+    const mode = $("#wbTaskTrigger").value;
+    const eventKey = $("#wbTaskEvent").value;
+    const condition = $("#wbTaskCondition").value.trim();
+    if (mode === "event" && !eventKey) return toast("请选择事件类型");
+    if (mode === "condition" && condition.length < 4) return toast("请写清判断条件");
+    const notifyChannel = $("#wbTaskNotify").value;
+    const notifyUrl = $("#wbTaskNotifyUrl").value.trim();
+    if (notifyChannel === "webhook" && !/^https?:\/\/\S+$/.test(notifyUrl)) {
+      return toast("Webhook 地址需要是完整的 http/https 链接");
+    }
     const frequency = $("#wbTaskFreq").value;
     const runAt = $("#wbTaskRunAt").value;
-    if (frequency === "once" && !runAt) return toast("请选择执行时间");
+    if (mode !== "event" && frequency === "once" && !runAt) return toast("请选择执行时间");
     const weekdays = $$("#wbTaskWeekdays input:checked").map((x) => Number(x.value));
-    if (frequency === "weekly" && !weekdays.length) return toast("请至少选择一天");
+    if (mode !== "event" && frequency === "weekly" && !weekdays.length) return toast("请至少选择一天");
     const editing = S.wbEditingTask ? (S.wbTasks || []).find((t) => t.id === S.wbEditingTask) : null;
     const body = {
       title,
       prompt,
       goal: $("#wbTaskGoal").value.trim(),
+      trigger_mode: mode,
+      event_key: mode === "event" ? eventKey : "",
+      event_filter: $("#wbTaskEventFilter").value.trim(),
+      condition: mode === "condition" ? condition : "",
+      notify_channel: notifyChannel,
+      notify_url: notifyChannel === "webhook" ? notifyUrl : "",
+      notify_format: $("#wbTaskNotifyFormat").value || "json",
+      notify_on: $("#wbTaskNotifyOn").value || "ok",
       frequency,
       time_of_day: $("#wbTaskTime").value || "09:00",
       weekdays,
@@ -1193,6 +1242,9 @@
   if ($("#wbTaskCancel")) $("#wbTaskCancel").addEventListener("click", closeWbTaskForm);
   if ($("#wbTaskSave")) $("#wbTaskSave").addEventListener("click", saveWbTask);
   if ($("#wbTaskFreq")) $("#wbTaskFreq").addEventListener("change", updateWbFreqFields);
+  ["#wbTaskTrigger", "#wbTaskNotify"].forEach((sel) => {
+    if ($(sel)) $(sel).addEventListener("change", updateWbFreqFields);
+  });
   if ($("#wbRefreshFiles")) $("#wbRefreshFiles").addEventListener("click", () => loadWbFiles().catch((e) => toast(e.message)));
   if ($("#wbNewChat")) $("#wbNewChat").addEventListener("click", () => { closeWorkbench(); newChat(); });
   if ($("#wbHeroBrowse")) $("#wbHeroBrowse").addEventListener("click", () => {

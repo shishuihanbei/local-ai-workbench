@@ -705,7 +705,49 @@
           <label class="wb-field"><span>任务名称</span><input id="wbTaskTitle" maxlength="80" placeholder="例如：每天早上生成行业简报"></label>
           <label class="wb-field"><span>要执行的内容</span><textarea id="wbTaskPrompt" rows="4" maxlength="3000" placeholder="写清楚要模型做什么，例如：整理今天的 AI 行业动态，输出 5 条，带来源链接。"></textarea></label>
           <label class="wb-field"><span>成功标准（可选）</span><input id="wbTaskGoal" maxlength="600" placeholder="例如：每条都要有来源链接，少于 5 条算不合格"></label>
-          <div class="wb-form-grid">
+          <label class="wb-field"><span>触发方式</span>
+            <select id="wbTaskTrigger">
+              <option value="schedule">按时间</option>
+              <option value="event">系统事件发生就执行</option>
+              <option value="condition">按时间，但先判断条件</option>
+            </select>
+          </label>
+          <div id="wbTaskEventWrap" hidden>
+            <div class="wb-form-grid">
+              <label class="wb-field"><span>事件类型</span><select id="wbTaskEvent"></select></label>
+              <label class="wb-field"><span>只在包含（可选）</span><input id="wbTaskEventFilter" maxlength="80" placeholder="关键词，留空表示全部"></label>
+            </div>
+          </div>
+          <div id="wbTaskCondWrap" hidden>
+            <label class="wb-field"><span>执行条件</span><textarea id="wbTaskCondition" rows="2" maxlength="600" placeholder="例如：只有当今天的动态里出现“降价”时才产出结果；不满足就跳过这一轮。"></textarea></label>
+          </div>
+          <label class="wb-field"><span>结果投递</span>
+            <select id="wbTaskNotify">
+              <option value="">只放工作台</option>
+              <option value="webhook">发送到 Webhook</option>
+            </select>
+          </label>
+          <div id="wbTaskNotifyWrap" hidden>
+            <label class="wb-field"><span>Webhook 地址</span><input id="wbTaskNotifyUrl" maxlength="500" placeholder="https://example.com/hook，只支持 http/https"></label>
+            <div class="wb-form-grid">
+              <label class="wb-field"><span>消息格式</span>
+                <select id="wbTaskNotifyFormat">
+                  <option value="json">通用 JSON</option>
+                  <option value="text">纯文本</option>
+                  <option value="feishu">飞书机器人</option>
+                  <option value="dingtalk">钉钉机器人</option>
+                  <option value="wecom">企业微信机器人</option>
+                </select>
+              </label>
+              <label class="wb-field"><span>投递时机</span>
+                <select id="wbTaskNotifyOn">
+                  <option value="ok">只在成功时</option>
+                  <option value="always">每次都发（含失败）</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div class="wb-form-grid" id="wbTaskScheduleGrid">
             <label class="wb-field"><span>重复方式</span>
               <select id="wbTaskFreq">
                 <option value="once">只执行一次</option>

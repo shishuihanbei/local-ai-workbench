@@ -304,6 +304,13 @@ async def build(user_id: int, conversation_id: int | None, markdown: str,
         "created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
         (user_id, conversation_id, message_id or None, fname, stored,
          FORMATS[fmt]["mime"], size, fmt, created, expires))
+    try:
+        # 生成文件也是一类系统事件：订阅了"新生成文件"的任务会被触发。
+        from . import scheduler
+        await scheduler.emit_event(
+            "file.generated", user_id=user_id, text=f"{fname} {FORMATS[fmt]['label']}")
+    except Exception:
+        pass
     return public(file_id, fname, size, fmt, expires)
 
 
